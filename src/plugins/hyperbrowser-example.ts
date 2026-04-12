@@ -34,7 +34,7 @@ export function initHyperbrowserPlugin(): void {
         const key = envMap.get('HYPERBROWSER_API_KEY') || process.env.HYPERBROWSER_API_KEY || ''
         if (!key) return { ok: false, detail: 'API key not set' }
         try {
-          const res = await fetch('https://app.hyperbrowser.ai/api/v2/sessions', {
+          const res = await fetch('https://app.hyperbrowser.ai/api/sessions', {
             headers: { 'x-api-key': key },
             signal: AbortSignal.timeout(5000),
           })

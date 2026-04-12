@@ -86,7 +86,7 @@ const INTEGRATIONS: IntegrationDef[] = [
   { id: 'gateway', name: 'Gateway Auth', category: 'infra', envVars: ['OPENCLAW_GATEWAY_TOKEN'], vaultItem: 'openclaw-openclaw-gateway-token' },
 
   // Browser Automation
-  { id: 'hyperbrowser', name: 'Hyperbrowser', category: 'browser', envVars: ['HYPERBROWSER_API_KEY'], testable: true, recommendation: 'Cloud browser automation for AI agents. Get a key at hyperbrowser.ai' },
+  { id: 'hyperbrowser', name: 'Hyperbrowser', category: 'browser', envVars: ['HYPERBROWSER_API_KEY'], vaultItem: 'Hyperbrowser API Key', testable: true, recommendation: 'Cloud browser automation for AI agents. Get a key at hyperbrowser.ai' },
 ]
 
 // Category metadata
@@ -752,7 +752,7 @@ async function handleTest(
       case 'hyperbrowser': {
         const key = getEffectiveEnvValue(envMap, 'HYPERBROWSER_API_KEY')
         if (!key) return NextResponse.json({ ok: false, detail: 'API key not set' })
-        const res = await fetch('https://app.hyperbrowser.ai/api/v2/sessions', {
+        const res = await fetch('https://app.hyperbrowser.ai/api/sessions', {
           headers: { 'x-api-key': key },
           signal: AbortSignal.timeout(5000),
         })
