@@ -181,7 +181,7 @@ export async function pullFromGitHub(
         // New issue — create MC task
         const status = issue.state === 'closed' ? 'done' : (labelToStatus(
           labelNames.find(l => ALL_STATUS_LABEL_NAMES.includes(l)) || ''
-        ) || 'inbox')
+        ) || 'backlog')
         const priority = labelToPriority(labelNames)
         const tags = labelNames.filter(l => !ALL_STATUS_LABEL_NAMES.includes(l) && !ALL_PRIORITY_LABEL_NAMES.includes(l))
 
