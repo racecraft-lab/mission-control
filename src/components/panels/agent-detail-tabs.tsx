@@ -2527,7 +2527,7 @@ export function ChannelsTab({ agent }: { agent: Agent }) {
       if (!response.ok) throw new Error('Failed to load channels')
       const data = await response.json()
 
-      const snapshot = data.channels || data
+      const snapshot = (data.channelOrder || data.channelAccounts) ? data : data.channels || data
       const channelOrder: string[] = snapshot.channelOrder || []
       const channelMeta: Array<{ id: string; label?: string }> = snapshot.channelMeta || []
       const channelAccounts: Record<string, ChannelAccountInfo[]> = snapshot.channelAccounts || {}
