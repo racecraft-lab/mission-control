@@ -323,7 +323,8 @@ export function SecurityAuditPanel() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('day')
   const [activeSeries, setActiveSeries] = useState<TimelineSeriesKey | null>(null)
   const [data, setData] = useState<SecurityAuditData | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isBlockingLoad, setIsBlockingLoad] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
@@ -393,7 +394,8 @@ export function SecurityAuditPanel() {
       }
     }
 
-    setIsLoading(true)
+    setIsBlockingLoad(!cached)
+    setIsRefreshing(true)
     setLoadError(null)
 
     try {
@@ -427,7 +429,8 @@ export function SecurityAuditPanel() {
       }
     } finally {
       if (requestId === requestIdRef.current) {
-        setIsLoading(false)
+        setIsBlockingLoad(false)
+        setIsRefreshing(false)
       }
     }
   }, [cacheAuditData, prefetchTimeframe, selectedTimeframe, setSecurityPosture])
@@ -449,7 +452,7 @@ export function SecurityAuditPanel() {
     : null
   const totalTimelineEvents = (data?.timeline.series ?? []).reduce((sum, series) => sum + series.total, 0)
   const hasTimelineActivity = (data?.timeline.series ?? []).some((series) => series.total > 0)
-  const chartIsRefreshing = Boolean(data && data.timeline.timeframe !== selectedTimeframe)
+  const chartIsRefreshing = isBlockingLoad && Boolean(data && data.timeline.timeframe !== selectedTimeframe)
 
   const postureColor = (score: number) => {
     if (score >= 80) return 'text-green-400'
@@ -530,7 +533,10 @@ export function SecurityAuditPanel() {
             <p className="text-muted-foreground mt-2">{t('subtitle')}</p>
           </div>
           <div className="flex items-center gap-4">
-            {isLoading && (
+            {isRefreshing && !isBlockingLoad && (
+              <div className="h-2 w-2 rounded-full bg-primary/70 animate-pulse" />
+            )}
+            {isBlockingLoad && (
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
             )}
             <div className="flex flex-wrap justify-end gap-2">
@@ -549,7 +555,7 @@ export function SecurityAuditPanel() {
       </div>
 
       {!data ? (
-        isLoading ? (
+        isBlockingLoad ? (
           <Loader variant="panel" label={t('loadingSecurityData')} />
         ) : (
           <div className="bg-card border border-border rounded-lg p-6 text-center space-y-3">
