@@ -31,6 +31,18 @@ const TIMELINE_SERIES: Array<{ key: TimelineSeriesKey; colorToken: string }> = [
   { key: 'toolCalls', colorToken: '--void-mint' },
 ]
 
+const SECURITY_AUDIT_CACHE_TTL_MS = 15_000
+const SECURITY_SCAN_CACHE_TTL_MS = 30_000
+
+type SecurityAuditCacheEntry = {
+  expiresAt: number
+  freshness: string
+  payload: unknown
+}
+
+const securityAuditCache = new Map<string, SecurityAuditCacheEntry>()
+let securityScanCache: { expiresAt: number; value: ReturnType<typeof runSecurityScan> } | null = null
+
 function asTimeframe(value: string | null): Timeframe {
   if (value === 'hour' || value === 'day' || value === 'week' || value === 'month') {
     return value
@@ -40,6 +52,65 @@ function asTimeframe(value: string | null): Timeframe {
 
 function toCount(value: unknown): number {
   return typeof value === 'number' ? value : Number(value ?? 0)
+}
+
+function getSecurityAuditCacheKey(params: {
+  workspaceId: number
+  timeframe: Timeframe
+  eventTypeFilter: string | null
+  severityFilter: string | null
+  agentFilter: string | null
+}): string {
+  return JSON.stringify(params)
+}
+
+function getSecurityAuditFreshness(db: ReturnType<typeof getDatabase>, workspaceId: number): string {
+  const securityMax = toCount((db.prepare(`
+    SELECT MAX(created_at) as max_created_at
+    FROM security_events
+    WHERE workspace_id = ?
+  `).get(workspaceId) as any)?.max_created_at)
+  const mcpMax = toCount((db.prepare(`
+    SELECT MAX(created_at) as max_created_at
+    FROM mcp_call_log
+    WHERE workspace_id = ?
+  `).get(workspaceId) as any)?.max_created_at)
+
+  return `${securityMax}:${mcpMax}`
+}
+
+function readSecurityAuditCache(key: string, freshness: string): unknown | null {
+  const cached = securityAuditCache.get(key)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now() || cached.freshness !== freshness) {
+    securityAuditCache.delete(key)
+    return null
+  }
+  return cached.payload
+}
+
+function writeSecurityAuditCache(key: string, freshness: string, payload: unknown) {
+  const expiresAt = Date.now() + SECURITY_AUDIT_CACHE_TTL_MS
+  securityAuditCache.set(key, { expiresAt, freshness, payload })
+
+  for (const [entryKey, entry] of securityAuditCache.entries()) {
+    if (entry.expiresAt <= Date.now()) {
+      securityAuditCache.delete(entryKey)
+    }
+  }
+}
+
+function getCachedSecurityScan() {
+  if (securityScanCache && securityScanCache.expiresAt > Date.now()) {
+    return securityScanCache.value
+  }
+
+  const value = runSecurityScan()
+  securityScanCache = {
+    value,
+    expiresAt: Date.now() + SECURITY_SCAN_CACHE_TTL_MS,
+  }
+  return value
 }
 
 export async function GET(request: NextRequest) {
@@ -64,8 +135,21 @@ export async function GET(request: NextRequest) {
     const firstBucket = Math.floor(since / bucketSize) * bucketSize
     const lastBucket = Math.floor(now / bucketSize) * bucketSize
     const db = getDatabase()
+    const freshness = getSecurityAuditFreshness(db, workspaceId)
+    const cacheKey = getSecurityAuditCacheKey({
+      workspaceId,
+      timeframe,
+      eventTypeFilter,
+      severityFilter,
+      agentFilter,
+    })
+    const cachedResponse = readSecurityAuditCache(cacheKey, freshness)
 
-    const scan = runSecurityScan()
+    if (cachedResponse) {
+      return NextResponse.json(cachedResponse)
+    }
+
+    const scan = getCachedSecurityScan()
     const eventPosture = getSecurityPosture(workspaceId)
 
     const blendedScore = Math.round(scan.score * 0.7 + eventPosture.score * 0.3)
@@ -237,7 +321,7 @@ export async function GET(request: NextRequest) {
       total: timelinePoints.reduce((sum, point) => sum + toCount(point[series.key]), 0),
     }))
 
-    return NextResponse.json({
+    const payload = {
       posture: { score: blendedScore, level },
       scan: {
         score: scan.score,
@@ -321,7 +405,11 @@ export async function GET(request: NextRequest) {
         points: timelinePoints,
         series: timelineSeries,
       },
-    })
+    }
+
+    writeSecurityAuditCache(cacheKey, freshness, payload)
+
+    return NextResponse.json(payload)
   } catch (error) {
     logger.error({ err: error }, 'GET /api/security-audit error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

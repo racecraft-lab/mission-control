@@ -1428,6 +1428,18 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN signature TEXT DEFAULT NULL`)
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN public_key TEXT DEFAULT NULL`)
     }
+  },
+  {
+    id: '051_security_audit_indexes',
+    up(db: Database.Database) {
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_created_at ON security_events(workspace_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_event_type_created_at ON security_events(workspace_id, event_type, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_agent_created_at ON security_events(workspace_id, agent_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_created_at ON mcp_call_log(workspace_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_agent_created_at ON mcp_call_log(workspace_id, agent_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_tool_created_at ON mcp_call_log(workspace_id, tool_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_trust_scores_workspace_trust_score ON agent_trust_scores(workspace_id, trust_score)`)
+    }
   }
 ]
 

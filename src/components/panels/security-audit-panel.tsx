@@ -13,6 +13,8 @@ import {
   BarChart,
   Brush,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -270,18 +272,38 @@ function TimelineTooltipContent({
   formatter,
 }: {
   active?: boolean
-  payload?: Array<{ value?: number }>
+  payload?: Array<{ value?: number; name?: string; color?: string }>
   label?: number | string
   formatter: (value: number) => string
 }) {
   if (!active || !payload || payload.length === 0) return null
-  const value = Number(payload[0]?.value ?? 0)
   const timestamp = Number(label ?? 0)
+  const rows = payload
+    .map((entry) => ({
+      name: entry.name || 'Value',
+      value: Number(entry.value ?? 0),
+      color: entry.color || 'hsl(var(--foreground))',
+    }))
+    .filter((entry) => entry.value > 0)
+  const visibleRows = rows.length > 0 ? rows : payload.map((entry) => ({
+    name: entry.name || 'Value',
+    value: Number(entry.value ?? 0),
+    color: entry.color || 'hsl(var(--foreground))',
+  }))
 
   return (
     <div className="rounded-lg border border-border/70 bg-card/95 px-3 py-2 shadow-xl backdrop-blur-sm">
       <div className="text-xs text-muted-foreground">{formatter(Math.floor(timestamp / 1000))}</div>
-      <div className="mt-1 text-sm font-medium text-foreground">{value}</div>
+      <div className="mt-2 space-y-1.5">
+        {visibleRows.map((entry) => (
+          <div key={entry.name} className="flex items-center justify-between gap-3 text-xs">
+            <span className="font-medium" style={{ color: entry.color }}>
+              {entry.name}
+            </span>
+            <span className="text-foreground">{entry.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -291,12 +313,13 @@ export function SecurityAuditPanel() {
   const { setSecurityPosture } = useMissionControl()
 
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('day')
-  const [activeSeries, setActiveSeries] = useState<TimelineSeriesKey>('authEvents')
+  const [activeSeries, setActiveSeries] = useState<TimelineSeriesKey | null>(null)
   const [data, setData] = useState<SecurityAuditData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const dataCacheRef = useRef(new Map<Timeframe, SecurityAuditData>())
 
   useEffect(() => {
     return () => {
@@ -309,6 +332,14 @@ export function SecurityAuditPanel() {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const cached = dataCacheRef.current.get(selectedTimeframe)
+
+    if (cached) {
+      setData(cached)
+      if (cached.posture) {
+        setSecurityPosture(cached.posture)
+      }
+    }
 
     setIsLoading(true)
     setLoadError(null)
@@ -319,11 +350,14 @@ export function SecurityAuditPanel() {
 
       if (!auditRes.ok) {
         setLoadError(`Security audit request failed (${auditRes.status})`)
-        setData(null)
+        if (!cached) {
+          setData(null)
+        }
         return
       }
 
       const audit = await auditRes.json() as SecurityAuditData
+      dataCacheRef.current.set(selectedTimeframe, audit)
       setData(audit)
       if (audit.posture) {
         setSecurityPosture(audit.posture)
@@ -331,7 +365,9 @@ export function SecurityAuditPanel() {
     } catch (error: any) {
       if (error?.name === 'AbortError' || controller.signal.aborted) return
       setLoadError('Security data request failed')
-      setData(null)
+      if (!cached) {
+        setData(null)
+      }
     } finally {
       if (requestId === requestIdRef.current) {
         setIsLoading(false)
@@ -348,8 +384,13 @@ export function SecurityAuditPanel() {
     })) ?? []
   ), [data?.timeline.points])
 
-  const activeSeriesDef = TIMELINE_SERIES.find((series) => series.key === activeSeries) ?? TIMELINE_SERIES[0]
-  const activeSeriesMeta = data?.timeline.series.find((series) => series.key === activeSeries)
+  const activeSeriesDef = activeSeries
+    ? TIMELINE_SERIES.find((series) => series.key === activeSeries) ?? null
+    : null
+  const activeSeriesMeta = activeSeries
+    ? data?.timeline.series.find((series) => series.key === activeSeries)
+    : null
+  const totalTimelineEvents = (data?.timeline.series ?? []).reduce((sum, series) => sum + series.total, 0)
   const hasTimelineActivity = (data?.timeline.series ?? []).some((series) => series.total > 0)
   const chartIsRefreshing = Boolean(data && data.timeline.timeframe !== selectedTimeframe)
 
@@ -554,12 +595,14 @@ export function SecurityAuditPanel() {
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   {TIMELINE_SERIES.map((series) => {
                     const total = data.timeline.series.find((item) => item.key === series.key)?.total ?? 0
+                    const isSelected = activeSeries === series.key
                     return (
                       <button
                         key={series.key}
                         type="button"
-                        onClick={() => setActiveSeries(series.key)}
-                        className={`rounded-lg border p-3 text-left transition-smooth ${series.panelClass} ${activeSeries === series.key ? series.activeClass : 'border-border/60 hover:border-border'}`}
+                        aria-pressed={isSelected}
+                        onClick={() => setActiveSeries((current) => current === series.key ? null : series.key)}
+                        className={`rounded-lg border p-3 text-left transition-smooth ${series.panelClass} ${isSelected ? series.activeClass : 'border-border/60 hover:border-border'}`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-sm font-medium text-foreground">{t(series.labelKey)}</span>
@@ -589,12 +632,21 @@ export function SecurityAuditPanel() {
                 <div className="rounded-lg border border-border/60 bg-secondary/20 p-4">
                   <div className="flex items-center justify-between gap-4 mb-3">
                     <div>
-                      <h3 className="text-sm font-medium text-foreground">{t(activeSeriesDef.labelKey)}</h3>
-                      <p className="text-xs text-muted-foreground">{bucketLabel}</p>
+                      <h3 className="text-sm font-medium text-foreground">
+                        {activeSeriesDef ? t(activeSeriesDef.labelKey) : 'All event types'}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        {activeSeriesDef
+                          ? bucketLabel
+                          : 'Click a card to focus a single event type. Click it again to show every event type.'}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <div className="text-xl font-semibold tabular-nums" style={{ color: activeSeriesDef.stroke }}>
-                        {activeSeriesMeta?.total ?? 0}
+                      <div
+                        className="text-xl font-semibold tabular-nums"
+                        style={{ color: activeSeriesDef?.stroke ?? 'hsl(var(--foreground))' }}
+                      >
+                        {activeSeriesMeta?.total ?? totalTimelineEvents}
                       </div>
                       {!hasTimelineActivity && (
                         <p className="text-xs text-muted-foreground">{t('noTimelineData')}</p>
@@ -602,51 +654,104 @@ export function SecurityAuditPanel() {
                     </div>
                   </div>
                   <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
-                        <XAxis
-                          type="number"
-                          dataKey="timestampMs"
-                          scale="time"
-                          domain={['dataMin', 'dataMax']}
-                          tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
-                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                          minTickGap={24}
-                        />
-                        <YAxis
-                          allowDecimals={false}
-                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                          tickLine={false}
-                          axisLine={false}
-                        />
-                        <Tooltip
-                          content={<TimelineTooltipContent formatter={formatTime} />}
-                          cursor={{ fill: 'hsl(var(--foreground) / 0.08)' }}
-                        />
-                        <Bar
-                          dataKey={activeSeries}
-                          fill={activeSeriesDef.fill}
-                          stroke={activeSeriesDef.stroke}
-                          strokeWidth={1}
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={24}
-                          isAnimationActive={false}
-                        />
-                        {timelinePoints.length > 12 && (
-                          <Brush
+                    {activeSeriesDef ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
+                          <XAxis
+                            type="number"
                             dataKey="timestampMs"
-                            height={20}
-                            travellerWidth={10}
-                            stroke={activeSeriesDef.stroke}
-                            fill="hsl(var(--surface-2))"
+                            scale="time"
+                            domain={['dataMin', 'dataMax']}
                             tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                            minTickGap={24}
                           />
-                        )}
-                      </BarChart>
-                    </ResponsiveContainer>
+                          <YAxis
+                            allowDecimals={false}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <Tooltip
+                            content={<TimelineTooltipContent formatter={formatTime} />}
+                            cursor={{ fill: 'hsl(var(--foreground) / 0.08)' }}
+                          />
+                          <Bar
+                            dataKey={activeSeriesDef.key}
+                            name={t(activeSeriesDef.labelKey)}
+                            fill={activeSeriesDef.fill}
+                            stroke={activeSeriesDef.stroke}
+                            strokeWidth={1}
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={24}
+                            isAnimationActive={false}
+                          />
+                          {timelinePoints.length > 12 && (
+                            <Brush
+                              dataKey="timestampMs"
+                              height={20}
+                              travellerWidth={10}
+                              stroke={activeSeriesDef.stroke}
+                              fill="hsl(var(--surface-2))"
+                              tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                            />
+                          )}
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
+                          <XAxis
+                            type="number"
+                            dataKey="timestampMs"
+                            scale="time"
+                            domain={['dataMin', 'dataMax']}
+                            tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                            minTickGap={24}
+                          />
+                          <YAxis
+                            allowDecimals={false}
+                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <Tooltip
+                            content={<TimelineTooltipContent formatter={formatTime} />}
+                            cursor={{ stroke: 'hsl(var(--foreground) / 0.18)', strokeWidth: 1 }}
+                          />
+                          {TIMELINE_SERIES.map((series) => (
+                            <Line
+                              key={series.key}
+                              type="linear"
+                              dataKey={series.key}
+                              name={t(series.labelKey)}
+                              stroke={series.stroke}
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 4, fill: series.stroke, stroke: 'hsl(var(--card))', strokeWidth: 2 }}
+                              isAnimationActive={false}
+                            />
+                          ))}
+                          {timelinePoints.length > 12 && (
+                            <Brush
+                              dataKey="timestampMs"
+                              height={20}
+                              travellerWidth={10}
+                              stroke="hsl(var(--primary))"
+                              fill="hsl(var(--surface-2))"
+                              tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                            />
+                          )}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </div>
               </div>
