@@ -24,6 +24,9 @@ import {
 type Timeframe = 'hour' | 'day' | 'week' | 'month'
 type TimelineSeriesKey = 'authEvents' | 'injectionAttempts' | 'secretAlerts' | 'toolCalls'
 
+const CANONICAL_TIMEFRAMES: Timeframe[] = ['hour', 'day', 'week', 'month']
+const CLIENT_SECURITY_AUDIT_CACHE_MAX_AGE_MS = 30_000
+
 interface AuthEvent {
   type: string
   severity: string
@@ -148,6 +151,11 @@ interface SecurityAuditData {
     recent: InjectionAttempt[]
   }
   timeline: TimelineData
+}
+
+interface CachedSecurityAuditData {
+  data: SecurityAuditData
+  fetchedAt: number
 }
 
 const SCAN_STATUS_ICON: Record<string, string> = { pass: '+', fail: 'x', warn: '!' }
@@ -319,20 +327,64 @@ export function SecurityAuditPanel() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
-  const dataCacheRef = useRef(new Map<Timeframe, SecurityAuditData>())
+  const prefetchControllersRef = useRef(new Map<Timeframe, AbortController>())
+  const dataCacheRef = useRef(new Map<Timeframe, CachedSecurityAuditData>())
 
   useEffect(() => {
     return () => {
       abortRef.current?.abort()
+      for (const controller of prefetchControllersRef.current.values()) {
+        controller.abort()
+      }
     }
   }, [])
+
+  const cacheAuditData = useCallback((timeframe: Timeframe, audit: SecurityAuditData) => {
+    dataCacheRef.current.set(timeframe, {
+      data: audit,
+      fetchedAt: Date.now(),
+    })
+  }, [])
+
+  const prefetchTimeframe = useCallback(async (timeframe: Timeframe) => {
+    const cached = dataCacheRef.current.get(timeframe)
+    if (cached && Date.now() - cached.fetchedAt < CLIENT_SECURITY_AUDIT_CACHE_MAX_AGE_MS) {
+      return
+    }
+    if (prefetchControllersRef.current.has(timeframe)) {
+      return
+    }
+
+    const controller = new AbortController()
+    prefetchControllersRef.current.set(timeframe, controller)
+
+    try {
+      const auditRes = await fetch(`/api/security-audit?timeframe=${timeframe}`, { signal: controller.signal })
+      if (!auditRes.ok || controller.signal.aborted) return
+
+      const audit = await auditRes.json() as SecurityAuditData
+      if (controller.signal.aborted) return
+
+      cacheAuditData(timeframe, audit)
+    } catch (error: any) {
+      if (error?.name !== 'AbortError') {
+        return
+      }
+    } finally {
+      const current = prefetchControllersRef.current.get(timeframe)
+      if (current === controller) {
+        prefetchControllersRef.current.delete(timeframe)
+      }
+    }
+  }, [cacheAuditData])
 
   const fetchData = useCallback(async () => {
     const requestId = ++requestIdRef.current
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    const cached = dataCacheRef.current.get(selectedTimeframe)
+    const cachedEntry = dataCacheRef.current.get(selectedTimeframe)
+    const cached = cachedEntry?.data
 
     if (cached) {
       setData(cached)
@@ -357,10 +409,15 @@ export function SecurityAuditPanel() {
       }
 
       const audit = await auditRes.json() as SecurityAuditData
-      dataCacheRef.current.set(selectedTimeframe, audit)
+      cacheAuditData(selectedTimeframe, audit)
       setData(audit)
       if (audit.posture) {
         setSecurityPosture(audit.posture)
+      }
+      for (const timeframe of CANONICAL_TIMEFRAMES) {
+        if (timeframe !== selectedTimeframe) {
+          void prefetchTimeframe(timeframe)
+        }
       }
     } catch (error: any) {
       if (error?.name === 'AbortError' || controller.signal.aborted) return
@@ -373,7 +430,7 @@ export function SecurityAuditPanel() {
         setIsLoading(false)
       }
     }
-  }, [selectedTimeframe, setSecurityPosture])
+  }, [cacheAuditData, prefetchTimeframe, selectedTimeframe, setSecurityPosture])
 
   useSmartPoll(fetchData, 30_000)
 
