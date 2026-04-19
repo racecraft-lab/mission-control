@@ -16,6 +16,13 @@ const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   month: 30 * 86400,
 }
 
+const TIMELINE_BUCKET_SECONDS: Record<Timeframe, number> = {
+  hour: 300,
+  day: 3600,
+  week: 86400,
+  month: 86400,
+}
+
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'admin')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -31,8 +38,10 @@ export async function GET(request: NextRequest) {
     const agentFilter = searchParams.get('agent')
     const workspaceId = auth.user.workspace_id ?? 1
 
+    const now = Math.floor(Date.now() / 1000)
     const seconds = TIMEFRAME_SECONDS[timeframe] || TIMEFRAME_SECONDS.day
-    const since = Math.floor(Date.now() / 1000) - seconds
+    const since = now - seconds
+    const bucketSize = TIMELINE_BUCKET_SECONDS[timeframe] || TIMELINE_BUCKET_SECONDS.day
     const db = getDatabase()
 
     // Infrastructure scan (same as onboarding security scan)
@@ -131,13 +140,13 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `).all(workspaceId, since) as any[]
 
-    // Timeline (bucketed by hour)
-    const bucketSize = timeframe === 'hour' ? 300 : 3600
+    // Timeline
     let timelineQuery = `
       SELECT
         (created_at / ${bucketSize}) * ${bucketSize} as bucket,
-        COUNT(*) as event_count,
-        MAX(CASE WHEN severity = 'critical' THEN 3 WHEN severity = 'warning' THEN 2 ELSE 1 END) as max_severity
+        SUM(CASE WHEN event_type IN ('auth.failure', 'auth.token_rotation', 'auth.access_denied') THEN 1 ELSE 0 END) as auth_events,
+        SUM(CASE WHEN event_type = 'injection.attempt' THEN 1 ELSE 0 END) as injection_attempts,
+        SUM(CASE WHEN event_type = 'secret.exposure' THEN 1 ELSE 0 END) as secret_alerts
       FROM security_events
       WHERE workspace_id = ? AND created_at > ?
     `
@@ -158,9 +167,57 @@ export async function GET(request: NextRequest) {
 
     timelineQuery += ' GROUP BY bucket ORDER BY bucket ASC'
 
-    const timeline = db.prepare(timelineQuery).all(...timelineParams) as any[]
+    const securityTimeline = db.prepare(timelineQuery).all(...timelineParams) as any[]
+    const includeToolCalls = !eventTypeFilter && !severityFilter
+    const mcpTimelineParams: any[] = [workspaceId, since]
+    let mcpTimeline: any[] = []
 
-    const severityMap: Record<number, string> = { 3: 'critical', 2: 'warning', 1: 'info' }
+    if (includeToolCalls) {
+      let mcpTimelineQuery = `
+        SELECT
+          (created_at / ${bucketSize}) * ${bucketSize} as bucket,
+          COUNT(*) as tool_calls
+        FROM mcp_call_log
+        WHERE workspace_id = ? AND created_at > ?
+      `
+
+      if (agentFilter) {
+        mcpTimelineQuery += ' AND agent_name = ?'
+        mcpTimelineParams.push(agentFilter)
+      }
+
+      mcpTimelineQuery += ' GROUP BY bucket ORDER BY bucket ASC'
+      mcpTimeline = db.prepare(mcpTimelineQuery).all(...mcpTimelineParams) as any[]
+    }
+
+    const securityTimelineByBucket = new Map(
+      securityTimeline.map((row: any) => [Number(row.bucket), row]),
+    )
+    const mcpTimelineByBucket = new Map(
+      mcpTimeline.map((row: any) => [Number(row.bucket), row]),
+    )
+    const firstBucket = Math.floor(since / bucketSize) * bucketSize
+    const lastBucket = Math.floor(now / bucketSize) * bucketSize
+    const timeline = []
+
+    for (let bucket = firstBucket; bucket <= lastBucket; bucket += bucketSize) {
+      const securityRow = securityTimelineByBucket.get(bucket)
+      const mcpRow = mcpTimelineByBucket.get(bucket)
+      timeline.push({
+        timestamp: bucket,
+        authEvents: Number(securityRow?.auth_events ?? 0),
+        injectionAttempts: Number(securityRow?.injection_attempts ?? 0),
+        secretAlerts: Number(securityRow?.secret_alerts ?? 0),
+        toolCalls: Number(mcpRow?.tool_calls ?? 0),
+      })
+    }
+
+    const timelineHasActivity = timeline.some((point) => (
+      point.authEvents > 0
+      || point.injectionAttempts > 0
+      || point.secretAlerts > 0
+      || point.toolCalls > 0
+    ))
 
     return NextResponse.json({
       posture: { score: blendedScore, level },
@@ -208,11 +265,7 @@ export async function GET(request: NextRequest) {
         total: injectionEvents.length,
         recent: injectionEvents.slice(0, 5),
       },
-      timeline: timeline.map((t: any) => ({
-        timestamp: t.bucket,
-        eventCount: t.event_count,
-        severity: severityMap[t.max_severity] || 'info',
-      })),
+      timeline: timelineHasActivity ? timeline : [],
     })
   } catch (error) {
     logger.error({ err: error }, 'GET /api/security-audit error')

@@ -62,7 +62,7 @@ interface InjectionAttempt {
 }
 
 interface TimelinePoint {
-  timestamp: string
+  timestamp: number
   authEvents: number
   injectionAttempts: number
   secretAlerts: number
@@ -288,11 +288,11 @@ export function SecurityAuditPanel() {
         // timeline: [{timestamp, eventCount, severity}] → [{timestamp, authEvents, ...}]
         if (Array.isArray(audit.timeline)) {
           audit.timeline = audit.timeline.map((t: any) => ({
-            timestamp: t.timestamp,
-            authEvents: t.eventCount || 0,
-            injectionAttempts: 0,
-            secretAlerts: 0,
-            toolCalls: 0,
+            timestamp: Number(t.timestamp || 0),
+            authEvents: Number(t.authEvents ?? t.auth_events ?? t.eventCount ?? 0),
+            injectionAttempts: Number(t.injectionAttempts ?? t.injection_attempts ?? 0),
+            secretAlerts: Number(t.secretAlerts ?? t.secret_alerts ?? 0),
+            toolCalls: Number(t.toolCalls ?? t.tool_calls ?? 0),
           }))
         }
         setData(audit)
@@ -353,6 +353,32 @@ export function SecurityAuditPanel() {
   const formatTime = (ts: number) => new Date(ts * 1000).toLocaleString([], {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   })
+
+  const formatTimelineLabel = (ts: number) => {
+    const date = new Date(ts * 1000)
+    switch (selectedTimeframe) {
+      case 'hour':
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      case 'day':
+        return date.toLocaleTimeString([], { hour: '2-digit' })
+      case 'week':
+      case 'month':
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+      default:
+        return formatTime(ts)
+    }
+  }
+
+  const timelineChartData = data?.timeline.map((point) => ({
+    ...point,
+    timeLabel: formatTimelineLabel(point.timestamp),
+    tooltipLabel: formatTime(point.timestamp),
+  })) ?? []
+
+  const timelineChartWidth = Math.max(
+    timelineChartData.length * (selectedTimeframe === 'month' ? 48 : selectedTimeframe === 'week' ? 56 : 72),
+    640,
+  )
 
   return (
     <div className="p-6 space-y-6">
@@ -677,23 +703,22 @@ export function SecurityAuditPanel() {
             {data.timeline.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t('noTimelineData')}</div>
             ) : (
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.timeline.map(p => ({
-                    ...p,
-                    time: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="authEvents" stroke="#8884d8" strokeWidth={2} name={t('chartAuthEvents')} />
-                    <Line type="monotone" dataKey="injectionAttempts" stroke="#ef4444" strokeWidth={2} name={t('chartInjections')} />
-                    <Line type="monotone" dataKey="secretAlerts" stroke="#f59e0b" strokeWidth={2} name={t('chartSecrets')} />
-                    <Line type="monotone" dataKey="toolCalls" stroke="#22c55e" strokeWidth={2} name={t('chartToolCalls')} />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="h-64 overflow-x-auto">
+                <div className="h-full min-w-full" style={{ width: `${timelineChartWidth}px` }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={timelineChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="timeLabel" interval="preserveStartEnd" minTickGap={16} />
+                      <YAxis allowDecimals={false} />
+                      <Tooltip labelFormatter={(_, payload) => payload?.[0]?.payload?.tooltipLabel ?? ''} />
+                      <Legend />
+                      <Line type="monotone" dataKey="authEvents" stroke="#8884d8" strokeWidth={2} name={t('chartAuthEvents')} />
+                      <Line type="monotone" dataKey="injectionAttempts" stroke="#ef4444" strokeWidth={2} name={t('chartInjections')} />
+                      <Line type="monotone" dataKey="secretAlerts" stroke="#f59e0b" strokeWidth={2} name={t('chartSecrets')} />
+                      <Line type="monotone" dataKey="toolCalls" stroke="#22c55e" strokeWidth={2} name={t('chartToolCalls')} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
           </div>
