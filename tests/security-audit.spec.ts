@@ -8,8 +8,6 @@ test.describe('Security Audit API', () => {
   })
 
   test('GET /api/security-audit returns 403 for non-admin (viewer)', async ({ request }) => {
-    // API key grants admin, so without it and without session, we get 401
-    // This test verifies that auth is required
     const res = await request.get('/api/security-audit', {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -24,6 +22,7 @@ test.describe('Security Audit API', () => {
   test('response has expected top-level fields', async ({ request }) => {
     const res = await request.get('/api/security-audit', { headers: API_KEY_HEADER })
     const body = await res.json()
+
     expect(body).toHaveProperty('posture')
     expect(body).toHaveProperty('authEvents')
     expect(body).toHaveProperty('agentTrust')
@@ -37,6 +36,7 @@ test.describe('Security Audit API', () => {
   test('posture has score and level', async ({ request }) => {
     const res = await request.get('/api/security-audit', { headers: API_KEY_HEADER })
     const body = await res.json()
+
     expect(body.posture).toHaveProperty('score')
     expect(body.posture).toHaveProperty('level')
     expect(typeof body.posture.score).toBe('number')
@@ -49,31 +49,63 @@ test.describe('Security Audit API', () => {
     const res = await request.get('/api/security-audit?timeframe=day', { headers: API_KEY_HEADER })
     expect(res.status()).toBe(200)
     const body = await res.json()
-    expect(body).toHaveProperty('posture')
+    expect(body.timeline.timeframe).toBe('day')
   })
 
   test('timeframe filtering works with week', async ({ request }) => {
     const res = await request.get('/api/security-audit?timeframe=week', { headers: API_KEY_HEADER })
     expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.timeline.timeframe).toBe('week')
   })
 
   test('timeframe filtering works with hour', async ({ request }) => {
     const res = await request.get('/api/security-audit?timeframe=hour', { headers: API_KEY_HEADER })
     expect(res.status()).toBe(200)
+    const body = await res.json()
+    expect(body.timeline.timeframe).toBe('hour')
   })
 
-  test('timeline is an array', async ({ request }) => {
-    const res = await request.get('/api/security-audit', { headers: API_KEY_HEADER })
+  test('timeline exposes canonical points and series metadata', async ({ request }) => {
+    const res = await request.get('/api/security-audit?timeframe=day', { headers: API_KEY_HEADER })
     const body = await res.json()
-    expect(Array.isArray(body.timeline)).toBe(true)
+
+    expect(body.timeline).toHaveProperty('bucketSizeSeconds')
+    expect(body.timeline).toHaveProperty('rangeStart')
+    expect(body.timeline).toHaveProperty('rangeEnd')
+    expect(Array.isArray(body.timeline.points)).toBe(true)
+    expect(Array.isArray(body.timeline.series)).toBe(true)
+    expect(body.timeline.points.length).toBeGreaterThan(0)
+
+    for (const point of body.timeline.points) {
+      expect(typeof point.timestamp).toBe('number')
+      expect(typeof point.authEvents).toBe('number')
+      expect(typeof point.injectionAttempts).toBe('number')
+      expect(typeof point.secretAlerts).toBe('number')
+      expect(typeof point.toolCalls).toBe('number')
+    }
+
+    const seriesKeys = body.timeline.series.map((series: any) => series.key).sort()
+    expect(seriesKeys).toEqual(['authEvents', 'injectionAttempts', 'secretAlerts', 'toolCalls'])
   })
 
-  test('mcpAudit has expected fields', async ({ request }) => {
+  test('mcpAudit has expected fields and per-tool breakdown', async ({ request }) => {
     const res = await request.get('/api/security-audit', { headers: API_KEY_HEADER })
     const body = await res.json()
+
     expect(body.mcpAudit).toHaveProperty('totalCalls')
     expect(body.mcpAudit).toHaveProperty('uniqueTools')
     expect(body.mcpAudit).toHaveProperty('failureRate')
-    expect(body.mcpAudit).toHaveProperty('topTools')
+    expect(body.mcpAudit).toHaveProperty('toolBreakdown')
+    expect(Array.isArray(body.mcpAudit.toolBreakdown)).toBe(true)
+  })
+
+  test('rate limit payload includes last-hit timestamps', async ({ request }) => {
+    const res = await request.get('/api/security-audit', { headers: API_KEY_HEADER })
+    const body = await res.json()
+
+    expect(body.rateLimits).toHaveProperty('totalHits')
+    expect(body.rateLimits).toHaveProperty('byIp')
+    expect(Array.isArray(body.rateLimits.byIp)).toBe(true)
   })
 })

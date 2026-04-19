@@ -39,6 +39,54 @@ function isStateDirectoryListLine(line: string): boolean {
   return /^(?:\$OPENCLAW_HOME(?:\/\.openclaw)?|~\/\.openclaw|\/\S+)$/.test(line)
 }
 
+function getSectionName(line: string): string | null {
+  const match = line.match(/^[◇◆?]\s+(.+?)(?:\s+─+.*)?$/)
+  return match?.[1]?.trim().toLowerCase() ?? null
+}
+
+function isInformationalSection(section: string | null): boolean {
+  if (!section) return false
+
+  return [
+    'claude cli',
+    'other gateway-like services detected',
+    'cleanup hints',
+    'gateway recommendation',
+    'skills status',
+    'plugins',
+    'plugin compatibility',
+    'bootstrap file size',
+  ].includes(section)
+}
+
+function isSessionLockIssue(line: string): boolean {
+  return /stale=yes|stale lock|dead\b|removed stale|failed to remove|unable to remove/i.test(line)
+}
+
+function isGatewayAuthIssue(line: string): boolean {
+  return !/managed via secretref and is currently unavailable|will not overwrite gateway\.auth\.token|resolve\/rotate the external secret source/i.test(line)
+}
+
+function isActionableIssueLine(line: string, section: string | null): boolean {
+  if (isSessionAgingLine(line) || isStateDirectoryListLine(line) || isPositiveOrInstructionalLine(line)) {
+    return false
+  }
+
+  if (isInformationalSection(section)) {
+    return false
+  }
+
+  if (section === 'session locks') {
+    return isSessionLockIssue(line)
+  }
+
+  if (section === 'gateway auth') {
+    return isGatewayAuthIssue(line)
+  }
+
+  return true
+}
+
 function normalizeFsPath(candidate: string): string {
   return path.resolve(candidate.trim())
 }
@@ -134,14 +182,29 @@ export function parseOpenClawDoctorOutput(
     .map(normalizeLine)
     .filter(Boolean)
 
-  const issues = lines
-    .filter(line => /^[-*]\s+/.test(line))
-    .map(line => line.replace(/^[-*]\s+/, '').trim())
-    .filter(line => !isSessionAgingLine(line) && !isStateDirectoryListLine(line) && !isPositiveOrInstructionalLine(line))
+  const issues: string[] = []
+  let currentSection: string | null = null
+
+  for (const line of lines) {
+    const section = getSectionName(line)
+    if (section) {
+      currentSection = section
+      continue
+    }
+
+    if (!/^[-*]\s+/.test(line)) {
+      continue
+    }
+
+    const candidate = line.replace(/^[-*]\s+/, '').trim()
+    if (isActionableIssueLine(candidate, currentSection)) {
+      issues.push(candidate)
+    }
+  }
 
   // Strip positive/negated phrases before checking for warning keywords
   const rawForWarningCheck = raw.replace(/\bno\s+\w+\s+(?:security\s+)?warnings?\s+detected\b/gi, '')
-  const mentionsWarnings = /\bwarning|warnings|problem|problems|invalid config|fix\b/i.test(rawForWarningCheck)
+  const mentionsWarnings = /\bwarning|warnings|problem|problems|invalid config\b/i.test(rawForWarningCheck)
   const mentionsHealthy = /\bok\b|\bhealthy\b|\bno issues\b|\bno\b.*\bwarnings?\s+detected\b|\bvalid\b/i.test(raw)
 
   let level: OpenClawDoctorLevel = 'healthy'

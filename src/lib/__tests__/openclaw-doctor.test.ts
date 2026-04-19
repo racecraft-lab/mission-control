@@ -146,4 +146,58 @@ Run "openclaw doctor --fix" to apply changes.
       'Channel "public" has no auth configured.',
     ])
   })
+
+  it('ignores informational doctor sections when no actionable issue remains', () => {
+    const result = parseOpenClawDoctorOutput(`
+◇  Claude CLI
+- Binary: ~/.local/bin/claude.
+- Headless Claude auth: OK (oauth).
+- OpenClaw auth profile: anthropic:claude-cli (provider claude-cli).
+◇  Gateway auth
+- Gateway token is managed via SecretRef and is currently unavailable.
+- Doctor will not overwrite gateway.auth.token with a plaintext value.
+- Resolve/rotate the external secret source, then rerun doctor.
+◇  Session locks
+- Found 1 session lock file.
+- ~/.openclaw/agents/main/sessions/test.jsonl.lock pid=123 (alive) age=11s stale=no
+◇  Other gateway-like services detected
+- mission-control.service (user)
+- openclaw-watchdog.service (user)
+◇  Cleanup hints
+- systemctl --user disable --now openclaw-gateway.service
+- rm ~/.config/systemd/user/openclaw-gateway.service
+◇  Plugin compatibility
+- claude-mem still uses legacy before_agent_start; keep regression coverage on this plugin.
+◇  Bootstrap file size
+- Workspace bootstrap files exceed limits and will be truncated.
+◇  Security
+- No channel security warnings detected.
+- Run: openclaw security audit --deep
+Run "openclaw doctor --fix" to apply changes.
+`, 0)
+
+    expect(result.healthy).toBe(true)
+    expect(result.level).toBe('healthy')
+    expect(result.issues).toEqual([])
+  })
+
+  it('keeps actionable state-integrity findings while ignoring surrounding informational sections', () => {
+    const result = parseOpenClawDoctorOutput(`
+◇  Claude CLI
+- Binary: ~/.local/bin/claude.
+◇  State integrity
+- Found 100 orphan transcript files in ~/.openclaw/agents/main/sessions.
+◇  Other gateway-like services detected
+- mission-control.service (user)
+Run "openclaw doctor --fix" to apply changes.
+`, 0)
+
+    expect(result.healthy).toBe(false)
+    expect(result.level).toBe('warning')
+    expect(result.category).toBe('state')
+    expect(result.issues).toEqual([
+      'Found 100 orphan transcript files in ~/.openclaw/agents/main/sessions.',
+    ])
+    expect(result.summary).toContain('Found 100 orphan transcript files')
+  })
 })

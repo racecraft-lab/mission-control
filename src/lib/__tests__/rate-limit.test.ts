@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+const { mockLogSecurityEvent } = vi.hoisted(() => ({
+  mockLogSecurityEvent: vi.fn(),
+}))
+vi.mock('@/lib/security-events', () => ({
+  logSecurityEvent: mockLogSecurityEvent,
+}))
+
 import { createRateLimiter } from '@/lib/rate-limit'
 
 describe('createRateLimiter', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    mockLogSecurityEvent.mockReset()
   })
 
   afterEach(() => {
@@ -49,6 +58,28 @@ describe('createRateLimiter', () => {
     expect(blocked).not.toBeNull()
     const body = await blocked!.json()
     expect(body.error).toBe('Slow down!')
+  })
+
+  it('logs non-critical limiter hits as info telemetry', () => {
+    const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1 })
+    limiter(makeRequest())
+    limiter(makeRequest())
+
+    expect(mockLogSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      event_type: 'rate_limit_hit',
+      severity: 'info',
+    }))
+  })
+
+  it('logs critical limiter hits as warnings', () => {
+    const limiter = createRateLimiter({ windowMs: 60_000, maxRequests: 1, critical: true })
+    limiter(makeRequest())
+    limiter(makeRequest())
+
+    expect(mockLogSecurityEvent).toHaveBeenCalledWith(expect.objectContaining({
+      event_type: 'rate_limit_hit',
+      severity: 'warning',
+    }))
   })
 
   it('resets after the window expires', () => {

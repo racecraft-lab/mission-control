@@ -34,10 +34,17 @@ export interface SecurityPosture {
 const TRUST_WEIGHTS: Record<string, { field: string; delta: number }> = {
   'auth.failure': { field: 'auth_failures', delta: -0.05 },
   'injection.attempt': { field: 'injection_attempts', delta: -0.15 },
-  'rate_limit.hit': { field: 'rate_limit_hits', delta: -0.03 },
   'secret.exposure': { field: 'secret_exposures', delta: -0.20 },
   'task.success': { field: 'successful_tasks', delta: 0.02 },
   'task.failure': { field: 'failed_tasks', delta: -0.01 },
+}
+
+const POSTURE_WINDOW_SECONDS = 86400
+const POSTURE_EVENT_WEIGHTS: Record<string, number> = {
+  'secret.exposure': 80,
+  'injection.attempt': 70,
+  'auth.failure': 15,
+  'auth.access_denied': 12,
 }
 
 const LEGACY_EVENT_TYPE_ALIASES: Record<string, string> = {
@@ -51,6 +58,22 @@ const LEGACY_EVENT_TYPE_ALIASES: Record<string, string> = {
 
 function normalizeSecurityEventType(eventType: string): string {
   return LEGACY_EVENT_TYPE_ALIASES[eventType] ?? eventType
+}
+
+export function calculateAgentTrustScore(row: {
+  auth_failures?: number
+  injection_attempts?: number
+  secret_exposures?: number
+  successful_tasks?: number
+  failed_tasks?: number
+}): number {
+  let score = 1.0
+  score += (row.auth_failures || 0) * -0.05
+  score += (row.injection_attempts || 0) * -0.15
+  score += (row.secret_exposures || 0) * -0.20
+  score += (row.successful_tasks || 0) * 0.02
+  score += (row.failed_tasks || 0) * -0.01
+  return Math.max(0, Math.min(1, score))
 }
 
 export function logSecurityEvent(event: SecurityEvent): number {
@@ -125,15 +148,7 @@ export function updateAgentTrustScore(
     `).get(agentName, workspaceId) as any
 
     if (row) {
-      let score = 1.0
-      score += (row.auth_failures || 0) * -0.05
-      score += (row.injection_attempts || 0) * -0.15
-      score += (row.rate_limit_hits || 0) * -0.03
-      score += (row.secret_exposures || 0) * -0.20
-      score += (row.successful_tasks || 0) * 0.02
-      score += (row.failed_tasks || 0) * -0.01
-      score = Math.max(0, Math.min(1, score))
-
+      const score = calculateAgentTrustScore(row)
       const isAnomaly = weight.delta < 0
       db.prepare(`
         UPDATE agent_trust_scores
@@ -148,22 +163,18 @@ export function updateAgentTrustScore(
 
 export function getSecurityPosture(workspaceId: number = 1): SecurityPosture {
   const db = getDatabase()
-  const oneDayAgo = Math.floor(Date.now() / 1000) - 86400
+  const oneDayAgo = Math.floor(Date.now() / 1000) - POSTURE_WINDOW_SECONDS
 
-  const totals = db.prepare(`
+  const postureEvents = db.prepare(`
     SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as critical,
-      SUM(CASE WHEN severity = 'warning' THEN 1 ELSE 0 END) as warning
+      event_type,
+      severity,
+      COUNT(*) as count
     FROM security_events
-    WHERE workspace_id = ?
-  `).get(workspaceId) as any
-
-  const recent = db.prepare(`
-    SELECT COUNT(*) as count
-    FROM security_events
-    WHERE workspace_id = ? AND severity IN ('warning', 'critical') AND created_at > ?
-  `).get(workspaceId, oneDayAgo) as any
+    WHERE workspace_id = ? AND created_at > ?
+      AND event_type IN ('secret.exposure', 'injection.attempt', 'auth.failure', 'auth.access_denied')
+    GROUP BY event_type, severity
+  `).all(workspaceId, oneDayAgo) as Array<{ event_type: string; severity: SecuritySeverity; count: number }>
 
   const trustAvg = db.prepare(`
     SELECT AVG(trust_score) as avg_trust
@@ -172,20 +183,26 @@ export function getSecurityPosture(workspaceId: number = 1): SecurityPosture {
   `).get(workspaceId) as any
 
   const avgTrust = trustAvg?.avg_trust ?? 1.0
-  const criticalCount = totals?.critical ?? 0
-  const warningCount = totals?.warning ?? 0
-  const recentCount = recent?.count ?? 0
+  const scoredEvents = postureEvents.filter((event) => POSTURE_EVENT_WEIGHTS[event.event_type] != null)
+  const criticalCount = scoredEvents
+    .filter((event) => event.severity === 'critical')
+    .reduce((sum, event) => sum + Number(event.count ?? 0), 0)
+  const warningCount = scoredEvents
+    .filter((event) => event.severity === 'warning')
+    .reduce((sum, event) => sum + Number(event.count ?? 0), 0)
+  const recentCount = scoredEvents.reduce((sum, event) => sum + Number(event.count ?? 0), 0)
 
-  // Score: start at 100, deduct for incidents
+  // Score the current posture from posture-relevant incidents once per event class.
+  // Trust is reported separately so the same incident cannot drag posture down twice.
   let score = 100
-  score -= criticalCount * 10
-  score -= warningCount * 3
-  score -= recentCount * 2
-  score = Math.round(Math.max(0, Math.min(100, score * avgTrust)))
+  score -= scoredEvents.reduce((sum, event) => (
+    sum + (POSTURE_EVENT_WEIGHTS[event.event_type] ?? 0) * Number(event.count ?? 0)
+  ), 0)
+  score = Math.round(Math.max(0, Math.min(100, score)))
 
   return {
     score,
-    totalEvents: totals?.total ?? 0,
+    totalEvents: recentCount,
     criticalEvents: criticalCount,
     warningEvents: warningCount,
     avgTrustScore: Math.round(avgTrust * 100) / 100,

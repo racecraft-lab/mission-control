@@ -1428,6 +1428,35 @@ const migrations: Migration[] = [
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN signature TEXT DEFAULT NULL`)
       db.exec(`ALTER TABLE mcp_call_log ADD COLUMN public_key TEXT DEFAULT NULL`)
     }
+  },
+  {
+    id: '051_security_audit_indexes',
+    up(db: Database.Database) {
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_created_at ON security_events(workspace_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_event_type_created_at ON security_events(workspace_id, event_type, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_security_events_workspace_agent_created_at ON security_events(workspace_id, agent_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_created_at ON mcp_call_log(workspace_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_agent_created_at ON mcp_call_log(workspace_id, agent_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_tool_created_at ON mcp_call_log(workspace_id, tool_name, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_trust_scores_workspace_trust_score ON agent_trust_scores(workspace_id, trust_score)`)
+    }
+  },
+  {
+    id: '052_recalculate_agent_trust_without_rate_limit_hits',
+    up(db: Database.Database) {
+      db.exec(`
+        UPDATE agent_trust_scores
+        SET trust_score = MIN(1.0, MAX(0.0,
+          1.0
+          + (COALESCE(auth_failures, 0) * -0.05)
+          + (COALESCE(injection_attempts, 0) * -0.15)
+          + (COALESCE(secret_exposures, 0) * -0.20)
+          + (COALESCE(successful_tasks, 0) * 0.02)
+          + (COALESCE(failed_tasks, 0) * -0.01)
+        )),
+        updated_at = unixepoch()
+      `)
+    }
   }
 ]
 

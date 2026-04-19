@@ -126,15 +126,15 @@ All security-relevant events are logged to the audit trail:
 Additionally, the **security event system** automatically logs:
 
 - Auth failures (invalid passwords, expired tokens, access denials)
-- Rate limit hits (429 responses with IP/agent correlation)
+- Rate limit hits (429 responses with IP/agent correlation; tracked as abuse-pressure telemetry unless tied to a critical limiter such as login/password throttling)
 - Injection attempts (prompt injection, command injection, exfiltration)
 - Secret exposures (AWS keys, GitHub tokens, Stripe keys, JWTs, private keys detected in agent messages)
 - MCP tool calls (agent, tool, duration, success/failure)
 
 These events feed into the **Security Audit Panel** (`/security`) which provides:
 
-- **Posture score** (0-100) with level badges (hardened/secure/needs-attention/at-risk)
-- **Agent trust scores** — weighted calculation based on auth failures, injection attempts, and task success rates
+- **Posture score** (0-100) with level badges (hardened/secure/needs-attention/at-risk), derived from posture-relevant incidents over a rolling 24-hour window without double-counting the same signal through trust
+- **Agent trust scores** — weighted calculation based on auth failures, injection attempts, secret exposures, and task success rates
 - **MCP call audit** — tool-use frequency, success/failure rates per agent
 - **Timeline visualization** — event density over selected timeframe
 
