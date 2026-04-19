@@ -351,6 +351,7 @@ export function SecurityAuditPanel() {
   const activeSeriesDef = TIMELINE_SERIES.find((series) => series.key === activeSeries) ?? TIMELINE_SERIES[0]
   const activeSeriesMeta = data?.timeline.series.find((series) => series.key === activeSeries)
   const hasTimelineActivity = (data?.timeline.series ?? []).some((series) => series.total > 0)
+  const chartIsRefreshing = Boolean(data && data.timeline.timeframe !== selectedTimeframe)
 
   const postureColor = (score: number) => {
     if (score >= 80) return 'text-green-400'
@@ -539,99 +540,115 @@ export function SecurityAuditPanel() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {TIMELINE_SERIES.map((series) => {
-                const total = data.timeline.series.find((item) => item.key === series.key)?.total ?? 0
-                return (
-                  <button
-                    key={series.key}
-                    type="button"
-                    onClick={() => setActiveSeries(series.key)}
-                    className={`rounded-lg border p-3 text-left transition-smooth ${series.panelClass} ${activeSeries === series.key ? series.activeClass : 'border-border/60 hover:border-border'}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-foreground">{t(series.labelKey)}</span>
-                      <span className="text-lg font-semibold tabular-nums" style={{ color: series.stroke }}>
-                        {total}
-                      </span>
-                    </div>
-                    <div className="mt-3 h-16">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={timelinePoints}>
-                          <Area
-                            type="monotone"
-                            dataKey={series.key}
-                            stroke={series.stroke}
-                            fill={series.fill}
-                            strokeWidth={2}
-                            isAnimationActive={false}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="mt-4 rounded-lg border border-border/60 bg-secondary/20 p-4">
-              <div className="flex items-center justify-between gap-4 mb-3">
-                <div>
-                  <h3 className="text-sm font-medium text-foreground">{t(activeSeriesDef.labelKey)}</h3>
-                  <p className="text-xs text-muted-foreground">{bucketLabel}</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-semibold tabular-nums" style={{ color: activeSeriesDef.stroke }}>
-                    {activeSeriesMeta?.total ?? 0}
+            <div className="relative">
+              {chartIsRefreshing && (
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl border border-border/60 bg-background/72 backdrop-blur-sm">
+                  <div className="flex items-center gap-3 rounded-full border border-border/70 bg-card/90 px-4 py-2 shadow-lg">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+                    <span className="text-sm text-foreground">{t('loadingSecurityData')}</span>
                   </div>
-                  {!hasTimelineActivity && (
-                    <p className="text-xs text-muted-foreground">{t('noTimelineData')}</p>
-                  )}
                 </div>
-              </div>
-              <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
-                    <XAxis
-                      type="number"
-                      dataKey="timestampMs"
-                      scale="time"
-                      domain={['dataMin', 'dataMax']}
-                      tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                      minTickGap={24}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <Tooltip content={<TimelineTooltipContent formatter={formatTime} />} />
-                    <Bar
-                      dataKey={activeSeries}
-                      fill={activeSeriesDef.fill}
-                      stroke={activeSeriesDef.stroke}
-                      strokeWidth={1}
-                      radius={[4, 4, 0, 0]}
-                      maxBarSize={24}
-                      isAnimationActive={false}
-                    />
-                    {timelinePoints.length > 12 && (
-                      <Brush
-                        dataKey="timestampMs"
-                        height={20}
-                        travellerWidth={10}
-                        stroke={activeSeriesDef.stroke}
-                        fill="hsl(var(--surface-2))"
-                        tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
-                      />
-                    )}
-                  </BarChart>
-                </ResponsiveContainer>
+              )}
+
+              <div className={`space-y-4 transition-opacity ${chartIsRefreshing ? 'opacity-35' : 'opacity-100'}`}>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {TIMELINE_SERIES.map((series) => {
+                    const total = data.timeline.series.find((item) => item.key === series.key)?.total ?? 0
+                    return (
+                      <button
+                        key={series.key}
+                        type="button"
+                        onClick={() => setActiveSeries(series.key)}
+                        className={`rounded-lg border p-3 text-left transition-smooth ${series.panelClass} ${activeSeries === series.key ? series.activeClass : 'border-border/60 hover:border-border'}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-foreground">{t(series.labelKey)}</span>
+                          <span className="text-lg font-semibold tabular-nums" style={{ color: series.stroke }}>
+                            {total}
+                          </span>
+                        </div>
+                        <div className="mt-3 h-16">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={timelinePoints}>
+                              <Area
+                                type="monotone"
+                                dataKey={series.key}
+                                stroke={series.stroke}
+                                fill={series.fill}
+                                strokeWidth={2}
+                                isAnimationActive={false}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-secondary/20 p-4">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div>
+                      <h3 className="text-sm font-medium text-foreground">{t(activeSeriesDef.labelKey)}</h3>
+                      <p className="text-xs text-muted-foreground">{bucketLabel}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-semibold tabular-nums" style={{ color: activeSeriesDef.stroke }}>
+                        {activeSeriesMeta?.total ?? 0}
+                      </div>
+                      {!hasTimelineActivity && (
+                        <p className="text-xs text-muted-foreground">{t('noTimelineData')}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
+                        <XAxis
+                          type="number"
+                          dataKey="timestampMs"
+                          scale="time"
+                          domain={['dataMin', 'dataMax']}
+                          tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                          minTickGap={24}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          content={<TimelineTooltipContent formatter={formatTime} />}
+                          cursor={{ fill: 'hsl(var(--foreground) / 0.08)' }}
+                        />
+                        <Bar
+                          dataKey={activeSeries}
+                          fill={activeSeriesDef.fill}
+                          stroke={activeSeriesDef.stroke}
+                          strokeWidth={1}
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={24}
+                          isAnimationActive={false}
+                        />
+                        {timelinePoints.length > 12 && (
+                          <Brush
+                            dataKey="timestampMs"
+                            height={20}
+                            travellerWidth={10}
+                            stroke={activeSeriesDef.stroke}
+                            fill="hsl(var(--surface-2))"
+                            tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                          />
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
