@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
@@ -203,118 +203,130 @@ export function SecurityAuditPanel() {
   const [evalsData, setEvalsData] = useState<AgentEvalsData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
 
   const fetchData = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setIsLoading(true)
     setLoadError(null)
+
+    const applyAuditData = (audit: any) => {
+      if (audit.authEvents && !Array.isArray(audit.authEvents)) {
+        const events = audit.authEvents.recentEvents || []
+        audit.authEvents = events.map((e: any, i: number) => ({
+          id: i,
+          type: (e.event_type || '').replace('auth.', ''),
+          actor: e.agent_name || 'unknown',
+          ip: e.ip_address || '',
+          timestamp: e.created_at || 0,
+          detail: e.detail || '',
+        }))
+      }
+      if (audit.agentTrust && !Array.isArray(audit.agentTrust)) {
+        const agents = audit.agentTrust.agents || []
+        const flaggedThreshold = 0.8
+        audit.agentTrust = agents.map((a: any, i: number) => ({
+          agentId: i,
+          name: a.name,
+          trustScore: a.score,
+          flagged: a.score < flaggedThreshold,
+        }))
+      }
+      if (audit.secretExposures && !audit.secretAlerts) {
+        const recent = audit.secretExposures.recent || []
+        audit.secretAlerts = recent.map((e: any, i: number) => ({
+          id: i,
+          file: e.detail || '',
+          line: 0,
+          type: (e.event_type || '').replace('secret.', ''),
+          preview: e.detail || '',
+          detectedAt: e.created_at || 0,
+          resolved: false,
+        }))
+      }
+      if (!Array.isArray(audit.secretAlerts)) audit.secretAlerts = []
+      if (audit.mcpAudit && !audit.toolAudit) {
+        const topTools = audit.mcpAudit.topTools || []
+        audit.toolAudit = topTools.map((t: any) => ({
+          tool: t.name,
+          calls: t.count,
+          successes: t.count,
+          failures: 0,
+        }))
+      }
+      if (!Array.isArray(audit.toolAudit)) audit.toolAudit = []
+      if (audit.rateLimits && !Array.isArray(audit.rateLimits)) {
+        const byIp = audit.rateLimits.byIp || []
+        audit.rateLimits = byIp.map((r: any) => ({
+          ip: r.ip,
+          hits: r.count,
+          lastHit: 0,
+        }))
+      }
+      if (audit.injectionAttempts && !Array.isArray(audit.injectionAttempts)) {
+        const recent = audit.injectionAttempts.recent || []
+        audit.injectionAttempts = recent.map((e: any, i: number) => ({
+          id: i,
+          type: (e.event_type || '').replace('injection.', ''),
+          source: e.agent_name || e.ip_address || 'unknown',
+          input: e.detail || '',
+          blocked: true,
+          timestamp: e.created_at || 0,
+        }))
+      }
+      if (Array.isArray(audit.timeline)) {
+        audit.timeline = audit.timeline.map((t: any) => ({
+          timestamp: Number(t.timestamp || 0),
+          authEvents: Number(t.authEvents ?? t.auth_events ?? t.eventCount ?? 0),
+          injectionAttempts: Number(t.injectionAttempts ?? t.injection_attempts ?? 0),
+          secretAlerts: Number(t.secretAlerts ?? t.secret_alerts ?? 0),
+          toolCalls: Number(t.toolCalls ?? t.tool_calls ?? 0),
+        }))
+      }
+      return audit
+    }
+
     try {
-      const [auditResult, evalsResult] = await Promise.allSettled([
-        fetch(`/api/security-audit?timeframe=${selectedTimeframe}`),
-        fetch(`/api/agents/evals?timeframe=${selectedTimeframe}`),
-      ])
-      if (auditResult.status === 'fulfilled' && auditResult.value.ok) {
-        const auditRes = auditResult.value
-        const audit = await auditRes.json()
-        // API returns authEvents as { loginFailures, tokenRotations, accessDenials, recentEvents }
-        // but the panel expects authEvents to be an array of AuthEvent
-        if (audit.authEvents && !Array.isArray(audit.authEvents)) {
-          const events = audit.authEvents.recentEvents || []
-          audit.authEvents = events.map((e: any, i: number) => ({
-            id: i,
-            type: (e.event_type || '').replace('auth.', ''),
-            actor: e.agent_name || 'unknown',
-            ip: e.ip_address || '',
-            timestamp: e.created_at || 0,
-            detail: e.detail || '',
-          }))
-        }
-        // agentTrust: { agents: [...], flaggedCount } → AgentTrust[]
-        if (audit.agentTrust && !Array.isArray(audit.agentTrust)) {
-          const agents = audit.agentTrust.agents || []
-          const flaggedThreshold = 0.8
-          audit.agentTrust = agents.map((a: any, i: number) => ({
-            agentId: i,
-            name: a.name,
-            trustScore: a.score,
-            flagged: a.score < flaggedThreshold,
-          }))
-        }
-        // secretExposures → secretAlerts
-        if (audit.secretExposures && !audit.secretAlerts) {
-          const recent = audit.secretExposures.recent || []
-          audit.secretAlerts = recent.map((e: any, i: number) => ({
-            id: i,
-            file: e.detail || '',
-            line: 0,
-            type: (e.event_type || '').replace('secret.', ''),
-            preview: e.detail || '',
-            detectedAt: e.created_at || 0,
-            resolved: false,
-          }))
-        }
-        if (!Array.isArray(audit.secretAlerts)) audit.secretAlerts = []
-        // mcpAudit → toolAudit
-        if (audit.mcpAudit && !audit.toolAudit) {
-          const topTools = audit.mcpAudit.topTools || []
-          audit.toolAudit = topTools.map((t: any) => ({
-            tool: t.name,
-            calls: t.count,
-            successes: t.count,
-            failures: 0,
-          }))
-        }
-        if (!Array.isArray(audit.toolAudit)) audit.toolAudit = []
-        // rateLimits: { totalHits, byIp } → RateLimitSignal[]
-        if (audit.rateLimits && !Array.isArray(audit.rateLimits)) {
-          const byIp = audit.rateLimits.byIp || []
-          audit.rateLimits = byIp.map((r: any) => ({
-            ip: r.ip,
-            hits: r.count,
-            lastHit: 0,
-          }))
-        }
-        // injectionAttempts: { total, recent } → InjectionAttempt[]
-        if (audit.injectionAttempts && !Array.isArray(audit.injectionAttempts)) {
-          const recent = audit.injectionAttempts.recent || []
-          audit.injectionAttempts = recent.map((e: any, i: number) => ({
-            id: i,
-            type: (e.event_type || '').replace('injection.', ''),
-            source: e.agent_name || e.ip_address || 'unknown',
-            input: e.detail || '',
-            blocked: true,
-            timestamp: e.created_at || 0,
-          }))
-        }
-        // timeline: [{timestamp, eventCount, severity}] → [{timestamp, authEvents, ...}]
-        if (Array.isArray(audit.timeline)) {
-          audit.timeline = audit.timeline.map((t: any) => ({
-            timestamp: Number(t.timestamp || 0),
-            authEvents: Number(t.authEvents ?? t.auth_events ?? t.eventCount ?? 0),
-            injectionAttempts: Number(t.injectionAttempts ?? t.injection_attempts ?? 0),
-            secretAlerts: Number(t.secretAlerts ?? t.secret_alerts ?? 0),
-            toolCalls: Number(t.toolCalls ?? t.tool_calls ?? 0),
-          }))
-        }
+      const auditRes = await fetch(`/api/security-audit?timeframe=${selectedTimeframe}`, { signal: controller.signal })
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return
+
+      if (auditRes.ok) {
+        const audit = applyAuditData(await auditRes.json())
         setData(audit)
         if (audit.posture) {
           setSecurityPosture(audit.posture)
         }
       } else {
-        const detail = auditResult.status === 'fulfilled'
-          ? `Security audit request failed (${auditResult.value.status})`
-          : 'Security audit request failed'
-        setLoadError(detail)
+        setLoadError(`Security audit request failed (${auditRes.status})`)
       }
-      if (evalsResult.status === 'fulfilled' && evalsResult.value.ok) {
-        const evals = await evalsResult.value.json()
-        setEvalsData(evals)
+
+      setIsLoading(false)
+
+      const evalsRes = await fetch(`/api/agents/evals?timeframe=${selectedTimeframe}`, { signal: controller.signal })
+      if (controller.signal.aborted || requestId !== requestIdRef.current) return
+      if (evalsRes.ok) {
+        setEvalsData(await evalsRes.json())
       } else {
         setEvalsData(null)
       }
-    } catch {
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || controller.signal.aborted) return
       setLoadError('Security data request failed')
     } finally {
-      setIsLoading(false)
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [selectedTimeframe, setSecurityPosture])
 
@@ -371,8 +383,7 @@ export function SecurityAuditPanel() {
 
   const timelineChartData = data?.timeline.map((point) => ({
     ...point,
-    timeLabel: formatTimelineLabel(point.timestamp),
-    tooltipLabel: formatTime(point.timestamp),
+    timestampMs: point.timestamp * 1000,
   })) ?? []
 
   const timelineChartWidth = Math.max(
@@ -708,14 +719,21 @@ export function SecurityAuditPanel() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={timelineChartData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="timeLabel" interval="preserveStartEnd" minTickGap={16} />
+                      <XAxis
+                        type="number"
+                        dataKey="timestampMs"
+                        domain={['dataMin', 'dataMax']}
+                        scale="time"
+                        tickFormatter={(value) => formatTimelineLabel(Math.floor(Number(value) / 1000))}
+                        minTickGap={16}
+                      />
                       <YAxis allowDecimals={false} />
-                      <Tooltip labelFormatter={(_, payload) => payload?.[0]?.payload?.tooltipLabel ?? ''} />
+                      <Tooltip labelFormatter={(value) => formatTime(Math.floor(Number(value) / 1000))} />
                       <Legend />
-                      <Line type="monotone" dataKey="authEvents" stroke="#8884d8" strokeWidth={2} name={t('chartAuthEvents')} />
-                      <Line type="monotone" dataKey="injectionAttempts" stroke="#ef4444" strokeWidth={2} name={t('chartInjections')} />
-                      <Line type="monotone" dataKey="secretAlerts" stroke="#f59e0b" strokeWidth={2} name={t('chartSecrets')} />
-                      <Line type="monotone" dataKey="toolCalls" stroke="#22c55e" strokeWidth={2} name={t('chartToolCalls')} />
+                      <Line type="linear" dataKey="authEvents" stroke="#8884d8" strokeWidth={2} name={t('chartAuthEvents')} isAnimationActive={false} />
+                      <Line type="linear" dataKey="injectionAttempts" stroke="#ef4444" strokeWidth={2} name={t('chartInjections')} isAnimationActive={false} />
+                      <Line type="linear" dataKey="secretAlerts" stroke="#f59e0b" strokeWidth={2} name={t('chartSecrets')} isAnimationActive={false} />
+                      <Line type="linear" dataKey="toolCalls" stroke="#22c55e" strokeWidth={2} name={t('chartToolCalls')} isAnimationActive={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

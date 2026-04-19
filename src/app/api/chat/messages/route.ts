@@ -6,6 +6,7 @@ import { eventBus } from '@/lib/event-bus'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { scanAndLogInjection, sanitizeForPrompt } from '@/lib/injection-guard'
+import { logMcpCall } from '@/lib/mcp-audit'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 import { resolveCoordinatorDeliveryTarget } from '@/lib/coordinator-routing'
 
@@ -618,6 +619,17 @@ export async function POST(request: NextRequest) {
 
                 if (toolEvents.length > 0) {
                   for (const evt of toolEvents) {
+                    const toolStatus = String(evt.status || '').toLowerCase()
+                    const toolSucceeded = !toolStatus || ['ok', 'success', 'completed', 'complete'].includes(toolStatus)
+
+                    logMcpCall({
+                      agentName: to || COORDINATOR_AGENT,
+                      toolName: evt.name,
+                      success: toolSucceeded,
+                      error: toolSucceeded ? undefined : (evt.output || evt.status || 'Tool call failed'),
+                      workspaceId,
+                    })
+
                     createChatReply(
                       db,
                       workspaceId,
