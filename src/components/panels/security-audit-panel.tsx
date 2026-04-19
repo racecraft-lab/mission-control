@@ -328,6 +328,7 @@ export function SecurityAuditPanel() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  const hasBootstrappedRef = useRef(false)
   const prefetchControllersRef = useRef(new Map<Timeframe, AbortController>())
   const dataCacheRef = useRef(new Map<Timeframe, CachedSecurityAuditData>())
 
@@ -440,6 +441,15 @@ export function SecurityAuditPanel() {
   }, [cacheAuditData, prefetchTimeframe, selectedTimeframe, setSecurityPosture])
 
   useSmartPoll(fetchData, 30_000)
+
+  useEffect(() => {
+    if (!hasBootstrappedRef.current) {
+      hasBootstrappedRef.current = true
+      return
+    }
+
+    void fetchData()
+  }, [fetchData])
 
   const timelinePoints = useMemo(() => (
     data?.timeline.points.map((point) => ({
