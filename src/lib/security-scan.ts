@@ -96,6 +96,58 @@ function describeConfiguredCredential(value: unknown, label: 'Token' | 'Password
   return `${label} auth enabled`
 }
 
+function normalizeHostAddress(rawAddress: string): string {
+  return rawAddress
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .replace(/^::ffff:/, '')
+    .split('%')[0]
+    .trim()
+}
+
+function isLoopbackAddress(rawAddress: string): boolean {
+  const address = normalizeHostAddress(rawAddress).toLowerCase()
+  return address === 'localhost'
+    || address === '::1'
+    || address === '0:0:0:0:0:0:0:1'
+    || address.startsWith('127.')
+}
+
+function isPrivateNetworkAddress(rawAddress: string): boolean {
+  const address = normalizeHostAddress(rawAddress).toLowerCase()
+  if (!address || isLoopbackAddress(address)) return true
+  if (address === '0.0.0.0' || address === '::' || address === '*') return false
+  if (address.startsWith('10.') || address.startsWith('192.168.') || address.startsWith('169.254.')) return true
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(address)) return true
+  if (/^100\.(6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\./.test(address)) return true
+  if (address.startsWith('fc') || address.startsWith('fd') || address.startsWith('fe80:')) return true
+  return false
+}
+
+function summarizeTcpListeners(output: string | null): { totalCount: number; publicCount: number } {
+  if (!output) return { totalCount: 0, publicCount: 0 }
+
+  let totalCount = 0
+  let publicCount = 0
+
+  for (const line of output.split('\n').map(line => line.trim()).filter(Boolean)) {
+    const parts = line.split(/\s+/)
+    const local = parts[3]
+    if (!local) continue
+
+    const separator = local.lastIndexOf(':')
+    if (separator <= 0) continue
+
+    totalCount += 1
+    const host = normalizeHostAddress(local.slice(0, separator))
+    if (host === '0.0.0.0' || host === '::' || (!isLoopbackAddress(host) && !isPrivateNetworkAddress(host))) {
+      publicCount += 1
+    }
+  }
+
+  return { totalCount, publicCount }
+}
+
 export function runSecurityScan(): ScanResult {
   const credentials = scanCredentials()
   const network = scanNetwork()
@@ -743,18 +795,33 @@ function scanOS(): Category {
   // -- Firewall --
 
   if (isLinux) {
-    const ufwStatus = tryExec('ufw status 2>/dev/null')
-    const iptablesCount = tryExec('iptables -L -n 2>/dev/null | wc -l')
-    const nftCount = tryExec('nft list ruleset 2>/dev/null | wc -l')
-    const hasUfw = ufwStatus?.includes('active')
+    const ufwService = cachedExec('ufw_service', 'systemctl is-active ufw 2>/dev/null')
+    const nftService = cachedExec('nft_service', 'systemctl is-active nftables 2>/dev/null')
+    const firewalldService = cachedExec('firewalld_service', 'systemctl is-active firewalld 2>/dev/null')
+    const ufwStatus = tryExec('/usr/sbin/ufw status 2>&1')
+    const nftRules = tryExec('/usr/sbin/nft list ruleset 2>&1')
+    const iptablesCount = tryExec('/usr/sbin/iptables -L -n 2>/dev/null | wc -l') ?? tryExec('iptables -L -n 2>/dev/null | wc -l')
+    const hasUfw = ufwService === 'active' || ufwStatus?.includes('Status: active')
     const hasIptables = iptablesCount ? parseInt(iptablesCount, 10) > 8 : false
-    const hasNft = nftCount ? parseInt(nftCount, 10) > 0 : false
+    const hasNft = nftService === 'active' || (!!nftRules && !nftRules.includes('Operation not permitted') && nftRules.trim().length > 0)
+    const hasFirewalld = firewalldService === 'active'
+    const firewallKnownUnavailable = ufwStatus?.includes('You need to be root') || nftRules?.includes('Operation not permitted')
     checks.push({
       id: 'firewall',
       name: 'Firewall active',
-      status: hasUfw || hasIptables || hasNft ? 'pass' : 'warn',
-      detail: hasUfw ? 'UFW firewall is active' : hasIptables ? 'iptables rules present' : hasNft ? 'nftables rules present' : 'No firewall detected',
-      fix: !hasUfw && !hasIptables && !hasNft ? 'Enable a firewall: sudo ufw enable' : '',
+      status: hasUfw || hasIptables || hasNft || hasFirewalld ? 'pass' : 'warn',
+      detail: hasUfw
+        ? 'UFW firewall is active'
+        : hasFirewalld
+          ? 'firewalld is active'
+          : hasNft
+            ? 'nftables ruleset is active'
+            : hasIptables
+              ? 'iptables rules present'
+              : firewallKnownUnavailable
+                ? 'Firewall state unavailable to unprivileged service'
+                : 'No firewall detected',
+      fix: !hasUfw && !hasIptables && !hasNft && !hasFirewalld && !firewallKnownUnavailable ? 'Enable a firewall: sudo ufw enable' : '',
       severity: 'critical',
       platform: 'linux',
     })
@@ -775,17 +842,18 @@ function scanOS(): Category {
   // -- Open ports --
 
   if (isLinux || isDarwin) {
-    const portCmd = isLinux
-      ? 'ss -tlnp 2>/dev/null | tail -n +2 | wc -l'
-      : 'netstat -an 2>/dev/null | grep LISTEN | wc -l'
-    const portCount = tryExec(portCmd)
-    const count = portCount ? parseInt(portCount.trim(), 10) : 0
+    const listenersRaw = isLinux
+      ? tryExec('ss -ltnH 2>/dev/null')
+      : tryExec('netstat -an 2>/dev/null | grep LISTEN')
+    const { totalCount, publicCount } = summarizeTcpListeners(listenersRaw)
     checks.push({
       id: 'open_ports',
       name: 'Listening ports',
-      status: count <= 10 ? 'pass' : count <= 25 ? 'warn' : 'fail',
-      detail: `${count} listening port${count !== 1 ? 's' : ''} detected`,
-      fix: count > 10 ? 'Review open ports and close unnecessary services' : '',
+      status: publicCount === 0 ? 'pass' : publicCount <= 5 ? 'warn' : 'fail',
+      detail: publicCount === 0
+        ? `No public listeners detected (${totalCount} total including loopback/private bindings)`
+        : `${publicCount} public listening port${publicCount !== 1 ? 's' : ''} detected (${totalCount} total including loopback/private bindings)`,
+      fix: publicCount > 0 ? 'Review public listeners and close or proxy unnecessary services' : '',
       severity: 'medium',
       platform: isLinux ? 'linux' : 'darwin',
     })
@@ -946,9 +1014,10 @@ function scanOS(): Category {
 
     // MAC framework
     const selinux = cachedExec('selinux', 'cat /sys/fs/selinux/enforce 2>/dev/null')
-    const apparmor = cachedExec('apparmor', 'aa-status --enabled 2>/dev/null; echo $?')
+    const apparmorKernel = cachedExec('apparmor_kernel', 'cat /sys/module/apparmor/parameters/enabled 2>/dev/null')
+    const apparmor = cachedExec('apparmor', '/usr/sbin/aa-status --enabled 2>/dev/null; echo $?')
     const hasSELinux = selinux === '1'
-    const hasAppArmor = apparmor?.trim().endsWith('0')
+    const hasAppArmor = apparmorKernel?.trim().toUpperCase() === 'Y' || apparmor?.trim().endsWith('0')
     checks.push({
       id: 'linux_mac_framework',
       name: 'Mandatory access control',
