@@ -5,7 +5,8 @@ import { getAllGatewaySessions } from '@/lib/sessions'
 import { eventBus } from '@/lib/event-bus'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
-import { scanForInjection, sanitizeForPrompt } from '@/lib/injection-guard'
+import { scanAndLogInjection, sanitizeForPrompt } from '@/lib/injection-guard'
+import { logMcpCall } from '@/lib/mcp-audit'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 import { resolveCoordinatorDeliveryTarget } from '@/lib/coordinator-routing'
 
@@ -353,7 +354,11 @@ export async function POST(request: NextRequest) {
 
     // Scan content for injection when it will be forwarded to an agent
     if (body.forward && to) {
-      const injectionReport = scanForInjection(content, { context: 'prompt' })
+      const injectionReport = scanAndLogInjection(
+        content,
+        { context: 'prompt' },
+        { agentName: to, source: 'api.chat.messages', workspaceId: auth.user.workspace_id ?? 1 }
+      )
       if (!injectionReport.safe) {
         const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
         if (criticals.length > 0) {
@@ -614,6 +619,17 @@ export async function POST(request: NextRequest) {
 
                 if (toolEvents.length > 0) {
                   for (const evt of toolEvents) {
+                    const toolStatus = String(evt.status || '').toLowerCase()
+                    const toolSucceeded = !toolStatus || ['ok', 'success', 'completed', 'complete'].includes(toolStatus)
+
+                    logMcpCall({
+                      agentName: to || COORDINATOR_AGENT,
+                      toolName: evt.name,
+                      success: toolSucceeded,
+                      error: toolSucceeded ? undefined : (evt.output || evt.status || 'Tool call failed'),
+                      workspaceId,
+                    })
+
                     createChatReply(
                       db,
                       workspaceId,

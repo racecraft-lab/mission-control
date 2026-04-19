@@ -40,8 +40,22 @@ const TRUST_WEIGHTS: Record<string, { field: string; delta: number }> = {
   'task.failure': { field: 'failed_tasks', delta: -0.01 },
 }
 
+const LEGACY_EVENT_TYPE_ALIASES: Record<string, string> = {
+  auth_failure: 'auth.failure',
+  auth_token_rotation: 'auth.token_rotation',
+  auth_access_denied: 'auth.access_denied',
+  injection_attempt: 'injection.attempt',
+  rate_limit_hit: 'rate_limit.hit',
+  secret_exposure: 'secret.exposure',
+}
+
+function normalizeSecurityEventType(eventType: string): string {
+  return LEGACY_EVENT_TYPE_ALIASES[eventType] ?? eventType
+}
+
 export function logSecurityEvent(event: SecurityEvent): number {
   const db = getDatabase()
+  const eventType = normalizeSecurityEventType(event.event_type)
   const severity = event.severity ?? 'info'
   const workspaceId = event.workspace_id ?? 1
   const tenantId = event.tenant_id ?? 1
@@ -50,7 +64,7 @@ export function logSecurityEvent(event: SecurityEvent): number {
     INSERT INTO security_events (event_type, severity, source, agent_name, detail, ip_address, workspace_id, tenant_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    event.event_type,
+    eventType,
     severity,
     event.source ?? null,
     event.agent_name ?? null,
@@ -65,10 +79,19 @@ export function logSecurityEvent(event: SecurityEvent): number {
   eventBus.broadcast('security.event' as EventType, {
     id,
     ...event,
+    event_type: eventType,
     severity,
     workspace_id: workspaceId,
     timestamp: Math.floor(Date.now() / 1000),
   })
+
+  if (event.agent_name && TRUST_WEIGHTS[eventType]) {
+    try {
+      updateAgentTrustScore(event.agent_name, eventType, workspaceId)
+    } catch (error) {
+      logger.warn({ err: error, agentName: event.agent_name, eventType }, 'Failed to update agent trust score')
+    }
+  }
 
   return id
 }
