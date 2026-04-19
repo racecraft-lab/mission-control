@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockRun = vi.fn((): any => ({ lastInsertRowid: 1, changes: 1 }))
+const mockAll = vi.fn((): any => [])
 const mockGet = vi.fn((): any => ({
   auth_failures: 1,
   injection_attempts: 0,
@@ -10,7 +11,7 @@ const mockGet = vi.fn((): any => ({
   failed_tasks: 0,
   trust_score: 0.95,
 }))
-const mockPrepare = vi.fn(() => ({ run: mockRun, get: mockGet, all: vi.fn(() => []) }))
+const mockPrepare = vi.fn(() => ({ run: mockRun, get: mockGet, all: mockAll }))
 
 vi.mock('@/lib/db', () => ({
   getDatabase: () => ({ prepare: mockPrepare }),
@@ -24,7 +25,7 @@ vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { logSecurityEvent, updateAgentTrustScore, getSecurityPosture } from '@/lib/security-events'
+import { calculateAgentTrustScore, logSecurityEvent, updateAgentTrustScore, getSecurityPosture } from '@/lib/security-events'
 
 describe('logSecurityEvent', () => {
   beforeEach(() => {
@@ -117,6 +118,17 @@ describe('updateAgentTrustScore', () => {
       expect(lastCall[0]).toBeLessThanOrEqual(1)
     }
   })
+
+  it('ignores rate-limit hit counts when calculating trust', () => {
+    expect(calculateAgentTrustScore({
+      auth_failures: 0,
+      injection_attempts: 0,
+      rate_limit_hits: 99,
+      secret_exposures: 0,
+      successful_tasks: 0,
+      failed_tasks: 0,
+    } as any)).toBe(1)
+  })
 })
 
 describe('getSecurityPosture', () => {
@@ -125,10 +137,11 @@ describe('getSecurityPosture', () => {
   })
 
   it('returns expected posture shape', () => {
-    mockGet
-      .mockReturnValueOnce({ total: 10, critical: 2, warning: 5 })
-      .mockReturnValueOnce({ count: 3 })
-      .mockReturnValueOnce({ avg_trust: 0.85 })
+    mockAll.mockReturnValueOnce([
+      { event_type: 'injection.attempt', severity: 'critical', count: 1 },
+      { event_type: 'auth.failure', severity: 'warning', count: 2 },
+    ])
+    mockGet.mockReturnValueOnce({ avg_trust: 0.85 })
 
     const posture = getSecurityPosture(1)
     expect(posture).toHaveProperty('score')
@@ -142,24 +155,34 @@ describe('getSecurityPosture', () => {
     expect(posture.score).toBeLessThanOrEqual(100)
   })
 
-  it('deducts points for critical and warning events', () => {
-    mockGet
-      .mockReturnValueOnce({ total: 5, critical: 5, warning: 0 })
-      .mockReturnValueOnce({ count: 5 })
-      .mockReturnValueOnce({ avg_trust: 1.0 })
+  it('deducts posture points once per incident class without trust multiplication', () => {
+    mockAll.mockReturnValueOnce([
+      { event_type: 'auth.failure', severity: 'warning', count: 1 },
+    ])
+    mockGet.mockReturnValueOnce({ avg_trust: 0.5 })
 
     const posture = getSecurityPosture(1)
-    expect(posture.score).toBeLessThan(100)
+    expect(posture.score).toBe(85)
   })
 
-  it('returns score of 100 with no events', () => {
-    mockGet
-      .mockReturnValueOnce({ total: 0, critical: 0, warning: 0 })
-      .mockReturnValueOnce({ count: 0 })
-      .mockReturnValueOnce({ avg_trust: 1.0 })
+  it('returns score of 100 with no posture-relevant events', () => {
+    mockAll.mockReturnValueOnce([])
+    mockGet.mockReturnValueOnce({ avg_trust: 1.0 })
 
     const posture = getSecurityPosture(1)
     expect(posture.score).toBe(100)
+  })
+
+  it('ignores rate-limit telemetry in posture scoring', () => {
+    mockAll.mockReturnValueOnce([
+      { event_type: 'rate_limit.hit', severity: 'warning', count: 24 },
+    ])
+    mockGet.mockReturnValueOnce({ avg_trust: 1.0 })
+
+    const posture = getSecurityPosture(1)
+    expect(posture.score).toBe(100)
+    expect(posture.warningEvents).toBe(0)
+    expect(posture.recentIncidents).toBe(0)
   })
 })
 

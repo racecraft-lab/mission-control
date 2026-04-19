@@ -1440,6 +1440,23 @@ const migrations: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_call_log_workspace_tool_created_at ON mcp_call_log(workspace_id, tool_name, created_at)`)
       db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_trust_scores_workspace_trust_score ON agent_trust_scores(workspace_id, trust_score)`)
     }
+  },
+  {
+    id: '052_recalculate_agent_trust_without_rate_limit_hits',
+    up(db: Database.Database) {
+      db.exec(`
+        UPDATE agent_trust_scores
+        SET trust_score = MIN(1.0, MAX(0.0,
+          1.0
+          + (COALESCE(auth_failures, 0) * -0.05)
+          + (COALESCE(injection_attempts, 0) * -0.15)
+          + (COALESCE(secret_exposures, 0) * -0.20)
+          + (COALESCE(successful_tasks, 0) * 0.02)
+          + (COALESCE(failed_tasks, 0) * -0.01)
+        )),
+        updated_at = unixepoch()
+      `)
+    }
   }
 ]
 

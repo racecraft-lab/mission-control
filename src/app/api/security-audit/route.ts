@@ -173,7 +173,7 @@ export async function GET(request: NextRequest) {
 
     const agents = db.prepare(`
       SELECT agent_name, trust_score, last_anomaly_at,
-        auth_failures + injection_attempts + rate_limit_hits + secret_exposures as anomalies
+        auth_failures + injection_attempts + secret_exposures as anomalies
       FROM agent_trust_scores
       WHERE workspace_id = ?
       ORDER BY trust_score ASC
