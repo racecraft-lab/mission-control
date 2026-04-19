@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   try {
     const progress: Array<{ step: string; detail: string }> = []
 
-    const fixResult = await runOpenClaw(['doctor', '--fix'], { timeoutMs: 120000 })
+    const fixResult = await runOpenClaw(['doctor', '--fix', '--non-interactive', '--yes'], { timeoutMs: 120000 })
     progress.push({ step: 'doctor', detail: 'Applied OpenClaw doctor config fixes.' })
 
     try {
