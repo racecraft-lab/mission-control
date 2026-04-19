@@ -42,7 +42,7 @@ describe('logSecurityEvent', () => {
 
     expect(mockPrepare).toHaveBeenCalled()
     expect(mockRun).toHaveBeenCalledWith(
-      'auth_failure', 'warning', 'auth', null, 'test detail', null, 1, 1
+      'auth.failure', 'warning', 'auth', null, 'test detail', null, 1, 1
     )
     expect(id).toBe(42)
   })
@@ -71,7 +71,7 @@ describe('logSecurityEvent', () => {
     logSecurityEvent({ event_type: 'injection_attempt', severity: 'critical' })
     expect(eventBus.broadcast).toHaveBeenCalledWith(
       'security.event',
-      expect.objectContaining({ event_type: 'injection_attempt', severity: 'critical' })
+      expect.objectContaining({ event_type: 'injection.attempt', severity: 'critical' })
     )
   })
 })

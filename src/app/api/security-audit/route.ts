@@ -4,10 +4,11 @@ import { requireRole } from '@/lib/auth'
 import { readLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { getSecurityPosture } from '@/lib/security-events'
-import { getMcpCallStats, verifyMcpCallReceipts } from '@/lib/mcp-audit'
+import { verifyMcpCallReceipts } from '@/lib/mcp-audit'
 import { runSecurityScan } from '@/lib/security-scan'
 
 type Timeframe = 'hour' | 'day' | 'week' | 'month'
+type TimelineSeriesKey = 'authEvents' | 'injectionAttempts' | 'secretAlerts' | 'toolCalls'
 
 const TIMEFRAME_SECONDS: Record<Timeframe, number> = {
   hour: 3600,
@@ -23,6 +24,24 @@ const TIMELINE_BUCKET_SECONDS: Record<Timeframe, number> = {
   month: 86400,
 }
 
+const TIMELINE_SERIES: Array<{ key: TimelineSeriesKey; colorToken: string }> = [
+  { key: 'authEvents', colorToken: '--void-violet' },
+  { key: 'injectionAttempts', colorToken: '--void-crimson' },
+  { key: 'secretAlerts', colorToken: '--void-amber' },
+  { key: 'toolCalls', colorToken: '--void-mint' },
+]
+
+function asTimeframe(value: string | null): Timeframe {
+  if (value === 'hour' || value === 'day' || value === 'week' || value === 'month') {
+    return value
+  }
+  return 'day'
+}
+
+function toCount(value: unknown): number {
+  return typeof value === 'number' ? value : Number(value ?? 0)
+}
+
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'admin')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -32,32 +51,29 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const timeframe = (searchParams.get('timeframe') || 'day') as Timeframe
+    const timeframe = asTimeframe(searchParams.get('timeframe'))
     const eventTypeFilter = searchParams.get('event_type')
     const severityFilter = searchParams.get('severity')
     const agentFilter = searchParams.get('agent')
     const workspaceId = auth.user.workspace_id ?? 1
 
     const now = Math.floor(Date.now() / 1000)
-    const seconds = TIMEFRAME_SECONDS[timeframe] || TIMEFRAME_SECONDS.day
+    const seconds = TIMEFRAME_SECONDS[timeframe]
     const since = now - seconds
-    const bucketSize = TIMELINE_BUCKET_SECONDS[timeframe] || TIMELINE_BUCKET_SECONDS.day
+    const bucketSize = TIMELINE_BUCKET_SECONDS[timeframe]
+    const firstBucket = Math.floor(since / bucketSize) * bucketSize
+    const lastBucket = Math.floor(now / bucketSize) * bucketSize
     const db = getDatabase()
 
-    // Infrastructure scan (same as onboarding security scan)
     const scan = runSecurityScan()
-
-    // Event-based posture (incidents, trust scores)
     const eventPosture = getSecurityPosture(workspaceId)
 
-    // Blend: weighted average — 70% infrastructure config, 30% event history
     const blendedScore = Math.round(scan.score * 0.7 + eventPosture.score * 0.3)
     const level = blendedScore >= 90 ? 'hardened'
       : blendedScore >= 70 ? 'secure'
       : blendedScore >= 40 ? 'needs-attention'
       : 'at-risk'
 
-    // Auth events
     const authEventsQuery = db.prepare(`
       SELECT event_type, severity, agent_name, detail, ip_address, created_at
       FROM security_events
@@ -67,11 +83,10 @@ export async function GET(request: NextRequest) {
       LIMIT 50
     `).all(workspaceId, since) as any[]
 
-    const loginFailures = authEventsQuery.filter(e => e.event_type === 'auth.failure').length
-    const tokenRotations = authEventsQuery.filter(e => e.event_type === 'auth.token_rotation').length
-    const accessDenials = authEventsQuery.filter(e => e.event_type === 'auth.access_denied').length
+    const loginFailures = authEventsQuery.filter((e) => e.event_type === 'auth.failure').length
+    const tokenRotations = authEventsQuery.filter((e) => e.event_type === 'auth.token_rotation').length
+    const accessDenials = authEventsQuery.filter((e) => e.event_type === 'auth.access_denied').length
 
-    // Agent trust
     const agents = db.prepare(`
       SELECT agent_name, trust_score, last_anomaly_at,
         auth_failures + injection_attempts + rate_limit_hits + secret_exposures as anomalies
@@ -82,7 +97,6 @@ export async function GET(request: NextRequest) {
 
     const flaggedCount = agents.filter((a: any) => a.trust_score < 0.8).length
 
-    // Secret exposures
     const secretEvents = db.prepare(`
       SELECT event_type, severity, agent_name, detail, created_at
       FROM security_events
@@ -91,7 +105,6 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `).all(workspaceId, since) as any[]
 
-    // MCP audit summary
     const mcpTotals = db.prepare(`
       SELECT
         COUNT(*) as total_calls,
@@ -101,21 +114,25 @@ export async function GET(request: NextRequest) {
       WHERE workspace_id = ? AND created_at > ?
     `).get(workspaceId, since) as any
 
-    const topTools = db.prepare(`
-      SELECT tool_name, COUNT(*) as count
+    const toolBreakdown = db.prepare(`
+      SELECT
+        tool_name,
+        COUNT(*) as calls,
+        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successes,
+        SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failures,
+        MAX(created_at) as last_called_at
       FROM mcp_call_log
       WHERE workspace_id = ? AND created_at > ?
       GROUP BY tool_name
-      ORDER BY count DESC
+      ORDER BY calls DESC, tool_name ASC
       LIMIT 10
     `).all(workspaceId, since) as any[]
 
-    const totalCalls = mcpTotals?.total_calls ?? 0
+    const totalCalls = toCount(mcpTotals?.total_calls)
     const failureRate = totalCalls > 0
-      ? Math.round(((mcpTotals?.failures ?? 0) / totalCalls) * 10000) / 100
+      ? Math.round((toCount(mcpTotals?.failures) / totalCalls) * 10000) / 100
       : 0
 
-    // Rate limit hits
     const rateLimitEvents = db.prepare(`
       SELECT COUNT(*) as total
       FROM security_events
@@ -123,15 +140,14 @@ export async function GET(request: NextRequest) {
     `).get(workspaceId, since) as any
 
     const rateLimitByIp = db.prepare(`
-      SELECT ip_address, COUNT(*) as count
+      SELECT ip_address, COUNT(*) as count, MAX(created_at) as last_hit
       FROM security_events
       WHERE workspace_id = ? AND created_at > ? AND event_type = 'rate_limit.hit' AND ip_address IS NOT NULL
       GROUP BY ip_address
-      ORDER BY count DESC
+      ORDER BY count DESC, last_hit DESC
       LIMIT 10
     `).all(workspaceId, since) as any[]
 
-    // Injection attempts
     const injectionEvents = db.prepare(`
       SELECT event_type, severity, agent_name, detail, ip_address, created_at
       FROM security_events
@@ -140,7 +156,6 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `).all(workspaceId, since) as any[]
 
-    // Timeline
     let timelineQuery = `
       SELECT
         (created_at / ${bucketSize}) * ${bucketSize} as bucket,
@@ -191,33 +206,36 @@ export async function GET(request: NextRequest) {
     }
 
     const securityTimelineByBucket = new Map(
-      securityTimeline.map((row: any) => [Number(row.bucket), row]),
+      securityTimeline.map((row: any) => [toCount(row.bucket), row]),
     )
     const mcpTimelineByBucket = new Map(
-      mcpTimeline.map((row: any) => [Number(row.bucket), row]),
+      mcpTimeline.map((row: any) => [toCount(row.bucket), row]),
     )
-    const firstBucket = Math.floor(since / bucketSize) * bucketSize
-    const lastBucket = Math.floor(now / bucketSize) * bucketSize
-    const timeline = []
 
+    const timelinePoints: Array<{
+      timestamp: number
+      authEvents: number
+      injectionAttempts: number
+      secretAlerts: number
+      toolCalls: number
+    }> = []
     for (let bucket = firstBucket; bucket <= lastBucket; bucket += bucketSize) {
       const securityRow = securityTimelineByBucket.get(bucket)
       const mcpRow = mcpTimelineByBucket.get(bucket)
-      timeline.push({
+      timelinePoints.push({
         timestamp: bucket,
-        authEvents: Number(securityRow?.auth_events ?? 0),
-        injectionAttempts: Number(securityRow?.injection_attempts ?? 0),
-        secretAlerts: Number(securityRow?.secret_alerts ?? 0),
-        toolCalls: Number(mcpRow?.tool_calls ?? 0),
+        authEvents: toCount(securityRow?.auth_events),
+        injectionAttempts: toCount(securityRow?.injection_attempts),
+        secretAlerts: toCount(securityRow?.secret_alerts),
+        toolCalls: toCount(mcpRow?.tool_calls),
       })
     }
 
-    const timelineHasActivity = timeline.some((point) => (
-      point.authEvents > 0
-      || point.injectionAttempts > 0
-      || point.secretAlerts > 0
-      || point.toolCalls > 0
-    ))
+    const timelineSeries = TIMELINE_SERIES.map((series) => ({
+      key: series.key,
+      colorToken: series.colorToken,
+      total: timelinePoints.reduce((sum, point) => sum + toCount(point[series.key]), 0),
+    }))
 
     return NextResponse.json({
       posture: { score: blendedScore, level },
@@ -230,25 +248,44 @@ export async function GET(request: NextRequest) {
         loginFailures,
         tokenRotations,
         accessDenials,
-        recentEvents: authEventsQuery.slice(0, 10),
+        recentEvents: authEventsQuery.slice(0, 10).map((event) => ({
+          type: String(event.event_type || '').replace('auth.', ''),
+          severity: event.severity || 'info',
+          actor: event.agent_name || 'system',
+          ip: event.ip_address || '',
+          timestamp: toCount(event.created_at),
+          detail: event.detail || '',
+        })),
       },
       agentTrust: {
-        agents: agents.map((a: any) => ({
-          name: a.agent_name,
-          score: Math.round(a.trust_score * 100) / 100,
-          anomalies: a.anomalies,
+        agents: agents.map((agent: any) => ({
+          name: agent.agent_name,
+          score: Number(agent.trust_score ?? 0),
+          anomalies: toCount(agent.anomalies),
         })),
         flaggedCount,
       },
       secretExposures: {
         total: secretEvents.length,
-        recent: secretEvents.slice(0, 5),
+        recent: secretEvents.slice(0, 5).map((event) => ({
+          type: String(event.event_type || '').replace('secret.', ''),
+          severity: event.severity || 'warning',
+          actor: event.agent_name || 'unknown',
+          preview: event.detail || '',
+          detectedAt: toCount(event.created_at),
+        })),
       },
       mcpAudit: {
         totalCalls,
-        uniqueTools: mcpTotals?.unique_tools ?? 0,
+        uniqueTools: toCount(mcpTotals?.unique_tools),
         failureRate,
-        topTools: topTools.map((t: any) => ({ name: t.tool_name, count: t.count })),
+        toolBreakdown: toolBreakdown.map((tool) => ({
+          tool: tool.tool_name,
+          calls: toCount(tool.calls),
+          successes: toCount(tool.successes),
+          failures: toCount(tool.failures),
+          lastCalledAt: tool.last_called_at ? toCount(tool.last_called_at) : null,
+        })),
         receiptIntegrity: (() => {
           try {
             return verifyMcpCallReceipts(24, workspaceId)
@@ -258,14 +295,32 @@ export async function GET(request: NextRequest) {
         })(),
       },
       rateLimits: {
-        totalHits: rateLimitEvents?.total ?? 0,
-        byIp: rateLimitByIp.map((r: any) => ({ ip: r.ip_address, count: r.count })),
+        totalHits: toCount(rateLimitEvents?.total),
+        byIp: rateLimitByIp.map((row: any) => ({
+          ip: row.ip_address,
+          hits: toCount(row.count),
+          lastHit: toCount(row.last_hit),
+        })),
       },
       injectionAttempts: {
         total: injectionEvents.length,
-        recent: injectionEvents.slice(0, 5),
+        recent: injectionEvents.slice(0, 5).map((event) => ({
+          type: String(event.event_type || '').replace('injection.', ''),
+          severity: event.severity || 'warning',
+          source: event.agent_name || event.ip_address || 'unknown',
+          input: event.detail || '',
+          blocked: true,
+          timestamp: toCount(event.created_at),
+        })),
       },
-      timeline: timelineHasActivity ? timeline : [],
+      timeline: {
+        timeframe,
+        bucketSizeSeconds: bucketSize,
+        rangeStart: firstBucket,
+        rangeEnd: lastBucket,
+        points: timelinePoints,
+        series: timelineSeries,
+      },
     })
   } catch (error) {
     logger.error({ err: error }, 'GET /api/security-audit error')
