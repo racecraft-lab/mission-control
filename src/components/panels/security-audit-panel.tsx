@@ -202,15 +202,18 @@ export function SecurityAuditPanel() {
   const [data, setData] = useState<SecurityAuditData | null>(null)
   const [evalsData, setEvalsData] = useState<AgentEvalsData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
-      const [auditRes, evalsRes] = await Promise.all([
+      const [auditResult, evalsResult] = await Promise.allSettled([
         fetch(`/api/security-audit?timeframe=${selectedTimeframe}`),
         fetch(`/api/agents/evals?timeframe=${selectedTimeframe}`),
       ])
-      if (auditRes.ok) {
+      if (auditResult.status === 'fulfilled' && auditResult.value.ok) {
+        const auditRes = auditResult.value
         const audit = await auditRes.json()
         // API returns authEvents as { loginFailures, tokenRotations, accessDenials, recentEvents }
         // but the panel expects authEvents to be an array of AuthEvent
@@ -296,13 +299,20 @@ export function SecurityAuditPanel() {
         if (audit.posture) {
           setSecurityPosture(audit.posture)
         }
+      } else {
+        const detail = auditResult.status === 'fulfilled'
+          ? `Security audit request failed (${auditResult.value.status})`
+          : 'Security audit request failed'
+        setLoadError(detail)
       }
-      if (evalsRes.ok) {
-        const evals = await evalsRes.json()
+      if (evalsResult.status === 'fulfilled' && evalsResult.value.ok) {
+        const evals = await evalsResult.value.json()
         setEvalsData(evals)
+      } else {
+        setEvalsData(null)
       }
     } catch {
-      // Silent failure — data will remain stale
+      setLoadError('Security data request failed')
     } finally {
       setIsLoading(false)
     }
@@ -375,7 +385,19 @@ export function SecurityAuditPanel() {
       </div>
 
       {!data ? (
-        <Loader variant="panel" label={t('loadingSecurityData')} />
+        isLoading ? (
+          <Loader variant="panel" label={t('loadingSecurityData')} />
+        ) : (
+          <div className="bg-card border border-border rounded-lg p-6 text-center space-y-3">
+            <p className="text-sm text-foreground">Security data failed to load.</p>
+            {loadError && <p className="text-xs text-muted-foreground">{loadError}</p>}
+            <div>
+              <Button onClick={() => { void fetchData() }} variant="secondary">
+                Retry
+              </Button>
+            </div>
+          </div>
+        )
       ) : (
         <div className="space-y-6">
           {/* Posture Score Header */}

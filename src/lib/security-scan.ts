@@ -75,6 +75,27 @@ const INSECURE_PASSWORDS = new Set([
   'admin', 'password', 'change-me-on-first-login', 'changeme', 'testpass123',
 ])
 
+function isSecretRefLike(value: unknown): value is { source: string; provider: string; id: string } {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Record<string, unknown>
+  return typeof candidate.source === 'string'
+    && candidate.source.trim().length > 0
+    && typeof candidate.provider === 'string'
+    && candidate.provider.trim().length > 0
+    && typeof candidate.id === 'string'
+    && candidate.id.trim().length > 0
+}
+
+function hasConfiguredCredential(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0
+  return isSecretRefLike(value)
+}
+
+function describeConfiguredCredential(value: unknown, label: 'Token' | 'Password'): string {
+  if (isSecretRefLike(value)) return `${label} auth enabled (SecretRef)`
+  return `${label} auth enabled`
+}
+
 export function runSecurityScan(): ScanResult {
   const credentials = scanCredentials()
   const network = scanNetwork()
@@ -309,14 +330,18 @@ function scanOpenClaw(): Category {
   } catch { /* skip */ }
 
   const gwAuth = ocConfig?.gateway?.auth
-  const tokenOk = gwAuth?.mode === 'token' && (gwAuth?.token ?? '').trim().length > 0
-  const passwordOk = gwAuth?.mode === 'password' && (gwAuth?.password ?? '').trim().length > 0
+  const tokenOk = gwAuth?.mode === 'token' && hasConfiguredCredential(gwAuth?.token)
+  const passwordOk = gwAuth?.mode === 'password' && hasConfiguredCredential(gwAuth?.password)
   const authOk = tokenOk || passwordOk
   checks.push({
     id: 'gateway_auth',
     name: 'Gateway authentication',
     status: authOk ? 'pass' : 'fail',
-    detail: tokenOk ? 'Token auth enabled' : passwordOk ? 'Password auth enabled' : `Auth mode: ${gwAuth?.mode || 'none'} (credential required)`,
+    detail: tokenOk
+      ? describeConfiguredCredential(gwAuth?.token, 'Token')
+      : passwordOk
+        ? describeConfiguredCredential(gwAuth?.password, 'Password')
+        : `Auth mode: ${gwAuth?.mode || 'none'} (credential required)`,
     fix: !authOk ? 'Set gateway.auth.mode to "token" with gateway.auth.token, or "password" with gateway.auth.password' : '',
     severity: 'critical',
   })

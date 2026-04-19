@@ -4,7 +4,7 @@ import { requireRole } from '@/lib/auth'
 import { validateBody, createWorkflowSchema } from '@/lib/validation'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { scanForInjection } from '@/lib/injection-guard'
+import { scanAndLogInjection } from '@/lib/injection-guard'
 
 export interface WorkflowTemplate {
   id: number
@@ -64,7 +64,11 @@ export async function POST(request: NextRequest) {
     const { name, description, model, task_prompt, timeout_seconds, agent_role, tags } = result.data
 
     // Scan task_prompt for injection — this gets sent directly to AI agents
-    const injectionReport = scanForInjection(task_prompt, { context: 'prompt' })
+    const injectionReport = scanAndLogInjection(
+      task_prompt,
+      { context: 'prompt' },
+      { source: 'api.workflows', workspaceId: auth.user.workspace_id ?? 1 }
+    )
     if (!injectionReport.safe) {
       const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
       if (criticals.length > 0) {

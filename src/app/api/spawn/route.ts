@@ -7,7 +7,7 @@ import { join } from 'path'
 import { heavyLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { validateBody, spawnAgentSchema } from '@/lib/validation'
-import { scanForInjection } from '@/lib/injection-guard'
+import { scanAndLogInjection } from '@/lib/injection-guard'
 import { logAuditEvent } from '@/lib/db'
 
 function getPreferredToolsProfile(): string {
@@ -32,7 +32,11 @@ export async function POST(request: NextRequest) {
       ...(label ? [{ name: 'label', value: label }] : []),
     ]
     for (const field of fieldsToScan) {
-      const injectionReport = scanForInjection(field.value, { context: 'prompt' })
+      const injectionReport = scanAndLogInjection(
+        field.value,
+        { context: 'prompt' },
+        { source: `api.spawn.${field.name}`, workspaceId: auth.user.workspace_id ?? 1 }
+      )
       if (!injectionReport.safe) {
         const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
         if (criticals.length > 0) {

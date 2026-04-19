@@ -5,7 +5,7 @@ import { requireRole } from '@/lib/auth'
 import { validateBody, createMessageSchema } from '@/lib/validation'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { scanForInjection } from '@/lib/injection-guard'
+import { scanAndLogInjection } from '@/lib/injection-guard'
 import { scanForSecrets } from '@/lib/secret-scanner'
 import { logSecurityEvent } from '@/lib/security-events'
 
@@ -23,7 +23,11 @@ export async function POST(request: NextRequest) {
     const from = auth.user.display_name || auth.user.username || 'system'
 
     // Scan message for injection — this gets forwarded directly to an agent
-    const injectionReport = scanForInjection(message, { context: 'prompt' })
+    const injectionReport = scanAndLogInjection(
+      message,
+      { context: 'prompt' },
+      { agentName: to, source: 'api.agents.message', workspaceId: auth.user.workspace_id ?? 1 }
+    )
     if (!injectionReport.safe) {
       const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
       if (criticals.length > 0) {
