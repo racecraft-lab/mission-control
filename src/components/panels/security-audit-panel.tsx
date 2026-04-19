@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { startTransition, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
@@ -388,10 +388,12 @@ export function SecurityAuditPanel() {
     const cached = cachedEntry?.data
 
     if (cached) {
-      setData(cached)
-      if (cached.posture) {
-        setSecurityPosture(cached.posture)
-      }
+      startTransition(() => {
+        setData(cached)
+        if (cached.posture) {
+          setSecurityPosture(cached.posture)
+        }
+      })
     }
 
     setIsBlockingLoad(!cached)
@@ -412,10 +414,12 @@ export function SecurityAuditPanel() {
 
       const audit = await auditRes.json() as SecurityAuditData
       cacheAuditData(selectedTimeframe, audit)
-      setData(audit)
-      if (audit.posture) {
-        setSecurityPosture(audit.posture)
-      }
+      startTransition(() => {
+        setData(audit)
+        if (audit.posture) {
+          setSecurityPosture(audit.posture)
+        }
+      })
       for (const timeframe of CANONICAL_TIMEFRAMES) {
         if (timeframe !== selectedTimeframe) {
           void prefetchTimeframe(timeframe)
@@ -452,7 +456,9 @@ export function SecurityAuditPanel() {
     : null
   const totalTimelineEvents = (data?.timeline.series ?? []).reduce((sum, series) => sum + series.total, 0)
   const hasTimelineActivity = (data?.timeline.series ?? []).some((series) => series.total > 0)
-  const chartIsRefreshing = isBlockingLoad && Boolean(data && data.timeline.timeframe !== selectedTimeframe)
+  const displayedTimeframe = data?.timeline.timeframe ?? selectedTimeframe
+  const chartIsRefreshing = Boolean(isRefreshing && data && data.timeline.timeframe !== selectedTimeframe)
+  const chartRenderKey = `${activeSeries ?? 'all'}:${displayedTimeframe}:${data?.timeline.rangeStart ?? 0}:${data?.timeline.rangeEnd ?? 0}`
 
   const postureColor = (score: number) => {
     if (score >= 80) return 'text-green-400'
@@ -496,7 +502,7 @@ export function SecurityAuditPanel() {
 
   const formatTimelineLabel = (ts: number) => {
     const date = new Date(ts * 1000)
-    switch (selectedTimeframe) {
+    switch (displayedTimeframe) {
       case 'hour':
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       case 'day':
@@ -543,7 +549,12 @@ export function SecurityAuditPanel() {
               {(['hour', 'day', 'week', 'month'] as const).map((tf) => (
                 <Button
                   key={tf}
-                  onClick={() => setSelectedTimeframe(tf)}
+                  onClick={() => {
+                    if (tf === selectedTimeframe) return
+                    startTransition(() => {
+                      setSelectedTimeframe(tf)
+                    })
+                  }}
                   variant={selectedTimeframe === tf ? 'default' : 'secondary'}
                 >
                   {t(`timeframe${tf.charAt(0).toUpperCase() + tf.slice(1)}` as 'timeframeHour' | 'timeframeDay' | 'timeframeWeek' | 'timeframeMonth')}
@@ -633,7 +644,7 @@ export function SecurityAuditPanel() {
           <div className="bg-card border border-border rounded-lg p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <h2 className="text-xl font-semibold">{t('securityTimeline', { timeframe: selectedTimeframe })}</h2>
+                <h2 className="text-xl font-semibold">{t('securityTimeline', { timeframe: displayedTimeframe })}</h2>
                 <p className="text-xs text-muted-foreground mt-1">
                   Separate event families stay on separate scales. The focused chart shows discrete counts for one signal at a time.
                 </p>
@@ -719,7 +730,7 @@ export function SecurityAuditPanel() {
                   <div className="h-72">
                     {activeSeriesDef ? (
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                        <BarChart key={chartRenderKey} data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
                           <XAxis
                             type="number"
@@ -766,7 +777,7 @@ export function SecurityAuditPanel() {
                       </ResponsiveContainer>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                        <LineChart key={chartRenderKey} data={timelinePoints} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.7)" />
                           <XAxis
                             type="number"
