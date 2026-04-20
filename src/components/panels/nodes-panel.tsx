@@ -105,6 +105,8 @@ export function NodesPanel() {
   const [connected, setConnected] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [nodesWarning, setNodesWarning] = useState<string | null>(null)
+  const [devicesWarning, setDevicesWarning] = useState<string | null>(null)
 
   const fetchNodes = useCallback(async () => {
     try {
@@ -113,6 +115,7 @@ export function NodesPanel() {
       const data = await res.json()
       setNodes(data.nodes || data.entries || [])
       setConnected(data.connected !== false)
+      setNodesWarning(typeof data.warning === 'string' ? data.warning : null)
       setError(null)
     } catch {
       setError('Failed to fetch nodes')
@@ -128,6 +131,7 @@ export function NodesPanel() {
       const data = await res.json()
       setDevices(data.paired || data.devices || [])
       setPendingDevices(data.pending || [])
+      setDevicesWarning(typeof data.warning === 'string' ? data.warning : null)
     } catch {
       // silent fallback
     }
@@ -145,6 +149,9 @@ export function NodesPanel() {
 
   const pendingCount = pendingDevices.length
   const totalDeviceCount = devices.length + pendingCount
+  const warningMessages = Array.from(
+    new Set([nodesWarning, devicesWarning].filter((message): message is string => Boolean(message))),
+  )
 
   return (
     <div className="m-4">
@@ -189,6 +196,14 @@ export function NodesPanel() {
           {error}
         </div>
       )}
+      {warningMessages.map((warning) => (
+        <div
+          key={warning}
+          className="mb-4 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm"
+        >
+          {warning}
+        </div>
+      ))}
 
       {loading ? (
         <div className="text-muted-foreground text-sm py-8 text-center">{t('loading')}</div>

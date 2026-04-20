@@ -1,3 +1,9 @@
+import {
+  detectUnsupportedMcpEnvEntries,
+  formatUnsupportedMcpEnvWarning,
+  loadFallbackDevices,
+  loadFallbackNodes,
+} from '@/lib/openclaw-node-fallback'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { config } from '@/lib/config'
@@ -23,6 +29,24 @@ async function isGatewayReachable(): Promise<boolean> {
   }
 }
 
+function getConfigFallbackWarning(): string | null {
+  return formatUnsupportedMcpEnvWarning(
+    detectUnsupportedMcpEnvEntries(config.openclawConfigPath),
+  )
+}
+
+function describeGatewayFailure(prefix: string, err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+        ? err
+        : ''
+  if (!message) return prefix
+  const compact = message.replace(/\s+/g, ' ').trim()
+  return `${prefix} ${compact}`
+}
+
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -30,32 +54,84 @@ export async function GET(request: NextRequest) {
   const action = request.nextUrl.searchParams.get('action') || 'list'
 
   if (action === 'list') {
+    const fallbackWarning = getConfigFallbackWarning()
+    const fallbackNodes = loadFallbackNodes(config.openclawStateDir)
     try {
       const connected = await isGatewayReachable()
+      if (fallbackWarning) {
+        logger.warn({ warning: fallbackWarning }, 'Skipping node.list RPC and using fallback node data')
+        return NextResponse.json({
+          nodes: fallbackNodes,
+          connected,
+          degraded: true,
+          warning: fallbackWarning,
+        })
+      }
       if (!connected) {
-        return NextResponse.json({ nodes: [], connected: false })
+        return NextResponse.json({
+          nodes: fallbackNodes,
+          connected: false,
+          degraded: fallbackNodes.length > 0,
+          warning: fallbackNodes.length > 0
+            ? 'Gateway unreachable. Showing last known node data from the OpenClaw state directory.'
+            : undefined,
+        })
       }
 
       try {
         const data = await callOpenClawGateway<{ nodes?: unknown[] }>('node.list', {}, GATEWAY_TIMEOUT)
         return NextResponse.json({ nodes: data?.nodes ?? [], connected: true })
       } catch (rpcErr) {
-        // Gateway is reachable but openclaw CLI unavailable (e.g. Docker) or
-        // node.list not supported — return connected=true with empty node list
-        logger.warn({ err: rpcErr }, 'node.list RPC failed, returning empty node list')
-        return NextResponse.json({ nodes: [], connected: true })
+        logger.warn({ err: rpcErr }, 'node.list RPC failed, using fallback node data')
+        return NextResponse.json({
+          nodes: fallbackNodes,
+          connected: true,
+          degraded: fallbackNodes.length > 0,
+          warning: describeGatewayFailure(
+            'Live gateway node listing failed. Showing fallback node data from the OpenClaw state directory.',
+            rpcErr,
+          ),
+        })
       }
     } catch (err) {
       logger.warn({ err }, 'Gateway unreachable for node listing')
-      return NextResponse.json({ nodes: [], connected: false })
+      return NextResponse.json({
+        nodes: fallbackNodes,
+        connected: false,
+        degraded: fallbackNodes.length > 0,
+        warning: fallbackNodes.length > 0
+          ? describeGatewayFailure(
+              'Gateway reachability check failed. Showing last known node data from the OpenClaw state directory.',
+              err,
+            )
+          : undefined,
+      })
     }
   }
 
   if (action === 'devices') {
+    const fallbackWarning = getConfigFallbackWarning()
+    const fallbackDevices = loadFallbackDevices(config.openclawStateDir)
     try {
       const connected = await isGatewayReachable()
+      if (fallbackWarning) {
+        logger.warn({ warning: fallbackWarning }, 'Skipping device.pair.list RPC and using fallback device data')
+        return NextResponse.json({
+          devices: fallbackDevices.devices,
+          pending: fallbackDevices.pending,
+          degraded: true,
+          warning: fallbackWarning,
+        })
+      }
       if (!connected) {
-        return NextResponse.json({ devices: [] })
+        return NextResponse.json({
+          devices: fallbackDevices.devices,
+          pending: fallbackDevices.pending,
+          degraded: fallbackDevices.devices.length > 0 || fallbackDevices.pending.length > 0,
+          warning: fallbackDevices.devices.length > 0 || fallbackDevices.pending.length > 0
+            ? 'Gateway unreachable. Showing last known device data from the OpenClaw state directory.'
+            : undefined,
+        })
       }
 
       try {
@@ -66,12 +142,30 @@ export async function GET(request: NextRequest) {
         )
         return NextResponse.json({ devices: data?.devices ?? [] })
       } catch (rpcErr) {
-        logger.warn({ err: rpcErr }, 'device.pair.list RPC failed, returning empty device list')
-        return NextResponse.json({ devices: [] })
+        logger.warn({ err: rpcErr }, 'device.pair.list RPC failed, using fallback device data')
+        return NextResponse.json({
+          devices: fallbackDevices.devices,
+          pending: fallbackDevices.pending,
+          degraded: fallbackDevices.devices.length > 0 || fallbackDevices.pending.length > 0,
+          warning: describeGatewayFailure(
+            'Live gateway device listing failed. Showing fallback device data from the OpenClaw state directory.',
+            rpcErr,
+          ),
+        })
       }
     } catch (err) {
       logger.warn({ err }, 'Gateway unreachable for device listing')
-      return NextResponse.json({ devices: [] })
+      return NextResponse.json({
+        devices: fallbackDevices.devices,
+        pending: fallbackDevices.pending,
+        degraded: fallbackDevices.devices.length > 0 || fallbackDevices.pending.length > 0,
+        warning: fallbackDevices.devices.length > 0 || fallbackDevices.pending.length > 0
+          ? describeGatewayFailure(
+              'Gateway reachability check failed. Showing last known device data from the OpenClaw state directory.',
+              err,
+            )
+          : undefined,
+      })
     }
   }
 
