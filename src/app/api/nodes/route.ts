@@ -6,6 +6,12 @@ import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 
 const GATEWAY_TIMEOUT = 5000
 
+function unwrapGatewayPayload<T>(data: T): T | unknown {
+  return data && typeof data === 'object' && 'payload' in (data as Record<string, unknown>)
+    ? (data as Record<string, unknown>).payload
+    : data
+}
+
 /** Probe the gateway HTTP /health endpoint to check reachability. */
 async function isGatewayReachable(): Promise<boolean> {
   const controller = new AbortController()
@@ -38,7 +44,11 @@ export async function GET(request: NextRequest) {
 
       try {
         const data = await callOpenClawGateway<{ nodes?: unknown[] }>('node.list', {}, GATEWAY_TIMEOUT)
-        return NextResponse.json({ nodes: data?.nodes ?? [], connected: true })
+        const payload = unwrapGatewayPayload(data) as { nodes?: unknown[]; entries?: unknown[] } | undefined
+        return NextResponse.json({
+          nodes: payload?.nodes ?? payload?.entries ?? [],
+          connected: true,
+        })
       } catch (rpcErr) {
         // Gateway is reachable but openclaw CLI unavailable (e.g. Docker) or
         // node.list not supported — return connected=true with empty node list
@@ -64,7 +74,14 @@ export async function GET(request: NextRequest) {
           {},
           GATEWAY_TIMEOUT,
         )
-        return NextResponse.json({ devices: data?.devices ?? [] })
+        const payload = unwrapGatewayPayload(data) as
+          | { devices?: unknown[]; paired?: unknown[]; pending?: unknown[] }
+          | undefined
+        return NextResponse.json({
+          devices: payload?.devices ?? [],
+          paired: payload?.paired ?? [],
+          pending: payload?.pending ?? [],
+        })
       } catch (rpcErr) {
         logger.warn({ err: rpcErr }, 'device.pair.list RPC failed, returning empty device list')
         return NextResponse.json({ devices: [] })
