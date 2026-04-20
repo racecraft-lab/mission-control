@@ -54,6 +54,118 @@ interface PairedDevice {
 
 type Tab = 'instances' | 'devices'
 
+type RawNodeEntry = Record<string, unknown>
+type RawPairedDevice = Record<string, unknown>
+type RawPendingDevice = Record<string, unknown>
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function numberOrZero(...values: unknown[]): number {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+  }
+  return 0
+}
+
+function normalizeNode(entry: RawNodeEntry): PresenceEntry {
+  const connected = entry.connected === true
+  const roles = stringArray(entry.roles)
+  const caps = stringArray(entry.caps)
+  const fallbackRoles =
+    roles.length > 0
+      ? roles
+      : caps.length > 0
+        ? caps
+        : typeof entry.clientMode === 'string'
+          ? [entry.clientMode]
+          : []
+  const connectedAt = numberOrZero(entry.connectedAt, entry.connectedAtMs, entry.approvedAtMs, entry.createdAtMs)
+  const lastActivity = numberOrZero(entry.lastActivity, entry.lastActivityAtMs, entry.lastSeen, entry.lastSeenAtMs)
+
+  return {
+    id:
+      (typeof entry.id === 'string' && entry.id) ||
+      (typeof entry.nodeId === 'string' && entry.nodeId) ||
+      (typeof entry.clientId === 'string' && entry.clientId) ||
+      (typeof entry.displayName === 'string' && entry.displayName) ||
+      'unknown-node',
+    clientId: typeof entry.clientId === 'string' ? entry.clientId : '--',
+    displayName:
+      (typeof entry.displayName === 'string' && entry.displayName) ||
+      (typeof entry.nodeId === 'string' && entry.nodeId) ||
+      'Unnamed node',
+    platform: typeof entry.platform === 'string' ? entry.platform : '--',
+    version: typeof entry.version === 'string' ? entry.version : '--',
+    roles: fallbackRoles,
+    connectedAt,
+    lastActivity,
+    host: typeof entry.host === 'string' ? entry.host : undefined,
+    ip: typeof entry.ip === 'string' ? entry.ip : undefined,
+    status: connected ? 'online' : 'offline',
+  }
+}
+
+function normalizePairedDevice(device: RawPairedDevice): PairedDevice {
+  const tokens = Array.isArray(device.tokens)
+    ? (device.tokens.filter((token): token is DeviceTokenSummary => typeof token === 'object' && token !== null))
+    : []
+  const tokenScopes = tokens.flatMap((token) => stringArray(token.scopes))
+  const rawScopes = stringArray(device.scopes)
+  const scopes = rawScopes.length > 0 ? rawScopes : tokenScopes
+  const roles = stringArray(device.roles)
+  const fallbackRoles =
+    roles.length > 0
+      ? roles
+      : typeof device.role === 'string'
+        ? [device.role]
+        : []
+  const lastSeen = tokens.reduce<number>((latest, token) => {
+    const candidate = typeof token.lastUsedAtMs === 'number' ? token.lastUsedAtMs : 0
+    return candidate > latest ? candidate : latest
+  }, 0)
+
+  return {
+    id:
+      (typeof device.id === 'string' && device.id) ||
+      (typeof device.deviceId === 'string' && device.deviceId) ||
+      'unknown-device',
+    deviceId:
+      (typeof device.deviceId === 'string' && device.deviceId) ||
+      (typeof device.id === 'string' && device.id) ||
+      'unknown-device',
+    displayName:
+      (typeof device.displayName === 'string' && device.displayName) ||
+      (typeof device.deviceId === 'string' && device.deviceId) ||
+      'Unnamed device',
+    publicKey: typeof device.publicKey === 'string' ? device.publicKey : undefined,
+    pairedAt: numberOrZero(device.pairedAt, device.approvedAtMs, device.createdAtMs),
+    lastSeen,
+    trusted: tokens.some((token) => !token.revokedAtMs),
+    roles: fallbackRoles,
+    scopes,
+    tokens,
+    createdAtMs: typeof device.createdAtMs === 'number' ? device.createdAtMs : undefined,
+    approvedAtMs: typeof device.approvedAtMs === 'number' ? device.approvedAtMs : undefined,
+  }
+}
+
+function normalizePendingDevice(device: RawPendingDevice): PendingDevice {
+  return {
+    requestId: typeof device.requestId === 'string' ? device.requestId : '',
+    deviceId:
+      (typeof device.deviceId === 'string' && device.deviceId) ||
+      (typeof device.id === 'string' && device.id) ||
+      'unknown-device',
+    displayName: typeof device.displayName === 'string' ? device.displayName : undefined,
+    role: typeof device.role === 'string' ? device.role : undefined,
+    remoteIp: typeof device.remoteIp === 'string' ? device.remoteIp : undefined,
+    isRepair: device.isRepair === true,
+    ts: typeof device.ts === 'number' ? device.ts : undefined,
+  }
+}
+
 function relativeTime(ts: number): string {
   if (!ts) return '--'
   const now = Date.now()
@@ -111,7 +223,8 @@ export function NodesPanel() {
       const res = await fetch('/api/nodes')
       if (!res.ok) { setError('Failed to fetch nodes'); return }
       const data = await res.json()
-      setNodes(data.nodes || data.entries || [])
+      const rawNodes = Array.isArray(data.nodes) ? data.nodes : Array.isArray(data.entries) ? data.entries : []
+      setNodes(rawNodes.map((entry: RawNodeEntry) => normalizeNode(entry)))
       setConnected(data.connected !== false)
       setError(null)
     } catch {
@@ -126,8 +239,10 @@ export function NodesPanel() {
       const res = await fetch('/api/nodes?action=devices')
       if (!res.ok) return
       const data = await res.json()
-      setDevices(data.paired || data.devices || [])
-      setPendingDevices(data.pending || [])
+      const rawDevices = Array.isArray(data.paired) ? data.paired : Array.isArray(data.devices) ? data.devices : []
+      const rawPending = Array.isArray(data.pending) ? data.pending : []
+      setDevices(rawDevices.map((device: RawPairedDevice) => normalizePairedDevice(device)))
+      setPendingDevices(rawPending.map((device: RawPendingDevice) => normalizePendingDevice(device)))
     } catch {
       // silent fallback
     }
