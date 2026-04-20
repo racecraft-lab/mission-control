@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { readdir, readFile } from 'node:fs/promises'
 import os from 'node:os'
+import path from 'node:path'
 import { runCommand } from '@/lib/command'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
@@ -181,12 +183,14 @@ async function getDiskSnapshot() {
 
 // ── GPU ─────────────────────────────────────────────────────────────────────
 
-async function getGpuSnapshot(): Promise<Array<{
+type GpuSnapshot = {
   name: string
   memoryTotalMB: number
   memoryUsedMB: number
   usagePercent: number
-}> | null> {
+}
+
+async function getGpuSnapshot(): Promise<GpuSnapshot[] | null> {
   // Try NVIDIA first (Linux/macOS with discrete GPU)
   try {
     const { stdout, code } = await runCommand('nvidia-smi', [
@@ -209,6 +213,11 @@ async function getGpuSnapshot(): Promise<Array<{
       if (gpus.length > 0) return gpus
     }
   } catch { /* nvidia-smi not available */ }
+
+  if (process.platform === 'linux') {
+    const gpus = await getLinuxGpuSnapshot()
+    if (gpus.length > 0) return gpus
+  }
 
   // macOS: system_profiler for GPU info (VRAM only, no live usage)
   if (process.platform === 'darwin') {
@@ -241,6 +250,79 @@ async function getGpuSnapshot(): Promise<Array<{
   }
 
   return null
+}
+
+async function getLinuxGpuSnapshot(): Promise<GpuSnapshot[]> {
+  const pciNames = await getLinuxGpuNamesBySlot()
+
+  try {
+    const cards = (await readdir('/sys/class/drm')).filter(entry => /^card\d+$/.test(entry))
+    const gpus: GpuSnapshot[] = []
+
+    for (const card of cards) {
+      const deviceDir = path.join('/sys/class/drm', card, 'device')
+      const uevent = await readText(deviceDir, 'uevent')
+      if (!uevent) continue
+
+      const slot = extractUeventField(uevent, 'PCI_SLOT_NAME')
+      const driver = extractUeventField(uevent, 'DRIVER')
+      const totalBytes = parseInt(await readText(deviceDir, 'mem_info_vram_total') || '0', 10)
+      const usedBytes = parseInt(await readText(deviceDir, 'mem_info_vram_used') || '0', 10)
+
+      const name =
+        (slot && (pciNames.get(slot) || pciNames.get(slot.replace(/^0000:/, '')))) ||
+        (driver ? `${driver.toUpperCase()} GPU` : `GPU ${card}`)
+
+      const memoryTotalMB = totalBytes > 0 ? Math.round(totalBytes / 1024 / 1024) : 0
+      const memoryUsedMB = usedBytes > 0 ? Math.round(usedBytes / 1024 / 1024) : 0
+
+      gpus.push({
+        name,
+        memoryTotalMB,
+        memoryUsedMB,
+        usagePercent: totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0,
+      })
+    }
+
+    if (gpus.length > 0) return gpus
+  } catch { /* fall through to lspci-only detection */ }
+
+  return Array.from(pciNames.values()).map(name => ({
+    name,
+    memoryTotalMB: 0,
+    memoryUsedMB: 0,
+    usagePercent: 0,
+  }))
+}
+
+async function getLinuxGpuNamesBySlot(): Promise<Map<string, string>> {
+  try {
+    const { stdout, code } = await runCommand('lspci', [], { timeoutMs: 3000 })
+    if (code !== 0 || !stdout.trim()) return new Map()
+
+    const names = new Map<string, string>()
+    for (const line of stdout.trim().split('\n')) {
+      const match = line.match(/^([0-9a-f:.]+)\s+(?:VGA compatible controller|3D controller|Display controller):\s+(.+)$/i)
+      if (!match) continue
+      names.set(match[1], match[2].trim())
+    }
+    return names
+  } catch {
+    return new Map()
+  }
+}
+
+async function readText(dir: string, fileName: string): Promise<string | null> {
+  try {
+    return (await readFile(path.join(dir, fileName), 'utf8')).trim()
+  } catch {
+    return null
+  }
+}
+
+function extractUeventField(uevent: string, key: string): string | null {
+  const match = uevent.match(new RegExp(`^${key}=(.+)$`, 'm'))
+  return match?.[1]?.trim() || null
 }
 
 // ── Network ──────────────────────────────────────────────────────────────────
