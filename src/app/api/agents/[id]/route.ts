@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase, db_helpers, logAuditEvent } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
-import { writeAgentToConfig, enrichAgentConfigFromWorkspace, removeAgentFromConfig } from '@/lib/agent-sync'
+import { writeAgentToConfig, enrichAgentConfigFromWorkspace, removeAgentFromConfig, sanitizeAgentToolsConfig } from '@/lib/agent-sync'
 import { eventBus } from '@/lib/event-bus'
 import { logger } from '@/lib/logger'
 import { runOpenClaw } from '@/lib/command'
@@ -85,6 +85,11 @@ export async function PUT(
     let newConfig = existingConfig
     if (gateway_config && typeof gateway_config === 'object') {
       newConfig = { ...existingConfig, ...gateway_config }
+      if ('tools' in newConfig) {
+        const sanitizedTools = sanitizeAgentToolsConfig(newConfig.tools)
+        if (sanitizedTools) newConfig.tools = sanitizedTools
+        else delete newConfig.tools
+      }
     }
 
     const shouldWriteToGateway = Boolean(

@@ -100,6 +100,60 @@ function parseIdentityFromFile(content: string): { name?: string; theme?: string
   }
 }
 
+const TOOL_SELECTOR_RE = /^[A-Za-z0-9*._:/-]+$/
+
+function isLikelyToolSelector(value: string): boolean {
+  const trimmed = value.trim()
+  return Boolean(trimmed) && TOOL_SELECTOR_RE.test(trimmed)
+}
+
+function sanitizeToolSelectorList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  const sanitized: string[] = []
+
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const trimmed = item.trim()
+    if (!isLikelyToolSelector(trimmed) || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    sanitized.push(trimmed)
+  }
+
+  return sanitized.length > 0 ? sanitized : undefined
+}
+
+export function sanitizeAgentToolsConfig(toolsData: any, options: { forGateway?: boolean } = {}): any {
+  if (!toolsData || typeof toolsData !== 'object') return toolsData
+
+  const sanitized: any = { ...toolsData }
+  const allow = sanitizeToolSelectorList(toolsData.allow)
+  const deny = sanitizeToolSelectorList(toolsData.deny)
+  const alsoAllow = sanitizeToolSelectorList(toolsData.alsoAllow)
+
+  if (allow) sanitized.allow = allow
+  else delete sanitized.allow
+
+  if (deny) sanitized.deny = deny
+  else delete sanitized.deny
+
+  if (options.forGateway) {
+    delete sanitized.raw
+    delete sanitized.alsoAllow
+  } else {
+    if (alsoAllow) sanitized.alsoAllow = alsoAllow
+    else delete sanitized.alsoAllow
+
+    if (typeof toolsData.raw === 'string' && toolsData.raw.trim()) {
+      sanitized.raw = toolsData.raw
+    } else {
+      delete sanitized.raw
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined
+}
+
 function parseToolsFromFile(content: string): { allow?: string[]; raw?: string } {
   if (!content.trim()) return {}
 
@@ -110,13 +164,15 @@ function parseToolsFromFile(content: string): { allow?: string[]; raw?: string }
 
     const listMatch = cleaned.match(/^[-*]\s+`?([^`]+?)`?\s*$/)
     if (listMatch?.[1]) {
-      parsedTools.add(listMatch[1].trim())
+      const candidate = listMatch[1].trim()
+      if (isLikelyToolSelector(candidate)) parsedTools.add(candidate)
       continue
     }
 
     const inlineMatch = cleaned.match(/^`([^`]+)`$/)
     if (inlineMatch?.[1]) {
-      parsedTools.add(inlineMatch[1].trim())
+      const candidate = inlineMatch[1].trim()
+      if (isLikelyToolSelector(candidate)) parsedTools.add(candidate)
     }
   }
 
@@ -177,11 +233,12 @@ export function enrichAgentConfigFromWorkspace(configData: any): any {
     ...parseToolsFromFile(toolsFile || ''),
     ...((configData.tools && typeof configData.tools === 'object') ? configData.tools : {}),
   }
+  const sanitizedTools = sanitizeAgentToolsConfig(mergedTools)
 
   return {
     ...configData,
     identity: Object.keys(mergedIdentity).length > 0 ? mergedIdentity : configData.identity,
-    tools: Object.keys(mergedTools).length > 0 ? mergedTools : configData.tools,
+    tools: sanitizedTools,
   }
 }
 
@@ -457,9 +514,11 @@ function normalizeModelConfig(model: unknown): unknown {
 
 function normalizeAgentConfigForOpenClaw(agentConfig: any): any {
   if (!agentConfig || typeof agentConfig !== 'object') return agentConfig
-  if (!('model' in agentConfig)) return agentConfig
-  return {
+  const normalized = {
     ...agentConfig,
-    model: normalizeModelConfig(agentConfig.model),
+    ...(('model' in agentConfig) ? { model: normalizeModelConfig(agentConfig.model) } : {}),
+    ...(('tools' in agentConfig) ? { tools: sanitizeAgentToolsConfig(agentConfig.tools, { forGateway: true }) } : {}),
   }
+  if (!normalized.tools) delete normalized.tools
+  return normalized
 }
