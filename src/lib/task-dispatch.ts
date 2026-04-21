@@ -71,6 +71,22 @@ function resolveGatewayAgentId(task: DispatchableTask): string {
   return task.agent_name
 }
 
+type ReviewAgentRecord = {
+  name?: string | null
+  agent_config?: string | null
+}
+
+/** Resolve the dedicated Aegis review agent id from its Mission Control record. */
+export function resolveGatewayAgentIdForReviewAgent(agent: ReviewAgentRecord | null | undefined): string {
+  if (agent?.agent_config) {
+    try {
+      const cfg = JSON.parse(agent.agent_config)
+      if (typeof cfg.openclawId === 'string' && cfg.openclawId) return cfg.openclawId
+    } catch { /* ignore */ }
+  }
+  return agent?.name || 'aegis'
+}
+
 function buildTaskPrompt(task: DispatchableTask, rejectionFeedback?: string | null): string {
   const ticket = task.ticket_prefix && task.project_ticket_no
     ? `${task.ticket_prefix}-${String(task.project_ticket_no).padStart(3, '0')}`
@@ -301,21 +317,10 @@ interface ReviewableTask {
   priority: string
   resolution: string | null
   assigned_to: string | null
-  agent_config: string | null
   workspace_id: number
   project_id: number | null
   ticket_prefix: string | null
   project_ticket_no: number | null
-}
-
-function resolveGatewayAgentIdForReview(task: ReviewableTask): string {
-  if (task.agent_config) {
-    try {
-      const cfg = JSON.parse(task.agent_config)
-      if (typeof cfg.openclawId === 'string' && cfg.openclawId) return cfg.openclawId
-    } catch { /* ignore */ }
-  }
-  return task.assigned_to || 'jarv'
 }
 
 function buildReviewPrompt(task: ReviewableTask): string {
@@ -373,10 +378,9 @@ export async function runAegisReviews(): Promise<{ ok: boolean; message: string 
 
   const tasks = db.prepare(`
     SELECT t.id, t.title, t.description, t.status, t.priority, t.resolution, t.assigned_to, t.workspace_id,
-           t.project_id, p.ticket_prefix, t.project_ticket_no, a.config as agent_config
+           t.project_id, p.ticket_prefix, t.project_ticket_no
     FROM tasks t
     LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-    LEFT JOIN agents a ON a.name = t.assigned_to AND a.workspace_id = t.workspace_id
     WHERE t.status = 'review'
     ORDER BY t.updated_at ASC
     LIMIT 3
@@ -387,6 +391,7 @@ export async function runAegisReviews(): Promise<{ ok: boolean; message: string 
   }
 
   const results: Array<{ id: number; verdict: string; error?: string }> = []
+  const aegisAgentByWorkspace = new Map<number, ReviewAgentRecord>()
 
   for (const task of tasks) {
     // Move to quality_review to prevent re-processing
@@ -414,8 +419,24 @@ export async function runAegisReviews(): Promise<{ ok: boolean; message: string 
         }
         agentResponse = await callClaudeDirectly(reviewTask, prompt)
       } else {
-        // Resolve the gateway agent ID from config, falling back to assigned_to or default
-        const reviewAgent = resolveGatewayAgentIdForReview(task)
+        let reviewAgentRecord = aegisAgentByWorkspace.get(task.workspace_id)
+        if (!reviewAgentRecord) {
+          const aegis = db.prepare(`
+            SELECT name, config
+            FROM agents
+            WHERE LOWER(name) = 'aegis' AND workspace_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+          `).get(task.workspace_id) as { name?: string | null; config?: string | null } | undefined
+          reviewAgentRecord = {
+            name: aegis?.name || 'aegis',
+            agent_config: aegis?.config || null,
+          }
+          aegisAgentByWorkspace.set(task.workspace_id, reviewAgentRecord)
+        }
+
+        // Resolve the dedicated Aegis gateway agent id, not the original worker.
+        const reviewAgent = resolveGatewayAgentIdForReviewAgent(reviewAgentRecord)
 
         const invokeParams = {
           message: prompt,
