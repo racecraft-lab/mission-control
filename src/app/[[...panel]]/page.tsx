@@ -180,12 +180,16 @@ export default function Home() {
     const connectWithEnvFallback = (localGatewayUrl: string | null) => {
       // localStorage user choice takes priority over env vars
       const explicitWsUrl = localGatewayUrl || process.env.NEXT_PUBLIC_GATEWAY_URL || ''
+      if (explicitWsUrl) {
+        connect(explicitWsUrl)
+        return
+      }
       const gatewayPort = process.env.NEXT_PUBLIC_GATEWAY_PORT || '18789'
       const gatewayHost = process.env.NEXT_PUBLIC_GATEWAY_HOST || window.location.hostname
       const gatewayProto =
         process.env.NEXT_PUBLIC_GATEWAY_PROTOCOL ||
         (window.location.protocol === 'https:' ? 'wss' : 'ws')
-      const wsUrl = explicitWsUrl || `${gatewayProto}://${gatewayHost}:${gatewayPort}`
+      const wsUrl = `${gatewayProto}://${gatewayHost}:${gatewayPort}`
       connect(wsUrl)
     }
 
