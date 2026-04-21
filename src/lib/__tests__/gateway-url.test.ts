@@ -34,12 +34,28 @@ describe('buildGatewayWebSocketUrl', () => {
     })).toBe('ws://127.0.0.1:18789')
   })
 
-  it('uses ws:// for prefixed localhost URL even with https scheme', () => {
+  it('normalizes prefixed localhost http URL into ws://', () => {
+    expect(buildGatewayWebSocketUrl({
+      host: 'http://127.0.0.1:18789',
+      port: 18789,
+      browserProtocol: 'https:',
+    })).toBe('ws://127.0.0.1:18789')
+  })
+
+  it('normalizes prefixed localhost https URL into wss://', () => {
     expect(buildGatewayWebSocketUrl({
       host: 'https://127.0.0.1:18789',
       port: 18789,
       browserProtocol: 'https:',
-    })).toBe('ws://127.0.0.1:18789')
+    })).toBe('wss://127.0.0.1:18789')
+  })
+
+  it('preserves explicit local wss:// URLs for reverse-proxy setups', () => {
+    expect(buildGatewayWebSocketUrl({
+      host: 'wss://127.0.0.1:18789',
+      port: 18789,
+      browserProtocol: 'https:',
+    })).toBe('wss://127.0.0.1:18789')
   })
 
   it('omits 18789 for remote hosts on https browser context', () => {
