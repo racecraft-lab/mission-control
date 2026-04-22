@@ -1,4 +1,6 @@
 import {
+  detectUnsupportedMcpEnvEntries,
+  formatUnsupportedMcpEnvWarning,
   loadFallbackDevices,
   loadFallbackNodes,
 } from '@/lib/openclaw-node-fallback'
@@ -14,6 +16,12 @@ function unwrapGatewayPayload<T>(data: T): T | unknown {
   return data && typeof data === 'object' && 'payload' in (data as Record<string, unknown>)
     ? (data as Record<string, unknown>).payload
     : data
+}
+
+function getConfigFallbackWarning(): string | null {
+  return formatUnsupportedMcpEnvWarning(
+    detectUnsupportedMcpEnvEntries(config.openclawConfigPath),
+  )
 }
 
 /** Probe the gateway HTTP /health endpoint to check reachability. */
@@ -54,7 +62,17 @@ export async function GET(request: NextRequest) {
   if (action === 'list') {
     try {
       const connected = await isGatewayReachable()
+      const fallbackWarning = getConfigFallbackWarning()
       const fallbackNodes = await loadFallbackNodes(config.openclawStateDir, { gatewayReachable: connected })
+      if (fallbackWarning) {
+        logger.warn({ warning: fallbackWarning }, 'Skipping node.list RPC and using fallback node data')
+        return NextResponse.json({
+          nodes: fallbackNodes,
+          connected,
+          degraded: true,
+          warning: fallbackWarning,
+        })
+      }
       if (!connected) {
         return NextResponse.json({
           nodes: fallbackNodes,
@@ -103,9 +121,19 @@ export async function GET(request: NextRequest) {
   }
 
   if (action === 'devices') {
+    const fallbackWarning = getConfigFallbackWarning()
     const fallbackDevices = loadFallbackDevices(config.openclawStateDir)
     try {
       const connected = await isGatewayReachable()
+      if (fallbackWarning) {
+        logger.warn({ warning: fallbackWarning }, 'Skipping device.pair.list RPC and using fallback device data')
+        return NextResponse.json({
+          devices: fallbackDevices.devices,
+          pending: fallbackDevices.pending,
+          degraded: true,
+          warning: fallbackWarning,
+        })
+      }
       if (!connected) {
         return NextResponse.json({
           devices: fallbackDevices.devices,
