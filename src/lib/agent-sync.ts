@@ -305,34 +305,38 @@ export async function syncAgentsFromConfig(actor: string = 'system'): Promise<Sy
   const results: SyncResult['agents'] = []
 
   const findByName = db.prepare('SELECT id, name, role, session_key, config, soul_content FROM agents WHERE name = ?')
+  const findBySessionKey = db.prepare('SELECT id, name, role, session_key, config, soul_content FROM agents WHERE session_key = ?')
   const insertAgent = db.prepare(`
     INSERT INTO agents (name, role, session_key, soul_content, status, created_at, updated_at, config)
     VALUES (?, ?, ?, ?, 'offline', ?, ?, ?)
   `)
   const updateAgent = db.prepare(`
-    UPDATE agents SET role = ?, session_key = ?, config = ?, soul_content = ?, updated_at = ? WHERE name = ?
+    UPDATE agents SET name = ?, role = ?, session_key = ?, config = ?, soul_content = ?, updated_at = ? WHERE id = ?
   `)
 
   db.transaction(() => {
     for (const agent of agents) {
       const mapped = mapAgentToMC(agent)
       const configJson = JSON.stringify(mapped.config)
-      const existing = findByName.get(mapped.name) as any
+      const existing =
+        (mapped.session_key ? (findBySessionKey.get(mapped.session_key) as any) : undefined) ||
+        (findByName.get(mapped.name) as any)
 
       if (existing) {
         // Check if config or soul_content actually changed
         const existingConfig = existing.config || '{}'
         const existingSoul = existing.soul_content || null
+        const nameChanged = existing.name !== mapped.name
         const configChanged =
           existingConfig !== configJson ||
           existing.role !== mapped.role ||
           (existing.session_key || null) !== mapped.session_key
         const soulChanged = mapped.soul_content !== null && mapped.soul_content !== existingSoul
 
-        if (configChanged || soulChanged) {
+        if (nameChanged || configChanged || soulChanged) {
           // Only overwrite soul_content if we read a new value from workspace
           const soulToWrite = mapped.soul_content ?? existingSoul
-          updateAgent.run(mapped.role, mapped.session_key, configJson, soulToWrite, now, mapped.name)
+          updateAgent.run(mapped.name, mapped.role, mapped.session_key, configJson, soulToWrite, now, existing.id)
           results.push({ id: agent.id, name: mapped.name, action: 'updated' })
           updated++
         } else {
@@ -374,23 +378,28 @@ export async function previewSyncDiff(): Promise<SyncDiff> {
   }
 
   const db = getDatabase()
-  const allMCAgents = db.prepare('SELECT name, role, config FROM agents').all() as Array<{ name: string; role: string; config: string }>
-  const mcNames = new Set(allMCAgents.map(a => a.name))
+  const allMCAgents = db.prepare('SELECT name, role, session_key, config FROM agents').all() as Array<{
+    name: string
+    role: string
+    session_key: string | null
+    config: string
+  }>
 
   const newAgents: string[] = []
   const updatedAgents: string[] = []
-  const configNames = new Set<string>()
+  const matchedNames = new Set<string>()
 
   for (const agent of agents) {
     const mapped = mapAgentToMC(agent)
-    configNames.add(mapped.name)
-
-    const existing = allMCAgents.find(a => a.name === mapped.name)
+    const existing = allMCAgents.find((a) =>
+      a.name === mapped.name ||
+      (mapped.session_key && a.session_key === mapped.session_key))
     if (!existing) {
       newAgents.push(mapped.name)
     } else {
+      matchedNames.add(existing.name)
       const configJson = JSON.stringify(mapped.config)
-      if (existing.config !== configJson || existing.role !== mapped.role) {
+      if (existing.name !== mapped.name || existing.config !== configJson || existing.role !== mapped.role) {
         updatedAgents.push(mapped.name)
       }
     }
@@ -398,7 +407,7 @@ export async function previewSyncDiff(): Promise<SyncDiff> {
 
   const onlyInMC = allMCAgents
     .map(a => a.name)
-    .filter(name => !configNames.has(name))
+    .filter(name => !matchedNames.has(name))
 
   return {
     inConfig: agents.length,

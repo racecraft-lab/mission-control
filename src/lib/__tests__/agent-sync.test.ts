@@ -199,3 +199,130 @@ describe('removeAgentFromConfig', () => {
     })
   })
 })
+
+describe('syncAgentsFromConfig', () => {
+  const originalEnv = { ...process.env }
+  let tempDir = ''
+
+  beforeEach(() => {
+    vi.resetModules()
+    vi.restoreAllMocks()
+  })
+
+  afterEach(() => {
+    process.env = { ...originalEnv }
+    if (tempDir) rmSync(tempDir, { recursive: true, force: true })
+    tempDir = ''
+  })
+
+  it('updates an existing agent row when the synced display name changes but the session key is stable', async () => {
+    tempDir = mkdtempSync(path.join(os.tmpdir(), 'mc-agent-sync-'))
+    const configPath = path.join(tempDir, 'openclaw.json')
+    const workspace = path.join(tempDir, 'workspace')
+    mkdirSync(workspace, { recursive: true })
+    writeFileSync(path.join(workspace, 'soul.md'), '# Soul\nsynced soul\n', 'utf-8')
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        agents: {
+          list: [
+            {
+              id: 'focusengine-macos-dev',
+              name: 'FocusEngine macOS Dev',
+              workspace,
+              agentDir: path.join(tempDir, 'agent'),
+              model: { primary: 'openai-codex/gpt-5.4' },
+              identity: {
+                name: 'FocusEngine macOS Dev',
+                theme: 'coder',
+              },
+            },
+          ],
+        },
+      }, null, 2) + '\n',
+      'utf-8',
+    )
+
+    process.env.OPENCLAW_CONFIG_PATH = configPath
+    process.env.OPENCLAW_STATE_DIR = tempDir
+
+    const Database = (await import('better-sqlite3')).default
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        role TEXT,
+        session_key TEXT UNIQUE,
+        soul_content TEXT,
+        status TEXT,
+        created_at INTEGER,
+        updated_at INTEGER,
+        config TEXT
+      );
+    `)
+    db.prepare(`
+      INSERT INTO agents (name, role, session_key, soul_content, status, created_at, updated_at, config)
+      VALUES (?, ?, ?, ?, 'offline', ?, ?, ?)
+    `).run(
+      'focusengine-macos-dev',
+      'agent',
+      'agent:focusengine-macos-dev:main',
+      null,
+      1,
+      1,
+      '{}',
+    )
+
+    const logAuditEvent = vi.fn()
+    const broadcast = vi.fn()
+    vi.doMock('@/lib/db', () => ({
+      getDatabase: () => db,
+      db_helpers: {},
+      logAuditEvent,
+    }))
+    vi.doMock('@/lib/event-bus', () => ({
+      eventBus: { broadcast },
+    }))
+    vi.doMock('@/lib/logger', () => ({
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    }))
+
+    const { previewSyncDiff, syncAgentsFromConfig } = await import('@/lib/agent-sync')
+
+    const preview = await previewSyncDiff()
+    expect(preview.newAgents).toEqual([])
+    expect(preview.updatedAgents).toEqual(['FocusEngine macOS Dev'])
+    expect(preview.onlyInMC).toEqual([])
+
+    const result = await syncAgentsFromConfig('tester')
+    expect(result.created).toBe(0)
+    expect(result.updated).toBe(1)
+    expect(result.agents).toEqual([
+      {
+        id: 'focusengine-macos-dev',
+        name: 'FocusEngine macOS Dev',
+        action: 'updated',
+      },
+    ])
+
+    const row = db.prepare(`
+      SELECT name, role, session_key, config, soul_content
+      FROM agents
+      WHERE session_key = ?
+    `).get('agent:focusengine-macos-dev:main') as {
+      name: string
+      role: string
+      session_key: string
+      config: string
+      soul_content: string | null
+    }
+
+    expect(row.name).toBe('FocusEngine macOS Dev')
+    expect(row.role).toBe('coder')
+    expect(JSON.parse(row.config).openclawId).toBe('focusengine-macos-dev')
+    expect(row.soul_content).toContain('synced soul')
+    expect(logAuditEvent).toHaveBeenCalled()
+    expect(broadcast).toHaveBeenCalledWith('agent.created', expect.objectContaining({ updated: 1 }))
+  })
+})
