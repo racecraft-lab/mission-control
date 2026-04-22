@@ -7,6 +7,9 @@ import { logger } from '@/lib/logger'
 import { archiveOrphanTranscriptsForStateDir } from '@/lib/openclaw-doctor-fix'
 import { parseOpenClawDoctorOutput } from '@/lib/openclaw-doctor'
 
+const OPENCLAW_DOCTOR_TIMEOUT_MS = 60_000
+const OPENCLAW_DOCTOR_FIX_TIMEOUT_MS = 120_000
+
 function getCommandDetail(error: unknown): { detail: string; code: number | null } {
   const err = error as {
     stdout?: string
@@ -32,7 +35,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await runOpenClaw(['doctor'], { timeoutMs: 15000 })
+    const result = await runOpenClaw(['doctor'], { timeoutMs: OPENCLAW_DOCTOR_TIMEOUT_MS })
     return NextResponse.json(parseOpenClawDoctorOutput(`${result.stdout}\n${result.stderr}`, result.code ?? 0, {
       stateDir: config.openclawStateDir,
     }), {
@@ -61,11 +64,15 @@ export async function POST(request: Request) {
   try {
     const progress: Array<{ step: string; detail: string }> = []
 
-    const fixResult = await runOpenClaw(['doctor', '--fix', '--non-interactive', '--yes'], { timeoutMs: 120000 })
+    const fixResult = await runOpenClaw(['doctor', '--fix', '--non-interactive', '--yes'], {
+      timeoutMs: OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
+    })
     progress.push({ step: 'doctor', detail: 'Applied OpenClaw doctor config fixes.' })
 
     try {
-      await runOpenClaw(['sessions', 'cleanup', '--all-agents', '--enforce', '--fix-missing'], { timeoutMs: 120000 })
+      await runOpenClaw(['sessions', 'cleanup', '--all-agents', '--enforce', '--fix-missing'], {
+        timeoutMs: OPENCLAW_DOCTOR_FIX_TIMEOUT_MS,
+      })
       progress.push({ step: 'sessions', detail: 'Pruned missing transcript entries from session stores.' })
     } catch (error) {
       const { detail } = getCommandDetail(error)
@@ -81,7 +88,7 @@ export async function POST(request: Request) {
           : `No orphan transcript files found across ${orphanFix.storesScanned} session store(s).`,
     })
 
-    const postFix = await runOpenClaw(['doctor'], { timeoutMs: 15000 })
+    const postFix = await runOpenClaw(['doctor'], { timeoutMs: OPENCLAW_DOCTOR_TIMEOUT_MS })
     const status = parseOpenClawDoctorOutput(`${postFix.stdout}\n${postFix.stderr}`, postFix.code ?? 0, {
       stateDir: config.openclawStateDir,
     })
