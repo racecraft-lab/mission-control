@@ -38,12 +38,12 @@ export async function POST(
 
     let result: unknown
     if (action === 'terminate') {
-      result = await callOpenClawGateway('sessions_kill', { sessionKey: id }, 10_000)
+      result = await callOpenClawGateway('sessions.abort', { key: id }, 10_000)
     } else {
       const message = action === 'monitor'
         ? { type: 'control', action: 'monitor' }
         : { type: 'control', action: 'pause' }
-      result = await callOpenClawGateway('sessions_send', { sessionKey: id, message }, 10_000)
+      result = await callOpenClawGateway('sessions.send', { key: id, message: JSON.stringify(message) }, 10_000)
     }
 
     db_helpers.logActivity(

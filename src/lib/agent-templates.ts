@@ -260,7 +260,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     description: 'Read-only access for code review, quality gates, and auditing. Lightweight Haiku model.',
     emoji: '\ud83d\udd2c',
     modelTier: 'haiku',
-    toolCount: 7,
+    toolCount: 5,
     config: {
       model: {
         primary: 'anthropic/claude-haiku-4-5',
@@ -278,8 +278,11 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
       },
       tools: {
         allow: [
-          'read', 'memory_search', 'memory_get',
-          'agents_list', 'thinking', 'reactions', 'skills',
+          'read',
+          'memory_search',
+          'memory_get',
+          'agents_list',
+          'session_status',
         ],
         deny: [
           ...COMMON_DENY,

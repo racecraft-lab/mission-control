@@ -13,6 +13,7 @@ import { existsSync, readFileSync, statSync } from 'fs'
 import { resolveWithin } from './paths'
 import { logger } from './logger'
 import { parseJsonRelaxed } from './json-relaxed'
+import { buildOpenClawMainSessionKey } from './openclaw-agent-session'
 
 interface OpenClawAgent {
   id: string
@@ -257,11 +258,13 @@ async function readOpenClawAgents(): Promise<OpenClawAgent[]> {
 function mapAgentToMC(agent: OpenClawAgent): {
   name: string
   role: string
+  session_key: string | null
   config: any
   soul_content: string | null
 } {
   const name = agent.identity?.name || agent.name || agent.id
   const role = agent.identity?.theme || 'agent'
+  const session_key = buildOpenClawMainSessionKey(agent.id)
   // Store the full config minus systemPrompt/soul (which can be large)
   const configData = enrichAgentConfigFromWorkspace({
     openclawId: agent.id,
@@ -279,7 +282,7 @@ function mapAgentToMC(agent: OpenClawAgent): {
   // Read soul.md from the agent's workspace if available
   const soul_content = readWorkspaceFile(agent.workspace, 'soul.md')
 
-  return { name, role, config: configData, soul_content }
+  return { name, role, session_key, config: configData, soul_content }
 }
 
 /** Sync agents from openclaw.json into the MC database */
@@ -301,13 +304,13 @@ export async function syncAgentsFromConfig(actor: string = 'system'): Promise<Sy
   let updated = 0
   const results: SyncResult['agents'] = []
 
-  const findByName = db.prepare('SELECT id, name, role, config, soul_content FROM agents WHERE name = ?')
+  const findByName = db.prepare('SELECT id, name, role, session_key, config, soul_content FROM agents WHERE name = ?')
   const insertAgent = db.prepare(`
-    INSERT INTO agents (name, role, soul_content, status, created_at, updated_at, config)
-    VALUES (?, ?, ?, 'offline', ?, ?, ?)
+    INSERT INTO agents (name, role, session_key, soul_content, status, created_at, updated_at, config)
+    VALUES (?, ?, ?, ?, 'offline', ?, ?, ?)
   `)
   const updateAgent = db.prepare(`
-    UPDATE agents SET role = ?, config = ?, soul_content = ?, updated_at = ? WHERE name = ?
+    UPDATE agents SET role = ?, session_key = ?, config = ?, soul_content = ?, updated_at = ? WHERE name = ?
   `)
 
   db.transaction(() => {
@@ -320,20 +323,23 @@ export async function syncAgentsFromConfig(actor: string = 'system'): Promise<Sy
         // Check if config or soul_content actually changed
         const existingConfig = existing.config || '{}'
         const existingSoul = existing.soul_content || null
-        const configChanged = existingConfig !== configJson || existing.role !== mapped.role
+        const configChanged =
+          existingConfig !== configJson ||
+          existing.role !== mapped.role ||
+          (existing.session_key || null) !== mapped.session_key
         const soulChanged = mapped.soul_content !== null && mapped.soul_content !== existingSoul
 
         if (configChanged || soulChanged) {
           // Only overwrite soul_content if we read a new value from workspace
           const soulToWrite = mapped.soul_content ?? existingSoul
-          updateAgent.run(mapped.role, configJson, soulToWrite, now, mapped.name)
+          updateAgent.run(mapped.role, mapped.session_key, configJson, soulToWrite, now, mapped.name)
           results.push({ id: agent.id, name: mapped.name, action: 'updated' })
           updated++
         } else {
           results.push({ id: agent.id, name: mapped.name, action: 'unchanged' })
         }
       } else {
-        insertAgent.run(mapped.name, mapped.role, mapped.soul_content, now, now, configJson)
+        insertAgent.run(mapped.name, mapped.role, mapped.session_key, mapped.soul_content, now, now, configJson)
         results.push({ id: agent.id, name: mapped.name, action: 'created' })
         created++
       }

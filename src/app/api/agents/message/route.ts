@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase, db_helpers } from '@/lib/db'
-import { runOpenClaw } from '@/lib/command'
 import { requireRole } from '@/lib/auth'
 import { validateBody, createMessageSchema } from '@/lib/validation'
 import { mutationLimiter } from '@/lib/rate-limit'
@@ -8,6 +7,8 @@ import { logger } from '@/lib/logger'
 import { scanAndLogInjection } from '@/lib/injection-guard'
 import { scanForSecrets } from '@/lib/secret-scanner'
 import { logSecurityEvent } from '@/lib/security-events'
+import { callOpenClawGateway } from '@/lib/openclaw-gateway'
+import { resolveAgentSessionKey } from '@/lib/openclaw-agent-session'
 
 export async function POST(request: NextRequest) {
   const auth = requireRole(request, 'operator')
@@ -52,24 +53,18 @@ export async function POST(request: NextRequest) {
     if (!agent) {
       return NextResponse.json({ error: 'Recipient agent not found' }, { status: 404 })
     }
-    if (!agent.session_key) {
+    const sessionKey = resolveAgentSessionKey(agent)
+    if (!sessionKey) {
       return NextResponse.json(
-        { error: 'Recipient agent has no session key configured' },
+        { error: 'Recipient agent has no routable OpenClaw session key configured' },
         { status: 400 }
       )
     }
 
-    await runOpenClaw(
-      [
-        'gateway',
-        'sessions_send',
-        '--session',
-        agent.session_key,
-        '--message',
-        `Message from ${from}: ${message}`
-      ],
-      { timeoutMs: 10000 }
-    )
+    await callOpenClawGateway('sessions.send', {
+      key: sessionKey,
+      message: `Message from ${from}: ${message}`,
+    }, 10_000)
 
     db_helpers.createNotification(
       to,
@@ -87,11 +82,11 @@ export async function POST(request: NextRequest) {
       agent.id,
       from,
       `Sent message to ${to}`,
-      { to },
+      { to, session_key: sessionKey },
       workspaceId
     )
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, session_key: sessionKey })
   } catch (error) {
     logger.error({ err: error }, 'POST /api/agents/message error')
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
