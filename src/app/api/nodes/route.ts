@@ -24,6 +24,25 @@ function getConfigFallbackWarning(): string | null {
   )
 }
 
+function isUnknownRequestIdError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err || '')
+  return /unknown requestId/i.test(message)
+}
+
+async function findLatestPendingRequestId(deviceId: string): Promise<string | null> {
+  const data = await callOpenClawGateway<{ pending?: unknown[] }>('device.pair.list', {}, GATEWAY_TIMEOUT)
+  const payload = unwrapGatewayPayload(data) as { pending?: unknown[] } | undefined
+  const pending = Array.isArray(payload?.pending) ? payload.pending : []
+  const matches = pending.filter((entry) => {
+    if (!entry || typeof entry !== 'object') return false
+    const record = entry as Record<string, unknown>
+    return record.deviceId === deviceId && typeof record.requestId === 'string' && record.requestId.length > 0
+  }) as Array<Record<string, unknown>>
+
+  if (matches.length !== 1) return null
+  return matches[0].requestId as string
+}
+
 /** Probe the gateway HTTP /health endpoint to check reachability. */
 async function isGatewayReachable(): Promise<boolean> {
   const controller = new AbortController()
@@ -245,6 +264,30 @@ export async function POST(request: NextRequest) {
     const result = await callOpenClawGateway(spec.method, params, GATEWAY_TIMEOUT)
     return NextResponse.json(result)
   } catch (err: unknown) {
+    if (
+      (action === 'approve' || action === 'reject')
+      && typeof body.deviceId === 'string'
+      && isUnknownRequestIdError(err)
+    ) {
+      try {
+        const latestRequestId = await findLatestPendingRequestId(body.deviceId)
+        if (latestRequestId && latestRequestId !== id) {
+          logger.warn(
+            { action, deviceId: body.deviceId, staleRequestId: id, latestRequestId },
+            'Retrying gateway device action with refreshed pending requestId',
+          )
+          const retried = await callOpenClawGateway(
+            spec.method,
+            { [spec.paramKey]: latestRequestId },
+            GATEWAY_TIMEOUT,
+          )
+          return NextResponse.json(retried)
+        }
+      } catch (retryErr) {
+        logger.warn({ err: retryErr, action, deviceId: body.deviceId }, 'Pending request refresh failed')
+      }
+    }
+
     logger.error({ err }, 'Gateway device action failed')
     return NextResponse.json({ error: 'Gateway device action failed' }, { status: 502 })
   }

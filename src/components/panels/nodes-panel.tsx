@@ -436,10 +436,13 @@ function PendingDevicesSection({
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  async function handleAction(action: 'approve' | 'reject', requestId: string) {
+  async function handleAction(action: 'approve' | 'reject', device: PendingDevice) {
     setActionError(null)
-    setActionLoading(`${action}-${requestId}`)
-    const result = await deviceAction(action, { requestId })
+    setActionLoading(`${action}-${device.requestId}`)
+    const result = await deviceAction(action, {
+      requestId: device.requestId,
+      deviceId: device.deviceId,
+    })
     setActionLoading(null)
     if (!result.ok) {
       setActionError(result.error || 'Action failed')
@@ -492,7 +495,7 @@ function PendingDevicesSection({
                 variant="ghost"
                 className="text-green-400 hover:text-green-300 hover:bg-green-500/10"
                 disabled={actionLoading !== null}
-                onClick={() => handleAction('approve', device.requestId)}
+                onClick={() => handleAction('approve', device)}
               >
                 {actionLoading === `approve-${device.requestId}` ? t('approving') : t('approve')}
               </Button>
@@ -501,7 +504,7 @@ function PendingDevicesSection({
                 variant="ghost"
                 className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
                 disabled={actionLoading !== null}
-                onClick={() => handleAction('reject', device.requestId)}
+                onClick={() => handleAction('reject', device)}
               >
                 {actionLoading === `reject-${device.requestId}` ? t('rejecting') : t('reject')}
               </Button>
