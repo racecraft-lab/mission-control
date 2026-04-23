@@ -45,3 +45,17 @@ playwright-report/
 # Claude Code context files (root CLAUDE.md is committed for AI agent discovery)
 **/CLAUDE.md
 !/CLAUDE.md
+
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.bak
+*.bak-*
+hal-gateway-probe.js
