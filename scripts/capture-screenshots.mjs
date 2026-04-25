@@ -68,6 +68,27 @@ try {
     await loginWithCredentials(context)
   }
 
+  // Long-poll / slow endpoints that aren't load-bearing for screenshots —
+  // letting them block the network keeps `networkidle` busy for 30+ seconds
+  // and the capture lands in a transitional render state. Use specific
+  // path patterns (not a global **/*) so we don't accidentally short-circuit
+  // any auth or content endpoint.
+  await context.route('**/api/events**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ events: [] }),
+  }))
+  await context.route('**/api/openclaw/doctor**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ issues: [] }),
+  }))
+
+  // Dismiss the onboarding wizard once via its own UI so the layout is the
+  // same one a returning user sees. Doing it via DOM click avoids any
+  // assumption about which storage key gates the wizard.
+  await dismissOnboardingOnce(context)
+
   for (const panel of targetPanels) {
     await capturePanel(context, panel)
   }
@@ -85,9 +106,11 @@ async function capturePanel(context, panel) {
   const url = `${MC_URL}${panel.url}`
   console.log(`[capture] ${panel.id} → ${url}`)
 
-  const responsePromise = page.waitForLoadState('networkidle').catch(() => null)
   await page.goto(url, { waitUntil: 'domcontentloaded' })
-  await responsePromise
+  // Wait until network settles OR ~6s elapses, whichever first.
+  await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => null)
+  // Then wait for the actual app shell to appear (sidebar nav).
+  await page.waitForSelector('nav[aria-label="Main navigation"]', { timeout: 8000 }).catch(() => null)
 
   // Hide transient overlay banners + side panels per manifest before capture.
   await page.addStyleTag({
@@ -148,6 +171,30 @@ async function runPostNavigateAction(page, action) {
     return
   }
   console.warn(`[capture]   warning: unknown postNavigateAction: ${action}`)
+}
+
+async function dismissOnboardingOnce(context) {
+  const page = await context.newPage()
+  try {
+    await page.goto(MC_URL, { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null)
+    // Try every plausible dismissal: a "Skip setup" link/button, then storage flag.
+    const dismissed = await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+      const t = (el) => (el.textContent || '').trim().toLowerCase()
+      const skip = candidates.find(el => /^skip(\s+setup)?$/.test(t(el)))
+      if (skip) { skip.click(); return 'skip-clicked' }
+      try { window.sessionStorage.setItem('mc-onboarding-dismissed', '1') } catch (_) {}
+      try { window.localStorage.setItem('mc-onboarding-dismissed', '1') } catch (_) {}
+      return 'storage-set'
+    })
+    console.log(`[capture] onboarding dismissal: ${dismissed}`)
+    await page.waitForTimeout(800)
+  } catch (e) {
+    console.warn(`[capture] onboarding dismiss failed: ${e.message}`)
+  } finally {
+    await page.close()
+  }
 }
 
 async function loginWithCredentials(context) {
