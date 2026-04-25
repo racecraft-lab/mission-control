@@ -125,6 +125,27 @@ async function capturePanel(context, panel) {
   const page = await context.newPage()
   page.setDefaultTimeout(30_000)
 
+  // Freeze the wall clock so the header-bar time and any "x ago" labels
+  // render identical bytes on every run. The seconds field updates via
+  // setInterval/Date.now(); we install a fixed Date and a no-op timer
+  // factory before any page script binds to them.
+  await page.addInitScript(() => {
+    const FROZEN_MS = Date.UTC(2026, 0, 15, 16, 30, 0) // 2026-01-15 16:30:00Z
+    const RealDate = Date
+    class FrozenDate extends RealDate {
+      constructor(...args) {
+        if (args.length === 0) return new RealDate(FROZEN_MS)
+        return new RealDate(...args)
+      }
+      static now() { return FROZEN_MS }
+    }
+    Object.setPrototypeOf(FrozenDate, RealDate)
+    Object.defineProperty(FrozenDate, 'name', { value: 'Date' })
+    // eslint-disable-next-line no-global-assign
+    Date = FrozenDate
+    // Intl-based formatters use Date internally, so they pick up FROZEN_MS.
+  })
+
   const url = `${MC_URL}${panel.url}`
   console.log(`[capture] ${panel.id} → ${url}`)
 
