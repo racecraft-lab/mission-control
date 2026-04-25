@@ -242,7 +242,7 @@ describe('auth hash migration', () => {
     expect(db.agentKeyLookupHashes).toEqual([hmacKeyHash])
   })
 
-  it('fails fast when AUTH_SECRET is missing in production', async () => {
+  it('fails fast when AUTH_SECRET is missing in production at first hash use', async () => {
     process.env = {
       ...originalEnv,
       NODE_ENV: 'production',
@@ -250,7 +250,12 @@ describe('auth hash migration', () => {
       API_KEY: '',
     }
 
-    await expect(import('@/lib/auth')).rejects.toThrow(
+    // Module load is deferred — auth.ts no longer derives the pepper at import
+    // time so that `next build` can statically collect route handlers without
+    // a real AUTH_SECRET. The fail-fast moves to the first call site that
+    // actually needs the pepper (hashApiKey / session token hashing).
+    const { hashApiKey } = await import('@/lib/auth')
+    expect(() => hashApiKey('test-key')).toThrow(
       'AUTH_SECRET must be configured in production for token hashing',
     )
   })

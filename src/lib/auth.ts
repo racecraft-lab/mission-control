@@ -124,15 +124,33 @@ const AUTH_SECRET_PLACEHOLDER = 'random-secret-for-legacy-cookies'
 function resolveAuthSecretForPepper(): string {
   const authSecret = (process.env.AUTH_SECRET || '').trim()
   if (authSecret && authSecret !== AUTH_SECRET_PLACEHOLDER) return authSecret
+  // During the Next.js production build, route modules are imported for static
+  // collection but no requests are served. Allow the placeholder so the build
+  // succeeds; runtime startup (mc-start.sh) regenerates AUTH_SECRET before the
+  // server accepts traffic, at which point the lazy peppers below recompute
+  // against the real secret.
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return authSecret || AUTH_SECRET_PLACEHOLDER
+  }
   if (process.env.NODE_ENV === 'production') {
     throw new Error('AUTH_SECRET must be configured in production for token hashing')
   }
   return authSecret || AUTH_SECRET_PLACEHOLDER
 }
 
-const AUTH_SECRET_FOR_PEPPER = resolveAuthSecretForPepper()
-const API_KEY_PEPPER_KEY = createHash('sha256').update(`${AUTH_SECRET_FOR_PEPPER}:api-key-pepper`).digest()
-const SESSION_TOKEN_PEPPER_KEY = createHash('sha256').update(`${AUTH_SECRET_FOR_PEPPER}:session-token-pepper`).digest()
+let _apiKeyPepperKey: Buffer | undefined
+let _sessionTokenPepperKey: Buffer | undefined
+let _resolvedSecret: string | undefined
+
+function pepperKeys(): { apiKey: Buffer; sessionToken: Buffer } {
+  const secret = resolveAuthSecretForPepper()
+  if (_resolvedSecret !== secret) {
+    _resolvedSecret = secret
+    _apiKeyPepperKey = createHash('sha256').update(`${secret}:api-key-pepper`).digest()
+    _sessionTokenPepperKey = createHash('sha256').update(`${secret}:session-token-pepper`).digest()
+  }
+  return { apiKey: _apiKeyPepperKey!, sessionToken: _sessionTokenPepperKey! }
+}
 
 function getDefaultWorkspaceContext(): { workspaceId: number; tenantId: number } {
   try {
@@ -643,7 +661,7 @@ function extractApiKeyFromHeaders(headers: Headers): string | null {
 }
 
 export function hashApiKey(rawKey: string): string {
-  return createHmac('sha256', API_KEY_PEPPER_KEY).update(rawKey).digest('hex')
+  return createHmac('sha256', pepperKeys().apiKey).update(rawKey).digest('hex')
 }
 
 /**
@@ -654,7 +672,7 @@ function hashApiKeyLegacy(rawKey: string): string {
 }
 
 function hashSessionToken(rawToken: string): string {
-  return createHmac('sha256', SESSION_TOKEN_PEPPER_KEY).update(rawToken).digest('hex')
+  return createHmac('sha256', pepperKeys().sessionToken).update(rawToken).digest('hex')
 }
 
 /**
