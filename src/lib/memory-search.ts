@@ -16,6 +16,7 @@ import { join } from 'path'
 import { getDatabase } from '@/lib/db'
 import { scanMemoryFiles, type MemoryFileInfo } from '@/lib/memory-utils'
 import { logger } from '@/lib/logger'
+import { normalizeRelativePath, resolveSafeMemoryPathSync } from '@/lib/memory-path'
 
 // ─── Schema ──────────────────────────────────────────────────────
 
@@ -62,11 +63,11 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
   if (allowedPrefixes.length) {
     for (const prefix of allowedPrefixes) {
       const folder = prefix.replace(/\/$/, '')
-      const fullPath = join(baseDir, folder)
+      const fullPath = resolveSafeMemoryPathSync(baseDir, folder)
       if (!existsSync(fullPath)) continue
       const prefixFiles = await scanMemoryFiles(fullPath, { extensions: ['.md', '.txt'] })
       for (const f of prefixFiles) {
-        files.push({ ...f, path: join(folder, f.path) })
+        files.push({ ...f, path: normalizeRelativePath(join(folder, f.path)) })
       }
     }
   } else {
@@ -81,7 +82,8 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
 
     for (const file of files) {
       try {
-        const content = readFileSync(join(baseDir, file.path), 'utf-8')
+        const safePath = resolveSafeMemoryPathSync(baseDir, file.path)
+        const content = readFileSync(safePath, 'utf-8')
         const title = extractTitle(content, file.name)
         const body = stripFrontmatter(content)
         insertStmt.run(file.path, title, body)
@@ -110,7 +112,8 @@ export async function rebuildIndex(baseDir: string, allowedPrefixes: string[]): 
 export function indexFile(db: Database.Database, baseDir: string, relativePath: string): void {
   ensureFtsTable(db)
   try {
-    const content = readFileSync(join(baseDir, relativePath), 'utf-8')
+    const safePath = resolveSafeMemoryPathSync(baseDir, relativePath)
+    const content = readFileSync(safePath, 'utf-8')
     const name = relativePath.split('/').pop() || relativePath
     const title = extractTitle(content, name)
     const body = stripFrontmatter(content)

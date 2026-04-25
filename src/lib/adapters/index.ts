@@ -16,8 +16,13 @@ const adapters: Record<string, () => FrameworkAdapter> = {
 }
 
 export function getAdapter(framework: string): FrameworkAdapter {
+  if (!Object.prototype.hasOwnProperty.call(adapters, framework)) {
+    throw new Error(`Unknown framework adapter: ${framework}`)
+  }
   const factory = adapters[framework]
-  if (!factory) throw new Error(`Unknown framework adapter: ${framework}`)
+  if (typeof factory !== 'function') {
+    throw new Error(`Unknown framework adapter: ${framework}`)
+  }
   return factory()
 }
 

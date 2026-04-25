@@ -15,11 +15,49 @@ interface CommandResult {
   code: number | null
 }
 
+const SHELL_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'cmd', 'powershell', 'pwsh'])
+const SHELL_INLINE_FLAGS = new Set(['-c', '/c', '-Command', '-command', '-EncodedCommand', '-encodedcommand'])
+
+export class CommandValidationError extends Error {
+  readonly code = 'COMMAND_VALIDATION_ERROR'
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'CommandValidationError'
+  }
+}
+
+function getCommandBasename(command: string): string {
+  const normalized = command.replace(/\\/g, '/')
+  const parts = normalized.split('/')
+  return (parts[parts.length - 1] || '').toLowerCase()
+}
+
+function assertSafeCommandInvocation(command: string, args: string[]): void {
+  if (typeof command !== 'string' || !command.trim()) {
+    throw new CommandValidationError('Executable is required')
+  }
+
+  if (/\s/.test(command) || /[|&;<>`$\n\r]/.test(command)) {
+    throw new CommandValidationError('Executable contains unsupported characters')
+  }
+
+  const basename = getCommandBasename(command)
+  if (SHELL_INTERPRETERS.has(basename)) {
+    const hasInlineShellPayload = args.some((arg) => SHELL_INLINE_FLAGS.has(String(arg)))
+    if (hasInlineShellPayload) {
+      throw new CommandValidationError('Shell interpreter inline execution is not allowed')
+    }
+  }
+}
+
 export function runCommand(
   command: string,
   args: string[],
   options: CommandOptions = {}
 ): Promise<CommandResult> {
+  assertSafeCommandInvocation(command, args)
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
@@ -61,7 +99,7 @@ export function runCommand(
         return
       }
       const error = new Error(
-        `Command failed (${command} ${args.join(' ')}): ${stderr || stdout}`
+        `Command failed with exit code ${String(code)}: ${stderr || stdout}`
       )
       ;(error as any).stdout = stdout
       ;(error as any).stderr = stderr

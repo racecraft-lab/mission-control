@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { parseNaturalSchedule, isCronDue } from '../schedule-parser'
+import safeRegex from '../../test/safe-regex'
+import {
+  parseNaturalSchedule,
+  isCronDue,
+  DAILY_AT_RE,
+  AT_TIME_DAILY_RE,
+  EVERY_DAY_AT_RE,
+} from '../schedule-parser'
 
 describe('parseNaturalSchedule', () => {
   it('returns null for empty input', () => {
@@ -128,6 +135,38 @@ describe('parseNaturalSchedule', () => {
   it('parses 12am as midnight', () => {
     const result = parseNaturalSchedule('daily at 12am')
     expect(result!.cronExpr).toBe('0 0 * * *')
+  })
+})
+
+describe('regex safety and redos guards', () => {
+  it('marks rewritten schedule regexes as safe', () => {
+    expect(safeRegex(DAILY_AT_RE)).toBe(true)
+    expect(safeRegex(AT_TIME_DAILY_RE)).toBe(true)
+    expect(safeRegex(EVERY_DAY_AT_RE)).toBe(true)
+  })
+
+  it('handles adversarial daily-at input quickly', () => {
+    const input = `daily at ${'9'.repeat(20_000)}x`
+    const start = performance.now()
+    parseNaturalSchedule(input)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
+  })
+
+  it('handles adversarial at-time-daily input quickly', () => {
+    const input = `at ${'9'.repeat(20_000)} every dayx`
+    const start = performance.now()
+    parseNaturalSchedule(input)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
+  })
+
+  it('handles adversarial every-day-at input quickly', () => {
+    const input = `every monday at ${'9'.repeat(20_000)}x`
+    const start = performance.now()
+    parseNaturalSchedule(input)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
   })
 })
 

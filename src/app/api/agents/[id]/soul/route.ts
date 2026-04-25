@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase, db_helpers } from '@/lib/db';
 import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname, isAbsolute, resolve } from 'path';
+import { dirname, isAbsolute, resolve, sep } from 'path';
 import { config } from '@/lib/config';
 import { resolveWithin } from '@/lib/paths';
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace';
@@ -12,6 +12,26 @@ function resolveAgentWorkspacePath(workspace: string): string {
   if (isAbsolute(workspace)) return resolve(workspace)
   if (!config.openclawStateDir) throw new Error('OPENCLAW_STATE_DIR not configured')
   return resolveWithin(config.openclawStateDir, workspace)
+}
+
+function isWithinBase(base: string, candidate: string): boolean {
+  if (candidate === base) return true
+  return candidate.startsWith(base + sep)
+}
+
+function resolveWithinConfiguredBase(baseDir: string, untrustedPath: string): string {
+  const value = String(untrustedPath ?? '')
+  if (value.includes('\u0000') || value.includes('..') || isAbsolute(value)) {
+    throw new Error('Invalid template path')
+  }
+
+  const resolvedBase = resolve(baseDir)
+  const fullPath = resolve(resolvedBase, value)
+  if (!isWithinBase(resolvedBase, fullPath)) {
+    throw new Error('Invalid template path')
+  }
+
+  return fullPath
 }
 
 /**
@@ -134,7 +154,7 @@ export async function PUT(
       }
       let templatePath: string;
       try {
-        templatePath = resolveWithin(config.soulTemplatesDir, `${template_name}.md`);
+        templatePath = resolveWithinConfiguredBase(config.soulTemplatesDir, `${template_name}.md`);
       } catch (pathError) {
         return NextResponse.json({ error: 'Invalid template name' }, { status: 400 });
       }
@@ -237,7 +257,7 @@ export async function PATCH(
       // Get specific template content
       let templatePath: string;
       try {
-        templatePath = resolveWithin(templatesPath, `${templateName}.md`);
+        templatePath = resolveWithinConfiguredBase(templatesPath, `${templateName}.md`);
       } catch (pathError) {
         return NextResponse.json({ error: 'Invalid template name' }, { status: 400 });
       }
@@ -260,7 +280,7 @@ export async function PATCH(
       .filter(file => file.endsWith('.md'))
       .map(file => {
         const name = file.replace('.md', '');
-        const templatePath = join(templatesPath, file);
+        const templatePath = resolveWithinConfiguredBase(templatesPath, file);
         const content = readFileSync(templatePath, 'utf8');
         
         // Extract first line as description

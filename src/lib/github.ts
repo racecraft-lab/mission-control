@@ -5,6 +5,51 @@
  */
 import { getEffectiveEnvValue } from '@/lib/runtime-env'
 
+const DEFAULT_GITHUB_API_BASE_URL = 'https://api.github.com/'
+
+export class GitHubUrlValidationError extends Error {
+  constructor() {
+    super('GitHub API request URL validation failed')
+    this.name = 'GitHubUrlValidationError'
+  }
+}
+
+function normalizeGitHubApiBase(baseUrl: string): URL {
+  const candidate = baseUrl.trim() || DEFAULT_GITHUB_API_BASE_URL
+
+  let parsed: URL
+  try {
+    parsed = new URL(candidate)
+  } catch {
+    throw new GitHubUrlValidationError()
+  }
+
+  if (!parsed.host || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')) {
+    throw new GitHubUrlValidationError()
+  }
+
+  if (!parsed.pathname.endsWith('/')) {
+    parsed.pathname = `${parsed.pathname}/`
+  }
+
+  return parsed
+}
+
+function buildGitHubApiUrl(path: string, baseUrl: URL, allowedHosts: Set<string>): string {
+  // Keep absolute/protocol-relative paths intact so host validation can reject escapes.
+  const resolvedPath = /^https?:\/\//i.test(path) || path.startsWith('//')
+    ? path
+    : path.replace(/^\/+/, '')
+
+  const resolvedUrl = new URL(resolvedPath, baseUrl)
+
+  if (!allowedHosts.has(resolvedUrl.host)) {
+    throw new GitHubUrlValidationError()
+  }
+
+  return resolvedUrl.toString()
+}
+
 export interface GitHubLabel {
   name: string
   color?: string
@@ -43,9 +88,10 @@ export async function githubFetch(
     throw new Error('GITHUB_TOKEN not configured')
   }
 
-  const url = path.startsWith('https://')
-    ? path
-    : `https://api.github.com${path.startsWith('/') ? '' : '/'}${path}`
+  const configuredBase = await getEffectiveEnvValue('GITHUB_API_BASE_URL')
+  const baseUrl = normalizeGitHubApiBase(configuredBase)
+  const allowedHosts = new Set<string>(['api.github.com', baseUrl.host])
+  const url = buildGitHubApiUrl(path, baseUrl, allowedHosts)
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,

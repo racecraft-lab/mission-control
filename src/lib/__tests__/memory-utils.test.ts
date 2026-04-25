@@ -1,8 +1,11 @@
 import { describe, test, expect } from 'vitest'
+import safeRegex from '../../test/safe-regex'
 import {
   extractWikiLinks,
   extractSchema,
   validateSchema,
+  REQUIRED_SCHEMA_FIELDS_RE,
+  OPTIONAL_SCHEMA_FIELDS_RE,
 } from '../memory-utils'
 
 describe('extractWikiLinks', () => {
@@ -74,6 +77,29 @@ describe('extractSchema', () => {
     const content = '---\n_schema:\n  type: note\n  optional: [source, author]\n---\n'
     const schema = extractSchema(content)
     expect(schema!.optional).toEqual(['source', 'author'])
+  })
+})
+
+describe('schema regex safety and redos guards', () => {
+  test('marks rewritten schema list regexes as safe', () => {
+    expect(safeRegex(REQUIRED_SCHEMA_FIELDS_RE)).toBe(true)
+    expect(safeRegex(OPTIONAL_SCHEMA_FIELDS_RE)).toBe(true)
+  })
+
+  test('handles adversarial required schema input quickly', () => {
+    const content = `---\n_schema:\n  required: [${'a'.repeat(20_000)}\n---\n`
+    const start = performance.now()
+    extractSchema(content)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
+  })
+
+  test('handles adversarial optional schema input quickly', () => {
+    const content = `---\n_schema:\n  optional: [${'a'.repeat(20_000)}\n---\n`
+    const start = performance.now()
+    extractSchema(content)
+    const elapsed = performance.now() - start
+    expect(elapsed).toBeLessThan(50)
   })
 })
 

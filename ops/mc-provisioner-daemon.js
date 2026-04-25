@@ -14,6 +14,22 @@ const TENANT_HOME_ROOT = String(process.env.MC_TENANT_HOME_ROOT || '/home').trim
 const TENANT_WORKSPACE_DIRNAME = String(process.env.MC_TENANT_WORKSPACE_DIRNAME || 'workspace').trim() || 'workspace'
 const TEMPLATE_OPENCLAW_JSON = process.env.MC_SUPER_TEMPLATE_OPENCLAW_JSON || (process.env.OPENCLAW_HOME ? path.join(process.env.OPENCLAW_HOME, 'openclaw.json') : '')
 const GATEWAY_SYSTEMD_TEMPLATE = path.join(REPO_ROOT, 'ops', 'templates', 'openclaw-gateway@.service')
+const MAX_PROVISIONER_INPUT_BYTES = (() => {
+  const parsed = Number.parseInt(String(process.env.MC_PROVISIONER_MAX_INPUT_BYTES || ''), 10)
+  if (Number.isFinite(parsed) && parsed > 0) return parsed
+  return 10 * 1024 * 1024
+})()
+
+const ALLOWLISTED_EXECUTABLES = Object.freeze({
+  useradd: '/usr/sbin/useradd',
+  install: '/usr/bin/install',
+  cp: '/usr/bin/cp',
+  chown: '/usr/bin/chown',
+  rm: '/usr/bin/rm',
+  userdel: '/usr/sbin/userdel',
+  true: '/usr/bin/true',
+  systemctl: '/usr/bin/systemctl',
+})
 
 if (!TOKEN) {
   console.error('MC_PROVISIONER_TOKEN is required')
@@ -38,9 +54,16 @@ function isSafeHomePath(path, user, suffix) {
   return path === pathJoinPosix(TENANT_HOME_ROOT, user, suffix)
 }
 
-function validateCommand(command, args) {
+function resolveAllowlistedCommand(command) {
   const cmd = String(command || '').split('/').pop()
-  if (!command || !Array.isArray(args)) return 'Invalid command payload'
+  if (!cmd) return null
+  const executable = ALLOWLISTED_EXECUTABLES[cmd]
+  if (!executable) return null
+  return { cmd, executable }
+}
+
+function validateCommand(cmd, args) {
+  if (!cmd || !Array.isArray(args)) return 'Invalid command payload'
 
   if (cmd === 'useradd') {
     if (args.length !== 4) return 'useradd argument mismatch'
@@ -147,7 +170,7 @@ function validateCommand(command, args) {
     return 'systemctl args not allowed'
   }
 
-  return `Command not allowlisted: ${command}`
+  return 'Command not allowlisted'
 }
 
 function run(command, args, timeoutMs) {
@@ -186,8 +209,8 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function runWithRetry(command, args, timeoutMs) {
-  const cmd = String(command || '').split('/').pop()
+async function runWithRetry(command, args, timeoutMs, commandName) {
+  const cmd = String(commandName || command || '').split('/').pop()
   const maxAttempts = cmd === 'useradd' ? 6 : 1
   let last = null
 
@@ -232,7 +255,13 @@ const server = net.createServer((socket) => {
   let buf = ''
 
   socket.on('data', async (chunk) => {
-    buf += chunk.toString('utf8')
+    const chunkText = chunk.toString('utf8')
+    if (Buffer.byteLength(buf, 'utf8') + Buffer.byteLength(chunkText, 'utf8') > MAX_PROVISIONER_INPUT_BYTES) {
+      writeResp(socket, { ok: false, code: 'PROVISIONER_INPUT_TOO_LARGE', error: 'Request payload too large' })
+      return
+    }
+
+    buf += chunkText
     const idx = buf.indexOf('\n')
     if (idx === -1) return
 
@@ -252,12 +281,18 @@ const server = net.createServer((socket) => {
       return
     }
 
-    const command = String(req.command || '')
+    const resolvedCommand = resolveAllowlistedCommand(req.command)
+    if (!resolvedCommand) {
+      writeResp(socket, { ok: false, error: 'Command not allowlisted' })
+      return
+    }
+
+    const { cmd, executable } = resolvedCommand
     const args = Array.isArray(req.args) ? req.args.map((a) => String(a)) : []
     const dryRun = !!req.dryRun
     const timeoutMs = Number(req.timeoutMs || 10000)
 
-    const validationErr = validateCommand(command, args)
+    const validationErr = validateCommand(cmd, args)
     if (validationErr) {
       writeResp(socket, { ok: false, error: validationErr })
       return
@@ -268,9 +303,9 @@ const server = net.createServer((socket) => {
       return
     }
 
-    const result = await runWithRetry(command, args, timeoutMs)
+    const result = await runWithRetry(executable, args, timeoutMs, cmd)
     if (!result.ok) {
-      writeResp(socket, { ok: false, code: result.code, stdout: result.stdout, stderr: result.stderr, error: `Command failed: ${command}` })
+      writeResp(socket, { ok: false, code: result.code, stdout: result.stdout, stderr: result.stderr, error: `Command failed: ${cmd}` })
       return
     }
 

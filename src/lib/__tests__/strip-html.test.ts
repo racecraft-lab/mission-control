@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest'
 
-// Reproduce the stripHtml logic from markdown-renderer to test it in isolation
+// Reproduce the stripHtml logic from markdown-renderer to test it in isolation.
+// Loops until idempotent so interleaved sequences like `<scr<script>ipt>` are
+// fully stripped rather than leaving a residual tag behind.
 function stripHtml(content: string): string {
-  return content.replace(/<[^>]*>/g, '')
+  let prev: string
+  let result = content
+  do {
+    prev = result
+    result = result.replace(/<[^>]*>/g, '')
+  } while (result !== prev)
+  return result
 }
 
 describe('stripHtml', () => {
@@ -49,5 +57,22 @@ describe('stripHtml', () => {
     // This is a limitation — mathematical expressions like "x < 5" would be affected
     // But for our use case (stripping pasted HTML), this is acceptable
     expect(stripHtml('5 > 3 is true')).toBe('5 > 3 is true')
+  })
+
+  it('output never contains a complete `<...>` after stripping', () => {
+    // A naive single-pass `replace(/<[^>]*>/g, '')` can leave a complete tag
+    // behind when one tag is split across the input by another (e.g.
+    // `<scr<script>ipt>` consumes the inner `<script>` first and leaves a
+    // residual fragment that, when concatenated by other inputs, re-forms a
+    // tag). The loop-until-idempotent variant guarantees the output has no
+    // surviving `<...>` patterns regardless of input.
+    const inputs = [
+      '<scr<script>alert(1)</script>ipt>',
+      '<scr<script>ipt>alert(1)<scr</script>ipt>',
+      '<<img src=x onerror=alert(1)>>',
+    ]
+    for (const input of inputs) {
+      expect(stripHtml(input)).not.toMatch(/<[^>]*>/)
+    }
   })
 })

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { getDatabase } from './db'
 import { hashPassword, verifyPassword, verifyPasswordWithRehashCheck } from './password'
 import { logSecurityEvent } from './security-events'
@@ -119,6 +119,38 @@ interface UserQueryRow {
 
 // Session management
 const SESSION_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
+const AUTH_SECRET_PLACEHOLDER = 'random-secret-for-legacy-cookies'
+
+function resolveAuthSecretForPepper(): string {
+  const authSecret = (process.env.AUTH_SECRET || '').trim()
+  if (authSecret && authSecret !== AUTH_SECRET_PLACEHOLDER) return authSecret
+  // During the Next.js production build, route modules are imported for static
+  // collection but no requests are served. Allow the placeholder so the build
+  // succeeds; runtime startup (mc-start.sh) regenerates AUTH_SECRET before the
+  // server accepts traffic, at which point the lazy peppers below recompute
+  // against the real secret.
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return authSecret || AUTH_SECRET_PLACEHOLDER
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_SECRET must be configured in production for token hashing')
+  }
+  return authSecret || AUTH_SECRET_PLACEHOLDER
+}
+
+let _apiKeyPepperKey: Buffer | undefined
+let _sessionTokenPepperKey: Buffer | undefined
+let _resolvedSecret: string | undefined
+
+function pepperKeys(): { apiKey: Buffer; sessionToken: Buffer } {
+  const secret = resolveAuthSecretForPepper()
+  if (_resolvedSecret !== secret) {
+    _resolvedSecret = secret
+    _apiKeyPepperKey = createHash('sha256').update(`${secret}:api-key-pepper`).digest()
+    _sessionTokenPepperKey = createHash('sha256').update(`${secret}:session-token-pepper`).digest()
+  }
+  return { apiKey: _apiKeyPepperKey!, sessionToken: _sessionTokenPepperKey! }
+}
 
 function getDefaultWorkspaceContext(): { workspaceId: number; tenantId: number } {
   try {
@@ -187,8 +219,9 @@ export function validateSession(token: string): (User & { sessionId: number }) |
   const db = getDatabase()
   const now = Math.floor(Date.now() / 1000)
   const tokenHash = hashSessionToken(token)
+  const legacyTokenHash = hashSessionTokenLegacy(token)
 
-  const row = db.prepare(`
+  const sessionLookup = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.role, u.provider, u.email, u.avatar_url, u.is_approved,
            COALESCE(s.workspace_id, u.workspace_id, 1) as workspace_id,
            COALESCE(s.tenant_id, w.tenant_id, 1) as tenant_id,
@@ -198,7 +231,19 @@ export function validateSession(token: string): (User & { sessionId: number }) |
     JOIN users u ON u.id = s.user_id
     LEFT JOIN workspaces w ON w.id = COALESCE(s.workspace_id, u.workspace_id, 1)
     WHERE s.token = ? AND s.expires_at > ?
-  `).get(tokenHash, now) as SessionQueryRow | undefined
+  `)
+
+  let row = sessionLookup.get(tokenHash, now) as SessionQueryRow | undefined
+  if (!row) {
+    row = sessionLookup.get(legacyTokenHash, now) as SessionQueryRow | undefined
+    if (row) {
+      try {
+        db.prepare('UPDATE user_sessions SET token = ? WHERE id = ?').run(tokenHash, row.session_id)
+      } catch {
+        // non-fatal — continue with authenticated session
+      }
+    }
+  }
 
   if (!row) return null
 
@@ -223,7 +268,8 @@ export function validateSession(token: string): (User & { sessionId: number }) |
 export function destroySession(token: string): void {
   const db = getDatabase()
   const tokenHash = hashSessionToken(token)
-  db.prepare('DELETE FROM user_sessions WHERE token = ?').run(tokenHash)
+  const legacyTokenHash = hashSessionTokenLegacy(token)
+  db.prepare('DELETE FROM user_sessions WHERE token IN (?, ?)').run(tokenHash, legacyTokenHash)
 }
 
 export function destroyAllUserSessions(userId: number): void {
@@ -501,14 +547,17 @@ export function getUserFromRequest(request: Request): User | null {
   if (apiKey) {
     try {
       const db = getDatabase()
-      const keyHash = hashApiKey(apiKey)
       const now = Math.floor(Date.now() / 1000)
-      const row = db.prepare(`
+      const keyHash = hashApiKey(apiKey)
+      const legacyKeyHash = hashApiKeyLegacy(apiKey)
+      const agentKeyLookup = db.prepare(`
         SELECT id, agent_id, workspace_id, scopes, expires_at, revoked_at
         FROM agent_api_keys
         WHERE key_hash = ?
         LIMIT 1
-      `).get(keyHash) as {
+      `)
+
+      let row = agentKeyLookup.get(keyHash) as {
         id: number
         agent_id: number
         workspace_id: number
@@ -516,6 +565,25 @@ export function getUserFromRequest(request: Request): User | null {
         expires_at: number | null
         revoked_at: number | null
       } | undefined
+
+      if (!row) {
+        row = agentKeyLookup.get(legacyKeyHash) as {
+          id: number
+          agent_id: number
+          workspace_id: number
+          scopes: string
+          expires_at: number | null
+          revoked_at: number | null
+        } | undefined
+
+        if (row) {
+          try {
+            db.prepare('UPDATE agent_api_keys SET key_hash = ?, updated_at = ? WHERE id = ?').run(keyHash, now, row.id)
+          } catch {
+            // non-fatal — continue with legacy match
+          }
+        }
+      }
 
       if (row && !row.revoked_at && (!row.expires_at || row.expires_at > now)) {
         const scopes = parseAgentScopes(row.scopes)
@@ -592,12 +660,38 @@ function extractApiKeyFromHeaders(headers: Headers): string | null {
   return null
 }
 
-function hashApiKey(rawKey: string): string {
-  return createHash('sha256').update(rawKey).digest('hex')
+// API keys and session tokens in this module are NOT user-chosen passwords.
+// They are server-generated random tokens (`mca_${randomBytes(24).toString('hex')}`
+// for agent API keys = 192 bits; `randomBytes(32).toString('hex')` for session
+// tokens = 256 bits). Hashing with HMAC-SHA256 + a server-side pepper derived
+// from AUTH_SECRET is the OWASP-recommended construction for high-entropy
+// secrets. A KDF such as bcrypt/scrypt/Argon2 is intended for low-entropy human
+// passwords; applying one here would add per-request latency without
+// strengthening security against an offline attacker who has the hash but not
+// the pepper. CodeQL's `js/insufficient-password-hash` rule cannot tell these
+// apart, so it is suppressed at each sink with `lgtm[js/insufficient-password-hash]`.
+export function hashApiKey(rawKey: string): string {
+  return createHmac('sha256', pepperKeys().apiKey).update(rawKey).digest('hex') // lgtm[js/insufficient-password-hash]
+}
+
+/**
+ * Legacy API key hash (plain SHA-256) retained only for dual-read migration.
+ * Will be removed once all stored hashes have been upgraded to the HMAC form.
+ */
+function hashApiKeyLegacy(rawKey: string): string {
+  return createHash('sha256').update(rawKey).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 function hashSessionToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex')
+  return createHmac('sha256', pepperKeys().sessionToken).update(rawToken).digest('hex') // lgtm[js/insufficient-password-hash]
+}
+
+/**
+ * Legacy session-token hash (plain SHA-256) retained only for dual-read migration.
+ * Will be removed once all stored hashes have been upgraded to the HMAC form.
+ */
+function hashSessionTokenLegacy(rawToken: string): string {
+  return createHash('sha256').update(rawToken).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 function parseAgentScopes(raw: string): Set<string> {
