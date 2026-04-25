@@ -22,7 +22,7 @@ export function TerminalView({ sessionId, sessionKind, mode, onExit, onError, on
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const connect = useCallback(async () => {
-    if (!containerRef.current) return
+    if (!containerRef.current) return undefined
 
     setConnState('connecting')
     setErrorMessage(null)
@@ -224,6 +224,7 @@ export function TerminalView({ sessionId, sessionKind, mode, onExit, onError, on
       const msg = err instanceof Error ? err.message : 'Failed to connect'
       setErrorMessage(msg)
       onError?.(msg)
+      return undefined
     }
   }, [sessionId, sessionKind, mode, onExit, onError, onReady, connState])
 

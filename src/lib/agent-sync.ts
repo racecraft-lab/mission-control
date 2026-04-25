@@ -6,9 +6,9 @@
  */
 
 import { config } from './config'
-import { getDatabase, db_helpers, logAuditEvent } from './db'
+import { getDatabase, logAuditEvent } from './db'
 import { eventBus } from './event-bus'
-import { join, isAbsolute, resolve } from 'path'
+import { isAbsolute, resolve } from 'path'
 import { existsSync, readFileSync, statSync } from 'fs'
 import { resolveWithin } from './paths'
 import { logger } from './logger'

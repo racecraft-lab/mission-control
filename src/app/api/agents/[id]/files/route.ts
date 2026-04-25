@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase, db_helpers } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
-import { config } from '@/lib/config'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { resolveWithin } from '@/lib/paths'
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace'
 import { logger } from '@/lib/logger'
@@ -29,12 +28,6 @@ const FILE_ALIASES: Record<string, string[]> = {
   'AGENTS.md': ['AGENTS.md', 'agents.md'],
   'MISSION.md': ['MISSION.md', 'mission.md'],
   'USER.md': ['USER.md', 'user.md'],
-}
-
-function resolveAgentWorkspacePath(workspace: string): string {
-  if (isAbsolute(workspace)) return resolve(workspace)
-  if (!config.openclawStateDir) throw new Error('OPENCLAW_STATE_DIR not configured')
-  return resolveWithin(config.openclawStateDir, workspace)
 }
 
 function getAgentByIdOrName(db: ReturnType<typeof getDatabase>, id: string, workspaceId: number): any | undefined {

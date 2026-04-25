@@ -8,7 +8,6 @@
 import { createHash, randomUUID } from 'crypto'
 import { getDatabase } from '@/lib/db'
 import { eventBus } from '@/lib/event-bus'
-import { logger } from '@/lib/logger'
 
 // --- Types (mirrors @agent-run/types) ---
 

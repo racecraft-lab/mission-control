@@ -12,7 +12,7 @@
  *   5. Framework identity (each adapter tags events correctly)
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { FrameworkAdapter, AgentRegistration, HeartbeatPayload, TaskReport } from '../adapter'
 import { getAdapter, listAdapters } from '../index'
 

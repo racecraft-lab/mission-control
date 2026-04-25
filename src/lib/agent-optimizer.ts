@@ -46,7 +46,7 @@ export interface Recommendation {
 export function analyzeTokenEfficiency(
   agentName: string,
   hours: number = 24,
-  workspaceId: number = 1,
+  _workspaceId: number = 1,
 ): TokenEfficiency {
   const db = getDatabase()
   const since = Math.floor(Date.now() / 1000) - hours * 3600

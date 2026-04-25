@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const queue = buildQueueMetrics(db, workspaceId);
 
     // --- Agent availability ---
-    const agents = buildAgentMetrics(db, workspaceId, now);
+    const agents = buildAgentMetrics(db, workspaceId);
 
     // --- Recommendation ---
     const recommendation = computeRecommendation(capacity, queue, agents);
@@ -199,7 +199,7 @@ function buildQueueMetrics(db: any, workspaceId: number): QueueMetrics {
   };
 }
 
-function buildAgentMetrics(db: any, workspaceId: number, now: number): AgentMetrics {
+function buildAgentMetrics(db: any, workspaceId: number): AgentMetrics {
   const agentStatuses = db.prepare(
     `SELECT status, COUNT(*) as count FROM agents WHERE workspace_id = ? GROUP BY status`
   ).all(workspaceId) as Array<{ status: string; count: number }>;

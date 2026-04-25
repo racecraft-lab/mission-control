@@ -1,12 +1,12 @@
 'use client'
 
 import { useMissionControl } from '@/store'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 
 export function LiveFeed() {
-  const { logs, sessions, activities, connection, dashboardMode, toggleLiveFeed } = useMissionControl()
+  const { logs, sessions, activities, dashboardMode, toggleLiveFeed } = useMissionControl()
   const t = useTranslations('liveFeed')
   const isLocal = dashboardMode === 'local'
   const [expanded, setExpanded] = useState(false)

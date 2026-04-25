@@ -144,7 +144,6 @@ export function SettingsPanel() {
     cronJobCount?: number
     memoryEntries?: number
   } | null>(null)
-  const [hermesLoading, setHermesLoading] = useState(false)
   const [hermesHookAction, setHermesHookAction] = useState(false)
 
   // Backup state

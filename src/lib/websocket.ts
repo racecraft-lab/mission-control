@@ -14,7 +14,6 @@ import {
 import { APP_VERSION } from '@/lib/version'
 import { createClientLogger } from '@/lib/client-logger'
 import {
-  ConnectErrorDetailCodes,
   readErrorDetailCode,
   NON_RETRYABLE_ERROR_CODES,
   shouldRetryWithoutDeviceIdentity,
@@ -45,12 +44,6 @@ interface GatewayFrame {
   seq?: number
 }
 
-interface GatewayMessage {
-  type: 'session_update' | 'log' | 'event' | 'status' | 'spawn_result' | 'cron_status' | 'pong'
-  data: any
-  timestamp?: number
-}
-
 // Shared websocket singleton state across hook mounts.
 const wsRef: { current: WebSocket | null } = { current: null }
 const reconnectTimeoutRef: { current: NodeJS.Timeout | undefined } = { current: undefined }
@@ -79,12 +72,8 @@ export function useWebSocket() {
   const {
     connection,
     setConnection,
-    setLastMessage,
     setSessions,
     addLog,
-    updateSpawnRequest,
-    setCronJobs,
-    addTokenUsage,
     addChatMessage,
     addNotification,
     updateAgent,
@@ -287,86 +276,6 @@ export function useWebSocket() {
     log.info('Sending connect handshake')
     ws.send(JSON.stringify(connectRequest))
   }, [])
-
-  // Parse and handle different gateway message types
-  const handleGatewayMessage = useCallback((message: GatewayMessage) => {
-    setLastMessage(message)
-
-    // Debug logging for development
-    if (process.env.NODE_ENV === 'development') {
-      log.debug(`Message received: ${message.type}`)
-    }
-
-    switch (message.type) {
-      case 'session_update':
-        if (message.data?.sessions) {
-          setSessions(message.data.sessions.map((session: any, index: number) => ({
-            id: session.key || `session-${index}`,
-            key: session.key || '',
-            kind: session.kind || 'unknown',
-            age: session.age || '',
-            model: normalizeModel(session.model),
-            tokens: session.tokens || '',
-            flags: session.flags || [],
-            active: session.active || false,
-            startTime: session.startTime,
-            lastActivity: session.lastActivity,
-            messageCount: session.messageCount,
-            cost: session.cost
-          })))
-        }
-        break
-
-      case 'log':
-        if (message.data) {
-          addLog({
-            id: message.data.id || `log-${Date.now()}-${Math.random()}`,
-            timestamp: message.data.timestamp || message.timestamp || Date.now(),
-            level: message.data.level || 'info',
-            source: message.data.source || 'gateway',
-            session: message.data.session,
-            message: message.data.message || '',
-            data: message.data.extra || message.data.data
-          })
-        }
-        break
-
-      case 'spawn_result':
-        if (message.data?.id) {
-          updateSpawnRequest(message.data.id, {
-            status: message.data.status,
-            completedAt: message.data.completedAt,
-            result: message.data.result,
-            error: message.data.error
-          })
-        }
-        break
-
-      case 'cron_status':
-        if (message.data?.jobs) {
-          setCronJobs(message.data.jobs)
-        }
-        break
-
-      case 'event':
-        // Handle various gateway events
-        if (message.data?.type === 'token_usage') {
-          addTokenUsage({
-            model: normalizeModel(message.data.model),
-            sessionId: message.data.sessionId,
-            date: new Date().toISOString(),
-            inputTokens: message.data.inputTokens || 0,
-            outputTokens: message.data.outputTokens || 0,
-            totalTokens: message.data.totalTokens || 0,
-            cost: message.data.cost || 0
-          })
-        }
-        break
-
-      default:
-        log.warn(`Unknown gateway message type: ${message.type}`)
-    }
-  }, [setLastMessage, setSessions, addLog, updateSpawnRequest, setCronJobs, addTokenUsage])
 
   // Handle gateway protocol frames
   const handleGatewayFrame = useCallback((frame: GatewayFrame, ws: WebSocket) => {

@@ -61,13 +61,6 @@ const statusBadgeStyles: Record<string, string> = {
   error: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 }
 
-const statusIcons: Record<string, string> = {
-  offline: '-',
-  idle: 'o',
-  busy: '~',
-  error: '!',
-}
-
 const defaultCardStyle = {
   edge: 'from-slate-400/60 to-slate-600/30',
   glow: 'from-slate-500/10 via-transparent to-transparent',
@@ -203,7 +196,7 @@ export function AgentSquadPanelPhase3() {
   }
 
   // Wake agent via session_send
-  const wakeAgent = async (agentName: string, sessionKey: string) => {
+  const wakeAgent = async (agentName: string) => {
     try {
       const response = await fetch(`/api/agents/${agentName}/wake`, {
         method: 'POST',
@@ -488,7 +481,7 @@ export function AgentSquadPanelPhase3() {
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            wakeAgent(agent.name, agent.session_key!)
+                            wakeAgent(agent.name)
                           }}
                           size="xs"
                           variant="ghost"

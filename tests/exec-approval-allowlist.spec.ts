@@ -74,7 +74,7 @@ test.describe('Exec Approval Allowlist API', () => {
     } else {
       // File didn't exist, so no conflict — clean up
       expect(res.status()).toBe(200)
-      const body = await res.json()
+      await res.json()
       // Re-read and clean up the test entry
       const getRes = await request.get('/api/exec-approvals?action=allowlist', {
         headers: API_KEY_HEADER,

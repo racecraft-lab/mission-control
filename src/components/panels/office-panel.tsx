@@ -150,13 +150,6 @@ const statusLabel: Record<string, string> = {
   offline: 'Offline',
 }
 
-const statusEmoji: Record<string, string> = {
-  idle: '',
-  busy: '',
-  error: '',
-  offline: '',
-}
-
 function getInitials(name: string): string {
   return name
     .split(/[\s_-]+/)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
   ReactFlow,
   Node,
@@ -154,7 +154,7 @@ const nodeTypes = {
   core: AgentCoreNode,
 }
 
-export function AgentNetwork({ agents, sessions }: AgentNetworkProps) {
+export function AgentNetwork({ sessions }: AgentNetworkProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
 

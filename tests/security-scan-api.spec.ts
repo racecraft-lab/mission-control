@@ -50,7 +50,7 @@ test.describe('Security Scan API', () => {
     const res = await request.get('/api/security-scan', { headers: API_KEY_HEADER })
     const body = await res.json()
 
-    for (const [name, cat] of Object.entries(body.categories) as [string, any][]) {
+    for (const cat of Object.values(body.categories) as any[]) {
       expect(typeof cat.score).toBe('number')
       expect(Array.isArray(cat.checks)).toBe(true)
 

@@ -4,7 +4,6 @@ import { readLimiter, mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { MEMORY_PATH, MEMORY_ALLOWED_PREFIXES } from '@/lib/memory-path'
 import { searchMemory, rebuildIndex } from '@/lib/memory-search'
-import { getDatabase } from '@/lib/db'
 
 /**
  * GET /api/memory/search?q=query&limit=20

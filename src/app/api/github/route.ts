@@ -9,10 +9,8 @@ import {
   getGitHubToken,
   githubFetch,
   fetchIssues,
-  fetchIssue,
   createIssueComment,
   updateIssueState,
-  type GitHubIssue,
 } from '@/lib/github'
 import { initializeLabels, pullFromGitHub } from '@/lib/github-sync-engine'
 

@@ -64,7 +64,7 @@ function modeColors(isGateway: boolean) {
 }
 
 export function OnboardingWizard() {
-  const { showOnboarding, setShowOnboarding, dashboardMode, gatewayAvailable, interfaceMode, setInterfaceMode } = useMissionControl()
+  const { showOnboarding, setShowOnboarding, dashboardMode, gatewayAvailable } = useMissionControl()
   const navigateToPanel = useNavigateToPanel()
   const t = useTranslations('onboarding')
   const [step, setStep] = useState(0)

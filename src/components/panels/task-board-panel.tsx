@@ -571,7 +571,7 @@ export function TaskBoardPanel() {
     e.dataTransfer.setData('text/html', e.currentTarget.outerHTML)
   }
 
-  const handleDragEnter = (e: React.DragEvent, status: string) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     dragCounter.current++
     e.currentTarget.classList.add('drag-over')
@@ -938,7 +938,7 @@ export function TaskBoardPanel() {
             role="region"
             aria-label={t('columnAriaLabel', { title: column.title, count: tasksByStatus[column.key]?.length || 0 })}
             className="flex-1 min-w-80 min-h-0 bg-surface-0 border border-border/60 rounded-xl flex flex-col transition-colors duration-200 [&.drag-over]:border-primary/40 [&.drag-over]:bg-primary/[0.02]"
-            onDragEnter={(e) => handleDragEnter(e, column.key)}
+            onDragEnter={(e) => handleDragEnter(e)}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={(e) => handleDrop(e, column.key)}
@@ -1202,7 +1202,6 @@ function TaskDetailModal({
   onClose,
   onUpdate,
   onEdit,
-  onDelete
 }: {
   task: Task
   agents: Agent[]
@@ -1213,7 +1212,6 @@ function TaskDetailModal({
   onDelete: () => void
 }) {
   const t = useTranslations('taskBoard')
-  const router = useRouter()
   const { currentUser } = useMissionControl()
   const commentAuthor = currentUser?.username || 'system'
   const resolvedProjectName =

@@ -13,14 +13,6 @@ interface AgentFileInfo {
   textSize: number
 }
 
-interface AgentGraphData {
-  name: string
-  dbSize: number
-  totalChunks: number
-  totalFiles: number
-  files: AgentFileInfo[]
-}
-
 // --- Obsidian-inspired palette (muted purples, warm grays) ---
 
 const AGENT_COLORS = [

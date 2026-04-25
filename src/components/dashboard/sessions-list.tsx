@@ -1,7 +1,7 @@
 'use client'
 
 import { Session } from '@/types'
-import { formatAge, parseTokenUsage, getStatusBadgeColor } from '@/lib/utils'
+import { formatAge, parseTokenUsage } from '@/lib/utils'
 
 interface SessionsListProps {
   sessions: Session[]
@@ -13,7 +13,6 @@ interface SessionCardProps {
 
 function SessionCard({ session }: SessionCardProps) {
   const tokenUsage = parseTokenUsage(session.tokens)
-  const statusColor = session.active ? 'success' : 'warning'
   
   const getSessionTypeIcon = (key: string) => {
     if (key.includes('main:main')) return '👑'

@@ -8,12 +8,6 @@ import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
 
-function resolveAgentWorkspacePath(workspace: string): string {
-  if (isAbsolute(workspace)) return resolve(workspace)
-  if (!config.openclawStateDir) throw new Error('OPENCLAW_STATE_DIR not configured')
-  return resolveWithin(config.openclawStateDir, workspace)
-}
-
 function isWithinBase(base: string, candidate: string): boolean {
   if (candidate === base) return true
   return candidate.startsWith(base + sep)
@@ -238,7 +232,7 @@ export async function PUT(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params: _params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { searchParams } = new URL(request.url);

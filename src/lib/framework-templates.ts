@@ -12,7 +12,6 @@
  */
 
 import { AGENT_TEMPLATES, type AgentTemplate } from './agent-templates'
-import { listAdapters } from './adapters'
 
 // ─── Framework Connection Config ────────────────────────────────────────────
 

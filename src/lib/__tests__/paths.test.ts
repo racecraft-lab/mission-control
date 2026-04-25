@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { resolveWithin } from '../paths'
-import path from 'node:path'
 
 describe('resolveWithin', () => {
   const base = '/tmp/sandbox'

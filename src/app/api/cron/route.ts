@@ -364,7 +364,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'add') {
-      const { schedule, command, model, description, staggerSeconds } = body
+      const { schedule, command, model, staggerSeconds } = body
       const name = jobName || body.name
       if (!schedule || !command || !name) {
         return NextResponse.json(

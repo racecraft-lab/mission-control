@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { mutationLimiter } from '@/lib/rate-limit'
-import { createAlertSchema, validateBody } from '@/lib/validation'
+import { createAlertSchema } from '@/lib/validation'
 
 interface AlertRule {
   id: number

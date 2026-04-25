@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { eventBus, type ServerEvent } from '@/lib/event-bus'
-import { logger } from '@/lib/logger'
 
 /**
  * GET /api/v1/runs/stream — SSE stream of run events.

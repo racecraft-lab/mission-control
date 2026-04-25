@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { config } from '@/lib/config'
 import { getAllGatewaySessions } from '@/lib/sessions'
-import { parseJsonlTranscript, readSessionJsonl, type TranscriptMessage, type MessageContentPart } from '@/lib/transcript-parser'
+import { parseJsonlTranscript, readSessionJsonl, type MessageContentPart } from '@/lib/transcript-parser'
 
 export interface AggregateEvent {
   id: string

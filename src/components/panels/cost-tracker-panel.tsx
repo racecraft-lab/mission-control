@@ -188,7 +188,6 @@ export function CostTrackerPanel() {
   }
 
   // Derived data
-  const summary = usageStats?.summary
   const agentSummary = byAgentData?.summary
   const agentList = byAgentData?.agents || []
   const maxAgentCost = Math.max(...agentList.map(a => a.total_cost), 0.0001)

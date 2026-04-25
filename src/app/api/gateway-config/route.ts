@@ -292,7 +292,7 @@ function setNestedValue(obj: any, path: string, value: any) {
 }
 
 /** Redact sensitive values for display */
-function redactSensitive(obj: any, parentKey = ''): any {
+function redactSensitive(obj: any): any {
   if (typeof obj !== 'object' || obj === null) return obj
 
   const sensitiveKeys = ['password', 'secret', 'token', 'api_key', 'apiKey']
@@ -303,7 +303,7 @@ function redactSensitive(obj: any, parentKey = ''): any {
         obj[key] = '--------'
       }
     } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-      redactSensitive(obj[key], key)
+      redactSensitive(obj[key])
     }
   }
 

@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { execFile, spawn } from 'node:child_process'
-import { promisify } from 'node:util'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { createTestAgent, deleteTestAgent, createTestTask, deleteTestTask } from './helpers'
 
@@ -130,7 +129,7 @@ test.describe('MCP Server Integration', () => {
   })
 
   test('mc_dashboard returns system summary', async () => {
-    const { content, isError } = await mcpTool('mc_dashboard')
+    const { isError } = await mcpTool('mc_dashboard')
     expect(isError).toBe(false)
   })
 
@@ -146,7 +145,7 @@ test.describe('MCP Server Integration', () => {
     })
 
     test('mc_list_agents returns agents', async () => {
-      const { content, isError } = await mcpTool('mc_list_agents')
+      const { isError } = await mcpTool('mc_list_agents')
       expect(isError).toBe(false)
     })
 
@@ -204,7 +203,7 @@ test.describe('MCP Server Integration', () => {
       expect(isError).toBe(false)
     })
 
-    test('mc_create_task creates a task', async ({ request }) => {
+    test('mc_create_task creates a task', async () => {
       const { content, isError } = await mcpTool('mc_create_task', { title: 'MCP e2e test task' })
       expect(isError).toBe(false)
       if ((content as any)?.task?.id) taskIds.push((content as any).task.id)
