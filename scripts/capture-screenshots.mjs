@@ -68,6 +68,26 @@ try {
     await loginWithCredentials(context)
   }
 
+  // The wizard renders even when skipped: an admin with skipped=true triggers
+  // the "replay from start" branch in getOnboardingSessionDecision unless the
+  // sessionStorage `mc-onboarding-dismissed` flag is set. addInitScript runs
+  // before any page script in every page in the context, so the flag is
+  // present when the React app boots.
+  await context.addInitScript(() => {
+    try {
+      window.sessionStorage.setItem('mc-onboarding-dismissed', '1')
+      window.sessionStorage.removeItem('mc-onboarding-replay')
+    } catch {}
+  })
+
+  // Belt-and-suspenders: also persist the skipped flag server-side so a fresh
+  // user without the sessionStorage flag still gets serverShowOnboarding=false.
+  await markOnboardingSkipped(context)
+
+  // Seed a few demo agents/tasks so panels render meaningful content rather
+  // than empty states. No-op if the workspace already has data.
+  await seedDemoData(context)
+
   // Long-poll / slow endpoints that aren't load-bearing for screenshots —
   // letting them block the network keeps `networkidle` busy for 30+ seconds
   // and the capture lands in a transitional render state. Use specific
@@ -84,10 +104,6 @@ try {
     body: JSON.stringify({ issues: [] }),
   }))
 
-  // Dismiss the onboarding wizard once via its own UI so the layout is the
-  // same one a returning user sees. Doing it via DOM click avoids any
-  // assumption about which storage key gates the wizard.
-  await dismissOnboardingOnce(context)
 
   for (const panel of targetPanels) {
     await capturePanel(context, panel)
@@ -109,8 +125,11 @@ async function capturePanel(context, panel) {
   await page.goto(url, { waitUntil: 'domcontentloaded' })
   // Wait until network settles OR ~6s elapses, whichever first.
   await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => null)
-  // Then wait for the actual app shell to appear (sidebar nav).
-  await page.waitForSelector('nav[aria-label="Main navigation"]', { timeout: 8000 }).catch(() => null)
+  // Then wait for the actual app shell to appear (sidebar nav). The nav rail
+  // only renders after bootComplete, which depends on 9 init steps and can
+  // take 12+s in dev mode. Don't swallow the timeout — if the app never
+  // boots, the screenshot is worthless and we want to fail loudly.
+  await page.waitForSelector('nav[aria-label="Main navigation"]', { timeout: 30000 })
 
   // Hide transient overlay banners + side panels per manifest before capture.
   await page.addStyleTag({
@@ -118,26 +137,27 @@ async function capturePanel(context, panel) {
       .map(s => `${s} { display: none !important; }`).join('\n'),
   }).catch(() => {})
 
-  // Heuristic: hide any element near the top whose textContent mentions OpenClaw
-  // (covers banners that don't expose className).
+  // Heuristic: hide banner-shaped elements (short text, near top) that
+  // mention OpenClaw. Skip anything that contains the nav rail or main
+  // content — that means we matched a wrapper, not the banner itself.
   await page.evaluate(() => {
+    const nav = document.querySelector('nav[aria-label="Main navigation"]')
+    const main = document.querySelector('main')
     const banners = Array.from(document.querySelectorAll('div')).filter(d => {
-      const t = d.textContent || ''
+      const t = (d.textContent || '').trim()
       if (!/OpenClaw (state integrity|update|doctor)/i.test(t)) return false
-      if (t.length > 800) return false
+      if (t.length > 300) return false
+      if (nav && d.contains(nav)) return false
+      if (main && d.contains(main)) return false
       const r = d.getBoundingClientRect()
-      return r.top >= 0 && r.top < 260 && r.width > 400
+      return r.top >= 0 && r.top < 260 && r.width > 400 && r.height < 200
     })
     banners.forEach(b => { b.style.display = 'none' })
 
-    // Hide live-feed side panel if open.
-    const liveFeed = Array.from(document.querySelectorAll('*')).find(el => {
-      const t = el.textContent || ''
-      if (!/^Live Feed/.test(t.trim().slice(0, 20))) return false
-      const r = el.getBoundingClientRect()
-      return r.right > window.innerWidth * 0.9 && r.width < 400 && r.height > 400
-    })
-    if (liveFeed) liveFeed.style.display = 'none'
+    // Hide live-feed side panel if open. Anchor on a known role/aria target
+    // first, fall back to a tightly scoped text match.
+    const liveFeedById = document.querySelector('[data-testid="live-feed-panel"], [aria-label="Live feed"]')
+    if (liveFeedById) liveFeedById.style.display = 'none'
   }).catch(() => {})
 
   if (panel.postNavigateAction) {
@@ -171,6 +191,81 @@ async function runPostNavigateAction(page, action) {
     return
   }
   console.warn(`[capture]   warning: unknown postNavigateAction: ${action}`)
+}
+
+async function seedDemoData(context) {
+  // Idempotent demo seed: creates agents/tasks if the workspace is empty so
+  // panels render meaningful content rather than empty states. Skips silently
+  // if data already exists or if the API rejects (non-operator user, etc).
+  const page = await context.newPage()
+  try {
+    const agentsRes = await page.request.get(`${MC_URL}/api/agents`)
+    const agentsBody = agentsRes.ok() ? await agentsRes.json() : { agents: [] }
+    const existingAgents = agentsBody.agents?.length ?? 0
+
+    const agentsToSeed = existingAgents > 0 ? [] : [
+      { name: 'Aegis', role: 'Security Auditor', status: 'online' },
+      { name: 'Codex', role: 'Code Reviewer', status: 'idle' },
+      { name: 'Hermes', role: 'Task Orchestrator', status: 'busy' },
+      { name: 'Athena', role: 'Knowledge Architect', status: 'online' },
+    ]
+
+    for (const a of agentsToSeed) {
+      const res = await page.request.post(`${MC_URL}/api/agents`, {
+        data: a,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok()) console.warn(`[capture] seed agent ${a.name}: ${res.status()}`)
+    }
+    if (agentsToSeed.length) console.log(`[capture] seeded ${agentsToSeed.length} demo agent(s)`)
+
+    const tasksRes = await page.request.get(`${MC_URL}/api/tasks`)
+    const tasksBody = tasksRes.ok() ? await tasksRes.json() : { tasks: [] }
+    const existingTasks = tasksBody.tasks?.length ?? 0
+
+    const tasksToSeed = existingTasks > 0 ? [] : [
+      { title: 'Triage incoming bug reports', description: 'Sort the new issues from the past 24h and tag by component.', status: 'inbox', priority: 'medium' },
+      { title: 'Spec out memory compaction job', description: 'Define the cron schedule, vacuum+reindex strategy, and failure surfacing.', status: 'inbox', priority: 'low' },
+      { title: 'Audit auth middleware for token leakage', description: 'Trace every request path that sees the session cookie and confirm we never log the raw value.', status: 'assigned', priority: 'high', assigned_to: 'Aegis' },
+      { title: 'Refactor task queue dispatcher', description: 'Pull the round-robin logic into a strategy object so we can A/B test priority weighting.', status: 'assigned', priority: 'medium', assigned_to: 'Codex' },
+      { title: 'Wire up cron for nightly memory compaction', description: 'Run vacuum+reindex against the memory FTS table at 02:00 local.', status: 'in_progress', priority: 'medium', assigned_to: 'Hermes' },
+      { title: 'Review agent trust score model', description: 'Sign off on inputs (success rate, manual override count, escalation latency) and the decay function.', status: 'review', priority: 'medium', assigned_to: 'Athena' },
+      { title: 'Awaiting product call on chat panel layout', description: 'Need a decision on whether the right-rail collapses by default on narrow viewports.', status: 'awaiting_owner', priority: 'low', assigned_to: 'Codex' },
+      { title: 'Plan Q3 observability roll-out', description: 'Schedule + scope for the OpenTelemetry traces work.', status: 'backlog', priority: 'low' },
+      { title: 'Add OpenClaw gateway health probe', description: 'Periodic 200/latency check, surfaces in the activity feed.', status: 'done', priority: 'high', outcome: 'success', assigned_to: 'Aegis' },
+    ]
+
+    for (const t of tasksToSeed) {
+      const res = await page.request.post(`${MC_URL}/api/tasks`, {
+        data: t,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok()) console.warn(`[capture] seed task "${t.title}": ${res.status()}`)
+    }
+    if (tasksToSeed.length) console.log(`[capture] seeded ${tasksToSeed.length} demo task(s)`)
+  } catch (e) {
+    console.warn(`[capture] seed failed: ${e.message}`)
+  } finally {
+    await page.close()
+  }
+}
+
+async function markOnboardingSkipped(context) {
+  // POST /api/onboarding requires admin role. The auto-seeded AUTH_USER is
+  // an admin in fresh deployments. If the call fails (non-admin, etc.) we
+  // log and continue — the wizard's "Skip setup" button is still clickable.
+  const page = await context.newPage()
+  try {
+    const res = await page.request.post(`${MC_URL}/api/onboarding`, {
+      data: { action: 'skip' },
+      headers: { 'Content-Type': 'application/json' },
+    })
+    console.log(`[capture] onboarding skip: ${res.status()}`)
+  } catch (e) {
+    console.warn(`[capture] onboarding skip failed: ${e.message}`)
+  } finally {
+    await page.close()
+  }
 }
 
 async function dismissOnboardingOnce(context) {
