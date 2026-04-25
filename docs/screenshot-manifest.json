@@ -1,0 +1,119 @@
+{
+  "$schema": "./screenshot-manifest.schema.json",
+  "description": "Single source of truth for README screenshots. Consumed by .github/workflows/screenshot-drift.yml (Tier 1 path-match comments) and scripts/{capture,diff}-screenshots.mjs (Tier 2 visual diff).",
+  "viewport": {
+    "width": 1440,
+    "height": 900,
+    "deviceScaleFactor": 2
+  },
+  "navigation": {
+    "settleMs": 1500,
+    "hideSelectors": [
+      "[class*='DoctorBanner' i]",
+      "[class*='doctor-banner' i]",
+      "[class*='UpdateBanner' i]",
+      "[class*='update-banner' i]",
+      "[data-testid='live-feed-panel']"
+    ]
+  },
+  "diff": {
+    "thresholdPixels": 2500,
+    "perPixelDelta": 0.1
+  },
+  "panels": [
+    {
+      "id": "overview",
+      "png": "docs/mission-control-overview.png",
+      "url": "/",
+      "sources": [
+        "src/app/[[...panel]]/page.tsx",
+        "src/app/page.tsx",
+        "src/components/dashboard/**",
+        "src/components/layout/**"
+      ]
+    },
+    {
+      "id": "agents",
+      "png": "docs/mission-control-agents.png",
+      "url": "/agents",
+      "sources": [
+        "src/components/panels/agent-squad-panel*.tsx",
+        "src/components/panels/agent-detail-tabs.tsx",
+        "src/components/panels/agent-comms-panel.tsx",
+        "src/components/panels/agent-history-panel.tsx",
+        "src/components/panels/agent-cost-panel.tsx"
+      ]
+    },
+    {
+      "id": "tasks",
+      "png": "docs/mission-control-tasks.png",
+      "url": "/tasks",
+      "sources": [
+        "src/components/panels/task-board-panel.tsx"
+      ]
+    },
+    {
+      "id": "memory",
+      "png": "docs/mission-control-memory.png",
+      "url": "/memory",
+      "sources": [
+        "src/components/panels/memory-browser-panel.tsx"
+      ]
+    },
+    {
+      "id": "memory-graph",
+      "png": "docs/mission-control-memory-graph.png",
+      "url": "/memory",
+      "postNavigateAction": "click-tab:Graph",
+      "sources": [
+        "src/components/panels/memory-graph.tsx",
+        "src/components/panels/memory-browser-panel.tsx"
+      ]
+    },
+    {
+      "id": "skills",
+      "png": "docs/mission-control-skills.png",
+      "url": "/skills",
+      "sources": [
+        "src/components/panels/skills-panel.tsx"
+      ]
+    },
+    {
+      "id": "activity",
+      "png": "docs/mission-control-activity.png",
+      "url": "/activity",
+      "sources": [
+        "src/components/panels/activity-feed-panel.tsx"
+      ]
+    },
+    {
+      "id": "cost-tracking",
+      "png": "docs/mission-control-cost-tracking.png",
+      "url": "/cost-tracker",
+      "sources": [
+        "src/components/panels/cost-tracker-panel.tsx",
+        "src/components/panels/agent-cost-panel.tsx",
+        "src/components/panels/token-dashboard-panel.tsx"
+      ]
+    },
+    {
+      "id": "cron",
+      "png": "docs/mission-control-cron.png",
+      "url": "/cron",
+      "sources": [
+        "src/components/panels/cron-management-panel.tsx"
+      ]
+    },
+    {
+      "id": "security",
+      "png": "docs/mission-control-security.png",
+      "url": "/security",
+      "sources": [
+        "src/components/panels/security-audit-panel.tsx",
+        "src/app/api/security-audit/**",
+        "src/app/api/security-scan/**",
+        "src/components/dashboard/widgets/security-audit-widget.tsx"
+      ]
+    }
+  ]
+}

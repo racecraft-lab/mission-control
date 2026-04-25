@@ -1,11 +1,26 @@
 name: Screenshot Drift Check
 
+# Tier 1: manifest-driven heuristic. When changed files match the source globs
+# of a panel in docs/screenshot-manifest.json, post a comment naming exactly
+# those PNGs (not a hardcoded checklist). One comment per PR — updated on push.
+#
+# Tier 2 (visual diff) lives in screenshot-visual-diff.yml and runs only when
+# the PR carries the `run-visual-diff` label.
+
 on:
   pull_request:
     paths:
-      - "src/app/**"
+      - "src/app/**/page.tsx"
+      - "src/app/**/layout.tsx"
+      - "src/app/**/template.tsx"
+      - "src/app/**/loading.tsx"
+      - "src/app/**/error.tsx"
+      - "src/app/globals.css"
       - "src/components/**"
+      - "src/styles/**"
       - "public/**"
+      - "tailwind.config.*"
+      - "docs/screenshot-manifest.json"
 
 permissions:
   contents: read
@@ -15,46 +30,128 @@ jobs:
   flag-drift:
     name: Flag potential screenshot drift
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-drift') }}
     steps:
-      - name: Check for UI changes
-        id: ui_changed
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Match changed files against manifest
+        id: match
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
+            const { minimatch } = await import('minimatch');
+
+            const manifest = JSON.parse(
+              fs.readFileSync('docs/screenshot-manifest.json', 'utf8')
+            );
+
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
+              per_page: 300,
+            });
+            const changed = files.map(f => f.filename);
+
+            const hits = manifest.panels
+              .map(panel => {
+                const matched = changed.filter(file =>
+                  panel.sources.some(glob => minimatch(file, glob, { dot: true }))
+                );
+                return matched.length ? { panel, matched } : null;
+              })
+              .filter(Boolean);
+
+            core.setOutput('count', hits.length);
+            core.setOutput('hits', JSON.stringify(hits));
+
+      - name: Upsert drift comment
+        if: steps.match.outputs.count > 0
+        uses: actions/github-script@v7
+        env:
+          HITS: ${{ steps.match.outputs.hits }}
+        with:
+          script: |
+            const hits = JSON.parse(process.env.HITS);
+            const MARKER = '<!-- screenshot-drift -->';
+
+            const lines = [
+              MARKER,
+              '## 📸 Screenshot Drift Check',
+              '',
+              `This PR touches files referenced by **${hits.length}** README screenshot${hits.length === 1 ? '' : 's'}. Verify whether each PNG needs refreshing:`,
+              '',
+            ];
+            for (const { panel, matched } of hits) {
+              lines.push(`- [ ] \`${panel.png}\` — _${panel.id}_`);
+              lines.push('  <details><summary>Source files changed</summary>');
+              lines.push('');
+              lines.push('  ```');
+              for (const f of matched.slice(0, 12)) lines.push('  ' + f);
+              if (matched.length > 12) lines.push(`  …and ${matched.length - 12} more`);
+              lines.push('  ```');
+              lines.push('  </details>');
+            }
+            lines.push('');
+            lines.push('### How to refresh');
+            lines.push('```bash');
+            lines.push('AUTH_USER=admin AUTH_PASS=... pnpm screenshots:refresh --only=' + hits.map(h => h.panel.id).join(','));
+            lines.push('git add docs/ && git commit -m "docs: refresh README screenshots"');
+            lines.push('```');
+            lines.push('');
+            lines.push('### Run the visual diff in CI');
+            lines.push('Add the `run-visual-diff` label to this PR — `screenshot-visual-diff.yml` will capture against a seeded local instance and post per-panel pixel deltas.');
+            lines.push('');
+            lines.push('### No visual change?');
+            lines.push('Add the `skip-drift` label to silence this check on future pushes.');
+            lines.push('');
+            lines.push('See [`docs/SCREENSHOT-GUIDE.md`](docs/SCREENSHOT-GUIDE.md) for full instructions.');
+
+            const body = lines.join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
               per_page: 100,
             });
+            const existing = comments.find(c => (c.body || '').includes(MARKER));
 
-            const uiPaths = files
-              .map(f => f.filename)
-              .filter(f =>
-                f.startsWith('src/app/') ||
-                f.startsWith('src/components/') ||
-                f.startsWith('public/')
-              );
+            if (existing) {
+              if (existing.body !== body) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              }
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
 
-            core.setOutput('count', uiPaths.length);
-            core.setOutput('paths', uiPaths.slice(0, 10).join('\n'));
-
-      - name: Add label if UI changed
-        if: steps.ui_changed.outputs.count > 0
+      - name: Apply screenshot-drift label
+        if: steps.match.outputs.count > 0
         uses: actions/github-script@v7
         with:
           script: |
-            // Ensure the label exists
             try {
               await github.rest.issues.createLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 name: 'screenshot-drift',
                 color: 'f9d71c',
-                description: 'UI changed — README screenshots may need updating',
+                description: 'README screenshots may need refreshing',
               });
-            } catch (_) { /* label already exists */ }
-
+            } catch (_) { /* label exists */ }
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -62,37 +159,16 @@ jobs:
               labels: ['screenshot-drift'],
             });
 
-      - name: Post checklist comment
-        if: steps.ui_changed.outputs.count > 0
+      - name: Remove screenshot-drift label when no hits
+        if: steps.match.outputs.count == 0
         uses: actions/github-script@v7
         with:
           script: |
-            const paths = `${{ steps.ui_changed.outputs.paths }}`;
-            const body = [
-              '## 📸 Screenshot Drift Check',
-              '',
-              'This PR modifies UI source files. Please verify whether the README screenshots need refreshing:',
-              '',
-              '- [ ] `docs/mission-control-overview.png` — main dashboard',
-              '- [ ] `docs/mission-control-agents.png` — agents panel',
-              '- [ ] `docs/mission-control-memory-graph.png` — memory graph',
-              '',
-              '<details><summary>Changed UI files</summary>',
-              '',
-              '```',
-              paths,
-              '```',
-              '',
-              '</details>',
-              '',
-              'See [`docs/SCREENSHOT-GUIDE.md`](docs/SCREENSHOT-GUIDE.md) for instructions on capturing and optimising screenshots.',
-              '',
-              '_This comment is posted automatically and can be dismissed if no visual changes occurred._',
-            ].join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'screenshot-drift',
+              });
+            } catch (_) { /* label not applied */ }

@@ -1,0 +1,149 @@
+name: Screenshot Visual Diff
+
+# Tier 2: real visual regression. Boots Mission Control with a seeded local
+# database, captures screenshots against docs/screenshot-manifest.json, then
+# pixelmatch-diffs each capture against the committed docs/*.png baselines.
+# Fails the PR if any panel's delta exceeds manifest.diff.thresholdPixels.
+#
+# Opt-in: only runs when the PR carries the `run-visual-diff` label.
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  visual-diff:
+    name: Capture & diff README screenshots
+    runs-on: ubuntu-latest
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'run-visual-diff') }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build app
+        run: pnpm build
+        env:
+          AUTH_SECRET: ci-test-secret-do-not-use-in-prod-ci-test-secret-do-not-use
+          API_KEY: ci-test-api-key-do-not-use-ci-test-api-key-do-not-use
+          NEXT_PUBLIC_GATEWAY_OPTIONAL: "true"
+
+      - name: Start app + seed
+        env:
+          AUTH_SECRET: ci-test-secret-do-not-use-in-prod-ci-test-secret-do-not-use
+          API_KEY: ci-test-api-key-do-not-use-ci-test-api-key-do-not-use
+          AUTH_USER: ci-admin
+          AUTH_PASS: ci-admin-password
+          MISSION_CONTROL_DATA_DIR: /tmp/mc-data
+          NEXT_PUBLIC_GATEWAY_OPTIONAL: "true"
+          PORT: "3000"
+        run: |
+          mkdir -p /tmp/mc-data
+          node .next/standalone/server.js &
+          echo $! > /tmp/mc.pid
+          for i in {1..40}; do
+            if curl -fs http://127.0.0.1:3000/api/health >/dev/null 2>&1 \
+               || curl -fs http://127.0.0.1:3000/setup >/dev/null 2>&1; then
+              echo "ready"; break
+            fi
+            sleep 1
+          done
+
+      - name: Capture screenshots
+        env:
+          MC_URL: http://127.0.0.1:3000
+          AUTH_USER: ci-admin
+          AUTH_PASS: ci-admin-password
+        run: node scripts/capture-screenshots.mjs --baseline
+
+      - name: Diff against committed baselines
+        id: diff
+        run: node scripts/diff-screenshots.mjs
+
+      - name: Upload captures + diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-visual-diff
+          path: |
+            docs/_captures/
+            docs/_diffs/
+          retention-days: 14
+
+      - name: Post diff summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const MARKER = '<!-- screenshot-visual-diff -->';
+            let summary = { results: [], failed: 0, passed: 0, missing: 0 };
+            try {
+              summary = JSON.parse(fs.readFileSync('docs/_diffs/summary.json', 'utf8'));
+            } catch (_) { /* missing summary — capture step probably failed */ }
+
+            const lines = [
+              MARKER,
+              '## 🖼️ Visual Diff Result',
+              '',
+              `**${summary.passed} passed · ${summary.failed} failed · ${summary.missing} missing** (threshold: ${summary.thresholdPixels} pixels per panel)`,
+              '',
+              '| Panel | Status | Δ pixels |',
+              '|-------|--------|----------|',
+            ];
+            for (const r of summary.results) {
+              const icon = r.status === 'pass' ? '✅' : r.status === 'fail' ? '❌' : r.status === 'size-mismatch' ? '⚠️' : '⏭️';
+              lines.push(`| \`${r.id}\` | ${icon} ${r.status} | ${r.deltaPixels ?? '—'} |`);
+            }
+            lines.push('');
+            lines.push('Full captures and diff overlays are in the **screenshot-visual-diff** artifact on this run.');
+            lines.push('');
+            lines.push('To accept these as the new baseline, run `pnpm screenshots:refresh` locally and commit the regenerated PNGs.');
+
+            const body = lines.join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => (c.body || '').includes(MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f /tmp/mc.pid ]; then kill "$(cat /tmp/mc.pid)" 2>/dev/null || true; fi
