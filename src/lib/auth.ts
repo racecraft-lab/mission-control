@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { getDatabase } from './db'
 import { hashPassword, verifyPassword, verifyPasswordWithRehashCheck } from './password'
 import { logSecurityEvent } from './security-events'
@@ -119,6 +119,20 @@ interface UserQueryRow {
 
 // Session management
 const SESSION_DURATION = 7 * 24 * 60 * 60 // 7 days in seconds
+const AUTH_SECRET_PLACEHOLDER = 'random-secret-for-legacy-cookies'
+
+function resolveAuthSecretForPepper(): string {
+  const authSecret = (process.env.AUTH_SECRET || '').trim()
+  if (authSecret && authSecret !== AUTH_SECRET_PLACEHOLDER) return authSecret
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('AUTH_SECRET must be configured in production for token hashing')
+  }
+  return authSecret || AUTH_SECRET_PLACEHOLDER
+}
+
+const AUTH_SECRET_FOR_PEPPER = resolveAuthSecretForPepper()
+const API_KEY_PEPPER_KEY = createHash('sha256').update(`${AUTH_SECRET_FOR_PEPPER}:api-key-pepper`).digest()
+const SESSION_TOKEN_PEPPER_KEY = createHash('sha256').update(`${AUTH_SECRET_FOR_PEPPER}:session-token-pepper`).digest()
 
 function getDefaultWorkspaceContext(): { workspaceId: number; tenantId: number } {
   try {
@@ -187,8 +201,9 @@ export function validateSession(token: string): (User & { sessionId: number }) |
   const db = getDatabase()
   const now = Math.floor(Date.now() / 1000)
   const tokenHash = hashSessionToken(token)
+  const legacyTokenHash = hashSessionTokenLegacy(token)
 
-  const row = db.prepare(`
+  const sessionLookup = db.prepare(`
     SELECT u.id, u.username, u.display_name, u.role, u.provider, u.email, u.avatar_url, u.is_approved,
            COALESCE(s.workspace_id, u.workspace_id, 1) as workspace_id,
            COALESCE(s.tenant_id, w.tenant_id, 1) as tenant_id,
@@ -198,7 +213,19 @@ export function validateSession(token: string): (User & { sessionId: number }) |
     JOIN users u ON u.id = s.user_id
     LEFT JOIN workspaces w ON w.id = COALESCE(s.workspace_id, u.workspace_id, 1)
     WHERE s.token = ? AND s.expires_at > ?
-  `).get(tokenHash, now) as SessionQueryRow | undefined
+  `)
+
+  let row = sessionLookup.get(tokenHash, now) as SessionQueryRow | undefined
+  if (!row) {
+    row = sessionLookup.get(legacyTokenHash, now) as SessionQueryRow | undefined
+    if (row) {
+      try {
+        db.prepare('UPDATE user_sessions SET token = ? WHERE id = ?').run(tokenHash, row.session_id)
+      } catch {
+        // non-fatal — continue with authenticated session
+      }
+    }
+  }
 
   if (!row) return null
 
@@ -223,7 +250,8 @@ export function validateSession(token: string): (User & { sessionId: number }) |
 export function destroySession(token: string): void {
   const db = getDatabase()
   const tokenHash = hashSessionToken(token)
-  db.prepare('DELETE FROM user_sessions WHERE token = ?').run(tokenHash)
+  const legacyTokenHash = hashSessionTokenLegacy(token)
+  db.prepare('DELETE FROM user_sessions WHERE token IN (?, ?)').run(tokenHash, legacyTokenHash)
 }
 
 export function destroyAllUserSessions(userId: number): void {
@@ -501,14 +529,17 @@ export function getUserFromRequest(request: Request): User | null {
   if (apiKey) {
     try {
       const db = getDatabase()
-      const keyHash = hashApiKey(apiKey)
       const now = Math.floor(Date.now() / 1000)
-      const row = db.prepare(`
+      const keyHash = hashApiKey(apiKey)
+      const legacyKeyHash = hashApiKeyLegacy(apiKey)
+      const agentKeyLookup = db.prepare(`
         SELECT id, agent_id, workspace_id, scopes, expires_at, revoked_at
         FROM agent_api_keys
         WHERE key_hash = ?
         LIMIT 1
-      `).get(keyHash) as {
+      `)
+
+      let row = agentKeyLookup.get(keyHash) as {
         id: number
         agent_id: number
         workspace_id: number
@@ -516,6 +547,25 @@ export function getUserFromRequest(request: Request): User | null {
         expires_at: number | null
         revoked_at: number | null
       } | undefined
+
+      if (!row) {
+        row = agentKeyLookup.get(legacyKeyHash) as {
+          id: number
+          agent_id: number
+          workspace_id: number
+          scopes: string
+          expires_at: number | null
+          revoked_at: number | null
+        } | undefined
+
+        if (row) {
+          try {
+            db.prepare('UPDATE agent_api_keys SET key_hash = ?, updated_at = ? WHERE id = ?').run(keyHash, now, row.id)
+          } catch {
+            // non-fatal — continue with legacy match
+          }
+        }
+      }
 
       if (row && !row.revoked_at && (!row.expires_at || row.expires_at > now)) {
         const scopes = parseAgentScopes(row.scopes)
@@ -592,11 +642,25 @@ function extractApiKeyFromHeaders(headers: Headers): string | null {
   return null
 }
 
-function hashApiKey(rawKey: string): string {
+export function hashApiKey(rawKey: string): string {
+  return createHmac('sha256', API_KEY_PEPPER_KEY).update(rawKey).digest('hex')
+}
+
+/**
+ * Legacy API key hash (plain SHA-256) retained only for dual-read migration.
+ */
+function hashApiKeyLegacy(rawKey: string): string {
   return createHash('sha256').update(rawKey).digest('hex')
 }
 
 function hashSessionToken(rawToken: string): string {
+  return createHmac('sha256', SESSION_TOKEN_PEPPER_KEY).update(rawToken).digest('hex')
+}
+
+/**
+ * Legacy session-token hash (plain SHA-256) retained only for dual-read migration.
+ */
+function hashSessionTokenLegacy(rawToken: string): string {
   return createHash('sha256').update(rawToken).digest('hex')
 }
 

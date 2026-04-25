@@ -1,6 +1,6 @@
-import { createHash, randomBytes } from 'crypto'
+import { randomBytes } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth'
+import { hashApiKey, requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { logger } from '@/lib/logger'
 
@@ -32,10 +32,6 @@ interface AgentKeyRow {
   last_used_at: number | null
   created_at: number
   updated_at: number
-}
-
-function hashApiKey(rawKey: string): string {
-  return createHash('sha256').update(rawKey).digest('hex')
 }
 
 function resolveAgent(db: ReturnType<typeof getDatabase>, idParam: string, workspaceId: number): AgentRow | null {
