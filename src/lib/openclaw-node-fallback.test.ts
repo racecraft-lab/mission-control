@@ -72,7 +72,7 @@ describe('openclaw node fallback helpers', () => {
       JSON.stringify({
         hal: {
           nodeId: 'hal-node',
-          displayName: 'HAL',
+          displayName: 'OpenClaw',
           platform: 'linux',
           version: '2026.4.15',
           caps: ['system'],
@@ -86,7 +86,7 @@ describe('openclaw node fallback helpers', () => {
       {
         id: 'hal-node',
         clientId: 'hal-node',
-        displayName: 'HAL',
+        displayName: 'OpenClaw',
         platform: 'linux',
         version: '2026.4.15',
         roles: ['system'],
@@ -107,7 +107,7 @@ describe('openclaw node fallback helpers', () => {
       JSON.stringify({
         paired: {
           nodeId: 'paired-id',
-          displayName: 'HAL',
+          displayName: 'OpenClaw',
           platform: 'linux',
           version: '2026.4.5',
           caps: ['system'],
@@ -120,7 +120,7 @@ describe('openclaw node fallback helpers', () => {
       path.join(stateDir, 'node.json'),
       JSON.stringify({
         nodeId: 'local-id',
-        displayName: 'HAL',
+        displayName: 'OpenClaw',
       }),
     )
 
@@ -135,7 +135,7 @@ describe('openclaw node fallback helpers', () => {
       {
         id: 'paired-id',
         clientId: 'paired-id',
-        displayName: 'HAL',
+        displayName: 'OpenClaw',
         platform: 'linux',
         version: '2026.4.15',
         roles: ['system'],

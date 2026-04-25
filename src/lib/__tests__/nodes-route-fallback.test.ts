@@ -12,7 +12,7 @@ const loadFallbackNodesMock = vi.fn(async () => ([
   {
     id: 'hal-node',
     clientId: 'hal-node',
-    displayName: 'HAL',
+    displayName: 'OpenClaw',
     platform: 'linux',
     version: '2026.4.15',
     roles: ['system'],
