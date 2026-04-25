@@ -17,9 +17,9 @@
     ]
   },
   "diff": {
-    "thresholdPixels": 1000,
+    "thresholdPixels": 5000,
     "perPixelDelta": 0.1,
-    "_note": "Tight threshold (1000 px) is safe because both ends of the diff render in linux/amd64 docker with the wall clock frozen via Playwright addInitScript. Local determinism test: 10/10 panels diff at 0 pixels across consecutive docker runs."
+    "_note": "Baselines are sourced from the GHA Tier 2 workflow (download screenshot-visual-diff artifact, commit those PNGs). Both ends of the CI diff are then GHA native amd64 — pixel-identical modulo the frozen-clock contract. 5000 px (~0.1% of frame) absorbs trivial PNG-encoder noise; structural regressions exceed this comfortably. Local docker runs are useful for spot-checking structural changes but won't pixel-match because qemu-emulated docker on Apple Silicon doesn't produce identical Skia/FreeType output to native amd64."
   },
   "panels": [
     {

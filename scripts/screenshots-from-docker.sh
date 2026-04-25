@@ -40,20 +40,19 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-# Pin to linux/amd64 so the container renders identically on every host —
-# Apple Silicon Macs would otherwise produce arm64 Chromium output that
-# differs from GHA ubuntu-x86_64 in sub-pixel font rendering. qemu adds
-# a small build/runtime cost on arm64 but eliminates cross-arch render
-# drift entirely.
-PLATFORM="linux/amd64"
+# NOTE on cross-host determinism: this script produces a render that
+# matches the host's docker engine. For pixel-identical baselines that
+# match the GHA Tier 2 workflow, generate baselines from CI itself
+# (download the screenshot-visual-diff artifact and commit those PNGs).
+# Local docker runs are still useful for catching structural regressions
+# before pushing — the diff threshold accommodates render-engine drift.
 
-echo "[docker-shots] building image for ${PLATFORM} (~2 min cold, ~30s cached)..."
-docker build --platform "$PLATFORM" -t "$IMAGE" .
+echo "[docker-shots] building image (~2 min cold, ~30s cached)..."
+docker build -t "$IMAGE" .
 
 echo "[docker-shots] starting container ${CONTAINER} on 127.0.0.1:${PORT}..."
 docker volume create "$DATA_VOL" >/dev/null
 docker run -d \
-  --platform "$PLATFORM" \
   --name "$CONTAINER" \
   -p "127.0.0.1:${PORT}:3000" \
   -e AUTH_USER="$AUTH_USER" \

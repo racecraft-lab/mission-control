@@ -34,7 +34,28 @@ Two GitHub Actions workflows enforce screenshot freshness:
 
 ## Refreshing screenshots locally
 
-### Canonical: clean docker container (matches CI byte-for-byte)
+### Canonical: download CI's captures as the new baseline
+
+For pixel-perfect baselines that survive the next Tier 2 run:
+
+1. Push your branch and add the `run-visual-diff` label to the PR.
+2. Wait for `screenshot-visual-diff.yml` to finish (3-5 min).
+3. Download the `screenshot-visual-diff` artifact from the run.
+4. Copy `_captures/*.png` over `docs/mission-control-*.png` and commit.
+
+```bash
+gh run download <RUN_ID> -n screenshot-visual-diff -D /tmp/captures
+cp /tmp/captures/_captures/*.png docs/
+git add docs/mission-control-*.png && git commit -m "docs: refresh README baselines from CI"
+```
+
+Why this is the canonical path: CI runs Chromium under native amd64
+on the GHA runner. Local docker on Apple Silicon emulates amd64 via
+qemu, which translates SIMD instructions used by Skia/FreeType. The
+emulated render isn't bit-identical to native, so a Mac-generated
+baseline will diff ~10-60K pixels against CI even on identical UI.
+
+### Local docker (useful for spot-checking, not for baselines)
 
 ```bash
 pnpm screenshots:docker          # writes docs/*.png
@@ -42,12 +63,9 @@ pnpm screenshots:docker --baseline   # writes docs/_captures/*.png
 ```
 
 Builds the production image, boots a fresh container with a synthetic
-admin and an empty data volume, captures all panels, tears down. CI's
-Tier 2 visual-diff workflow runs the exact same script, so committing
-the output of `pnpm screenshots:docker` guarantees the next CI run
-matches without rebaselining.
-
-Requires docker (or a compatible runtime) running locally.
+admin and an empty data volume, captures all panels, tears down. Good
+for catching structural regressions (missing panels, wizard re-opening,
+etc.) before pushing — but the resulting PNGs won't pixel-match CI.
 
 ### Other capture modes
 
