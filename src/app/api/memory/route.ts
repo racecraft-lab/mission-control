@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
         const tree: MemoryFile[] = []
         for (const prefix of MEMORY_ALLOWED_PREFIXES) {
           const folder = prefix.replace(/\/$/, '')
-          const fullPath = join(MEMORY_PATH, folder)
+          const fullPath = await resolveSafeMemoryPath(MEMORY_PATH, folder)
           if (!existsSync(fullPath)) continue
           try {
             const stats = await stat(fullPath)
