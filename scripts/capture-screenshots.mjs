@@ -78,6 +78,12 @@ try {
       window.sessionStorage.setItem('mc-onboarding-dismissed', '1')
       window.sessionStorage.removeItem('mc-onboarding-replay')
     } catch {}
+    // Force "full" dashboard mode for screenshots even when no gateway is
+    // present locally — when STORAGE_GATEWAY_URL exists the app skips the
+    // capabilities-driven local-mode branch and runs as if connected.
+    try {
+      window.localStorage.setItem('mc-gateway-url', 'http://127.0.0.1:9999')
+    } catch {}
   })
 
   // Belt-and-suspenders: also persist the skipped flag server-side so a fresh
@@ -261,6 +267,14 @@ async function markOnboardingSkipped(context) {
       headers: { 'Content-Type': 'application/json' },
     })
     console.log(`[capture] onboarding skip: ${res.status()}`)
+    // Force `interface_mode = full` so panels like Skills/Security/Memory
+    // render their real content instead of the "available in Full mode"
+    // nudge. Persisted in the settings table; idempotent.
+    const modeRes = await page.request.put(`${MC_URL}/api/settings`, {
+      data: { settings: { 'general.interface_mode': 'full' } },
+      headers: { 'Content-Type': 'application/json' },
+    })
+    console.log(`[capture] interface_mode=full: ${modeRes.status()}`)
   } catch (e) {
     console.warn(`[capture] onboarding skip failed: ${e.message}`)
   } finally {
