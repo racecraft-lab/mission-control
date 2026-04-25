@@ -60,14 +60,30 @@ pnpm screenshots:refresh --only=security
 ### Capture against local dev
 
 ```bash
-# In one shell:
+# In one shell — fresh data dir keeps the seed deterministic:
+MISSION_CONTROL_DATA_DIR=/tmp/mc-screenshots-data \
+AUTH_USER=demo AUTH_PASS=demo-password \
 pnpm dev
 
 # In another:
-AUTH_USER=admin AUTH_PASS='your-local-pass' \
+AUTH_USER=demo AUTH_PASS=demo-password \
 MC_URL=http://127.0.0.1:3000 \
 pnpm screenshots:refresh
 ```
+
+The capture script does the following automatically before navigating:
+1. Logs in via `/api/auth/login`
+2. Sets `mc-onboarding-dismissed` sessionStorage via `addInitScript` so
+   the wizard never reopens for a skipped admin
+3. POSTs `{action:"skip"}` to `/api/onboarding` (server-side persistence)
+4. PUTs `general.interface_mode=full` to `/api/settings` so panels gated
+   on `interfaceMode==='essential'` render their real content
+5. Sets `mc-gateway-url` localStorage so `dashboardMode` flips to `full`
+   without a real OpenClaw gateway being present
+6. Seeds 4 demo agents + 9 tasks (idempotent; no-op if data exists) so
+   panels render meaningful content rather than empty states
+7. Routes long-poll endpoints (`/api/events`, `/api/openclaw/doctor`)
+   to fast empty responses so `networkidle` doesn't hang
 
 ### Compare local captures against committed baselines
 

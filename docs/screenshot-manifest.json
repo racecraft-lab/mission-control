@@ -17,8 +17,9 @@
     ]
   },
   "diff": {
-    "thresholdPixels": 2500,
-    "perPixelDelta": 0.1
+    "thresholdPixels": 50000,
+    "perPixelDelta": 0.1,
+    "_note": "Dynamic panels (activity feed, cost tracking, overview timestamps) diff a few thousand pixels even on identical content. 50000 (~1% of a 1440x900@2x frame) catches structural regressions without flagging timestamp jitter."
   },
   "panels": [
     {
