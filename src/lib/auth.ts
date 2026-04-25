@@ -660,26 +660,38 @@ function extractApiKeyFromHeaders(headers: Headers): string | null {
   return null
 }
 
+// API keys and session tokens in this module are NOT user-chosen passwords.
+// They are server-generated random tokens (`mca_${randomBytes(24).toString('hex')}`
+// for agent API keys = 192 bits; `randomBytes(32).toString('hex')` for session
+// tokens = 256 bits). Hashing with HMAC-SHA256 + a server-side pepper derived
+// from AUTH_SECRET is the OWASP-recommended construction for high-entropy
+// secrets. A KDF such as bcrypt/scrypt/Argon2 is intended for low-entropy human
+// passwords; applying one here would add per-request latency without
+// strengthening security against an offline attacker who has the hash but not
+// the pepper. CodeQL's `js/insufficient-password-hash` rule cannot tell these
+// apart, so it is suppressed at each sink with `lgtm[js/insufficient-password-hash]`.
 export function hashApiKey(rawKey: string): string {
-  return createHmac('sha256', pepperKeys().apiKey).update(rawKey).digest('hex')
+  return createHmac('sha256', pepperKeys().apiKey).update(rawKey).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 /**
  * Legacy API key hash (plain SHA-256) retained only for dual-read migration.
+ * Will be removed once all stored hashes have been upgraded to the HMAC form.
  */
 function hashApiKeyLegacy(rawKey: string): string {
-  return createHash('sha256').update(rawKey).digest('hex')
+  return createHash('sha256').update(rawKey).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 function hashSessionToken(rawToken: string): string {
-  return createHmac('sha256', pepperKeys().sessionToken).update(rawToken).digest('hex')
+  return createHmac('sha256', pepperKeys().sessionToken).update(rawToken).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 /**
  * Legacy session-token hash (plain SHA-256) retained only for dual-read migration.
+ * Will be removed once all stored hashes have been upgraded to the HMAC form.
  */
 function hashSessionTokenLegacy(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex')
+  return createHash('sha256').update(rawToken).digest('hex') // lgtm[js/insufficient-password-hash]
 }
 
 function parseAgentScopes(raw: string): Set<string> {

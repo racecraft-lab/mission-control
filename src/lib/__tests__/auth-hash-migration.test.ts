@@ -1,6 +1,14 @@
 import { createHash } from 'crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Reconstructs the pre-HMAC SHA-256 token-hash format ONLY so the dual-read
+// migration tests below can plant fixture rows that look like legacy data.
+// These are not password hashes; the production sinks already use HMAC + pepper
+// (see hashApiKey / hashSessionToken in src/lib/auth.ts).
+function legacyTokenHashFixture(token: string): string {
+  return createHash('sha256').update(token).digest('hex') // lgtm[js/insufficient-password-hash]
+}
+
 const { mockGetDatabase } = vi.hoisted(() => ({
   mockGetDatabase: vi.fn(),
 }))
@@ -156,7 +164,7 @@ describe('auth hash migration', () => {
     const { createSession } = await import('@/lib/auth')
     const { token } = createSession(42, undefined, undefined, 1)
 
-    const legacyHash = createHash('sha256').update(token).digest('hex')
+    const legacyHash = legacyTokenHashFixture(token)
     expect(db.insertedSessionHash).toBeTruthy()
     expect(db.insertedSessionHash).not.toBe(legacyHash)
   })
@@ -164,7 +172,7 @@ describe('auth hash migration', () => {
   it('falls back to legacy session hash and upgrades it to HMAC', async () => {
     const db = new FakeAuthDb()
     const token = 'legacy-session-token'
-    const legacyHash = createHash('sha256').update(token).digest('hex')
+    const legacyHash = legacyTokenHashFixture(token)
 
     db.sessionRowsByHash.set(legacyHash, {
       id: 7,
@@ -201,14 +209,14 @@ describe('auth hash migration', () => {
     expect(userAfterUpgrade?.username).toBe('alice')
     expect(db.sessionLookupHashes).toEqual([hmacSessionHash])
 
-    const legacyApiHash = createHash('sha256').update('api-key').digest('hex')
+    const legacyApiHash = legacyTokenHashFixture('api-key')
     expect(hashApiKey('api-key')).not.toBe(legacyApiHash)
   })
 
   it('falls back to legacy API-key hash and upgrades it to HMAC', async () => {
     const db = new FakeAuthDb()
     const rawApiKey = 'mca_legacy_key'
-    const legacyHash = createHash('sha256').update(rawApiKey).digest('hex')
+    const legacyHash = legacyTokenHashFixture(rawApiKey)
 
     db.agentRowsByHash.set(legacyHash, {
       id: 5,
