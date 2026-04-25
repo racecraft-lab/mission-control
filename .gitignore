@@ -59,3 +59,4 @@ playwright-report/
 *.bak
 *.bak-*
 hal-gateway-probe.js
+.pnpm-store/
