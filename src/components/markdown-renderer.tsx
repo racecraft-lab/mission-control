@@ -9,7 +9,13 @@ interface MarkdownRendererProps {
 }
 
 function stripHtml(content: string): string {
-  return content.replace(/<[^>]*>/g, '')
+  let prev: string
+  let result = content
+  do {
+    prev = result
+    result = result.replace(/<[^>]*>/g, '')
+  } while (result !== prev)
+  return result
 }
 
 function getPreviewContent(content: string): string {

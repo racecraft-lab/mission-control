@@ -270,12 +270,22 @@ async function updateSystem(request: NextRequest, auth: any): Promise<NextRespon
   }
 }
 
+/** Reject keys that could mutate the prototype chain when a path comes from untrusted input. */
+const FORBIDDEN_NESTED_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+
 /** Set a value in a nested object using dot-notation path */
 function setNestedValue(obj: any, path: string, value: any) {
   const keys = path.split('.')
+  for (const key of keys) {
+    if (FORBIDDEN_NESTED_KEYS.has(key)) {
+      throw new Error('Invalid configuration path')
+    }
+  }
   let current = obj
   for (let i = 0; i < keys.length - 1; i++) {
-    if (current[keys[i]] === undefined) current[keys[i]] = {}
+    if (!Object.prototype.hasOwnProperty.call(current, keys[i]) || current[keys[i]] === undefined) {
+      current[keys[i]] = {}
+    }
     current = current[keys[i]]
   }
   current[keys[keys.length - 1]] = value
