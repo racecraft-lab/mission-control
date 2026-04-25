@@ -17,9 +17,9 @@
     ]
   },
   "diff": {
-    "thresholdPixels": 50000,
+    "thresholdPixels": 100000,
     "perPixelDelta": 0.1,
-    "_note": "Dynamic panels (activity feed, cost tracking, overview timestamps) diff a few thousand pixels even on identical content. 50000 (~1% of a 1440x900@2x frame) catches structural regressions without flagging timestamp jitter."
+    "_note": "100000 pixels (~2% of a 1440x900@2x frame) absorbs font-hinting and anti-aliasing differences between baseline-host and CI-host (e.g. macOS-arm64 docker engine vs GHA ubuntu-x86_64 runner produces ~10-50K px deltas on identical text content). Structural regressions — missing panels, layout shifts, color changes — exceed this comfortably."
   },
   "panels": [
     {
