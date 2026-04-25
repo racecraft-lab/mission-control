@@ -86,7 +86,16 @@ jobs:
             lines.push('');
             lines.push('Full captures and diff overlays are in the **screenshot-visual-diff** artifact on this run.');
             lines.push('');
-            lines.push('To accept these as the new baseline, run `pnpm screenshots:docker` locally (or download the artifact above) and commit the regenerated PNGs.');
+            lines.push('### To accept these captures as the new baseline');
+            lines.push('Download this run\'s artifact and commit the captures — both ends of the diff are then GHA native amd64, so future runs pixel-match.');
+            lines.push('');
+            lines.push('```bash');
+            lines.push(`gh run download ${context.runId} -R ${context.repo.owner}/${context.repo.repo} -n screenshot-visual-diff -D /tmp/captures`);
+            lines.push('cp /tmp/captures/_captures/*.png docs/');
+            lines.push('git add docs/mission-control-*.png && git commit -m "docs: refresh README baselines from CI"');
+            lines.push('```');
+            lines.push('');
+            lines.push('Local `pnpm screenshots:docker` is for spot-checking structural changes only — qemu-emulated docker on Apple Silicon doesn\'t pixel-match GHA\'s native amd64 render.');
 
             const body = lines.join('\n');
 
