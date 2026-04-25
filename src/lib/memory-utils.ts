@@ -10,6 +10,8 @@ import { logger } from './logger'
 // ─── Wiki-link extraction ────────────────────────────────────────
 
 const WIKI_LINK_RE = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g
+export const REQUIRED_SCHEMA_FIELDS_RE = /^\s*required:\s*\[([^\]\n]*)\]\s*$/m
+export const OPTIONAL_SCHEMA_FIELDS_RE = /^\s*optional:\s*\[([^\]\n]*)\]\s*$/m
 
 export interface WikiLink {
   target: string   // The linked-to file stem (e.g. "my-note")
@@ -75,12 +77,12 @@ export function extractSchema(content: string): SchemaBlock | null {
   const typeMatch = block.match(/type:\s*(.+)/)
   if (typeMatch) schema.type = typeMatch[1].trim()
 
-  const requiredMatch = block.match(/required:\s*\[([^\]]*)\]/)
+  const requiredMatch = block.match(REQUIRED_SCHEMA_FIELDS_RE)
   if (requiredMatch) {
     schema.required = requiredMatch[1].split(',').map((s) => s.trim()).filter(Boolean)
   }
 
-  const optionalMatch = block.match(/optional:\s*\[([^\]]*)\]/)
+  const optionalMatch = block.match(OPTIONAL_SCHEMA_FIELDS_RE)
   if (optionalMatch) {
     schema.optional = optionalMatch[1].split(',').map((s) => s.trim()).filter(Boolean)
   }

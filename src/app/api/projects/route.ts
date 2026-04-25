@@ -5,12 +5,17 @@ import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { ensureTenantWorkspaceAccess, ForbiddenError } from '@/lib/workspaces'
 
-function slugify(input: string): string {
+export const SLUG_NON_ALNUM_SEQUENCE_RE = /[^a-z0-9]+/g
+export const SLUG_LEADING_DASH_RE = /^-+/
+export const SLUG_TRAILING_DASH_RE = /-+$/
+
+export function slugify(input: string): string {
   return input
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(SLUG_NON_ALNUM_SEQUENCE_RE, '-')
+    .replace(SLUG_LEADING_DASH_RE, '')
+    .replace(SLUG_TRAILING_DASH_RE, '')
     .slice(0, 64)
 }
 
