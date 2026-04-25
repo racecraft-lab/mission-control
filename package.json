@@ -29,6 +29,7 @@
     "screenshots:diff": "node scripts/diff-screenshots.mjs",
     "screenshots:refresh": "node scripts/capture-screenshots.mjs",
     "screenshots:auth": "node scripts/capture-screenshots.mjs --auth=interactive --storage=.mc-auth.json",
+    "screenshots:docker": "bash scripts/screenshots-from-docker.sh",
     "postinstall": "node -e \"try{require('better-sqlite3')}catch(e){if(e.code==='ERR_DLOPEN_FAILED'||/NODE_MODULE_VERSION/.test(e.message)){console.error('\\n⚠  better-sqlite3 compiled for wrong Node version. Run: pnpm rebuild better-sqlite3\\n');process.exit(1)}}\""
   },
   "dependencies": {

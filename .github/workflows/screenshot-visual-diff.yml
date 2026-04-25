@@ -39,40 +39,10 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Build app
-        run: pnpm build
+      - name: Capture screenshots from clean docker container
         env:
-          AUTH_SECRET: ci-test-secret-do-not-use-in-prod-ci-test-secret-do-not-use
-          API_KEY: ci-test-api-key-do-not-use-ci-test-api-key-do-not-use
-          NEXT_PUBLIC_GATEWAY_OPTIONAL: "true"
-
-      - name: Start app + seed
-        env:
-          AUTH_SECRET: ci-test-secret-do-not-use-in-prod-ci-test-secret-do-not-use
-          API_KEY: ci-test-api-key-do-not-use-ci-test-api-key-do-not-use
-          AUTH_USER: ci-admin
-          AUTH_PASS: ci-admin-password
-          MISSION_CONTROL_DATA_DIR: /tmp/mc-data
-          NEXT_PUBLIC_GATEWAY_OPTIONAL: "true"
-          PORT: "3000"
-        run: |
-          mkdir -p /tmp/mc-data
-          node .next/standalone/server.js &
-          echo $! > /tmp/mc.pid
-          for i in {1..40}; do
-            if curl -fs http://127.0.0.1:3000/api/health >/dev/null 2>&1 \
-               || curl -fs http://127.0.0.1:3000/setup >/dev/null 2>&1; then
-              echo "ready"; break
-            fi
-            sleep 1
-          done
-
-      - name: Capture screenshots
-        env:
-          MC_URL: http://127.0.0.1:3000
-          AUTH_USER: ci-admin
-          AUTH_PASS: ci-admin-password
-        run: node scripts/capture-screenshots.mjs --baseline
+          MC_DOCKER_PORT: "3300"
+        run: bash scripts/screenshots-from-docker.sh --baseline
 
       - name: Diff against committed baselines
         id: diff
@@ -116,7 +86,7 @@ jobs:
             lines.push('');
             lines.push('Full captures and diff overlays are in the **screenshot-visual-diff** artifact on this run.');
             lines.push('');
-            lines.push('To accept these as the new baseline, run `pnpm screenshots:refresh` locally and commit the regenerated PNGs.');
+            lines.push('To accept these as the new baseline, run `pnpm screenshots:docker` locally (or download the artifact above) and commit the regenerated PNGs.');
 
             const body = lines.join('\n');
 
@@ -143,7 +113,3 @@ jobs:
               });
             }
 
-      - name: Stop app
-        if: always()
-        run: |
-          if [ -f /tmp/mc.pid ]; then kill "$(cat /tmp/mc.pid)" 2>/dev/null || true; fi

@@ -34,6 +34,23 @@ Two GitHub Actions workflows enforce screenshot freshness:
 
 ## Refreshing screenshots locally
 
+### Canonical: clean docker container (matches CI byte-for-byte)
+
+```bash
+pnpm screenshots:docker          # writes docs/*.png
+pnpm screenshots:docker --baseline   # writes docs/_captures/*.png
+```
+
+Builds the production image, boots a fresh container with a synthetic
+admin and an empty data volume, captures all panels, tears down. CI's
+Tier 2 visual-diff workflow runs the exact same script, so committing
+the output of `pnpm screenshots:docker` guarantees the next CI run
+matches without rebaselining.
+
+Requires docker (or a compatible runtime) running locally.
+
+### Other capture modes
+
 ### One-time auth setup (against a remote deployment)
 
 ```bash
