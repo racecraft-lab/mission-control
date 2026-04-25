@@ -50,20 +50,6 @@ interface SoulTemplate {
   size: number
 }
 
-const statusColors: Record<string, string> = {
-  offline: 'bg-gray-500',
-  idle: 'bg-green-500',
-  busy: 'bg-yellow-500',
-  error: 'bg-red-500',
-}
-
-const statusIcons: Record<string, string> = {
-  offline: '-',
-  idle: 'o',
-  busy: '~',
-  error: '!',
-}
-
 // Overview Tab Component
 export function OverviewTab({
   agent,
@@ -462,7 +448,6 @@ export function SoulTab({
 
 // Memory Tab Component
 export function MemoryTab({
-  agent,
   workingMemory,
   onSave
 }: {

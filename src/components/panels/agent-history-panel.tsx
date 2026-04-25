@@ -106,13 +106,6 @@ export function AgentHistoryPanel() {
   const selectedAgentData = agents.find(a => a.name === selectedAgent)
   const totalPages = Math.ceil(total / limit)
 
-  function formatTime(ts: number) {
-    const d = new Date(ts * 1000)
-    return d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-    })
-  }
-
   function formatRelative(ts: number) {
     const diff = Math.floor(Date.now() / 1000) - ts
     if (diff < 60) return 'just now'

@@ -104,7 +104,6 @@ export function MemoryBrowserPanel() {
     selectedMemoryFile,
     memoryContent,
     memoryFileLinks,
-    memoryHealth,
     dashboardMode,
     setMemoryFiles,
     setSelectedMemoryFile,
@@ -118,7 +117,7 @@ export function MemoryBrowserPanel() {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [searchResults, setSearchResults] = useState<{ path: string; name: string; matches: number }[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [isSearching, setIsSearching] = useState(false)
+  const [, setIsSearching] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)

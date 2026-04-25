@@ -67,7 +67,7 @@ function ensurePort(value: any): number | null {
   return n
 }
 
-function normalizeOwnerGateway(value: any, slug: string): string {
+function normalizeOwnerGateway(value: any): string {
   const raw = String(value || '').trim()
   const fallback =
     String(process.env.MC_DEFAULT_OWNER_GATEWAY || process.env.MC_DEFAULT_GATEWAY_NAME || 'primary').trim() ||
@@ -382,7 +382,7 @@ export function createTenantAndBootstrapJob(request: TenantBootstrapRequest, act
   const planTier = (request.plan_tier || 'standard').trim().toLowerCase()
   const config = request.config || {}
   const dryRun = request.dry_run !== false
-  const ownerGateway = normalizeOwnerGateway((request as any).owner_gateway, slug)
+  const ownerGateway = normalizeOwnerGateway((request as any).owner_gateway)
 
   if (!gatewayPort) {
     throw new Error('gateway_port is required for tenant bootstrap')

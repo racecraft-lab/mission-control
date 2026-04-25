@@ -129,7 +129,6 @@ export function NavRail() {
   const navigateToPanel = useNavigateToPanel()
   const prefetchPanel = usePrefetchPanel()
   const tn = useTranslations('nav')
-  const tc = useTranslations('common')
 
   // Translate a nav item label using the translation key map
   function tLabel(id: string, fallback: string): string {
@@ -1256,14 +1255,6 @@ function ChatIcon() {
   )
 }
 
-function SessionsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h12v9H2zM5 12v2M11 12v2M4 14h8" />
-    </svg>
-  )
-}
-
 function ActivityIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1385,17 +1376,6 @@ function IntegrationsIcon() {
   )
 }
 
-function AgentCostsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="6" cy="5" r="3" />
-      <path d="M1 14c0-2.8 2.2-5 5-5" />
-      <circle cx="12" cy="10" r="3.5" />
-      <path d="M12 8.5v3M10.8 10h2.4" />
-    </svg>
-  )
-}
-
 function GitHubIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1409,15 +1389,6 @@ function SkillsIcon() {
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="2" width="12" height="12" rx="1.5" />
       <path d="M5 5h6M5 8h6M5 11h3" />
-    </svg>
-  )
-}
-
-function SuperAdminIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 1L2 4v4c0 4 2.5 6 6 7 3.5-1 6-3 6-7V4L8 1z" />
-      <path d="M8 5v2M8 9v0.5" />
     </svg>
   )
 }
@@ -1443,16 +1414,6 @@ function OfficeIcon() {
   )
 }
 
-function OrganizationsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="1" width="8" height="5" rx="1" />
-      <rect x="1" y="10" width="5" height="5" rx="1" />
-      <rect x="10" y="10" width="5" height="5" rx="1" />
-      <path d="M8 6v2M4 10L8 8M12 10L8 8" />
-    </svg>
-  )
-}
 
 function ChannelsIcon() {
   return (

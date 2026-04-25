@@ -78,6 +78,7 @@ export function OnboardingChecklistWidget() {
       }, 3000)
       return () => clearTimeout(timer)
     }
+    return undefined
   }, [allComplete, visible, celebrating])
 
   const handleDismiss = useCallback(async () => {

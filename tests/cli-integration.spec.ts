@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
-import { API_KEY_HEADER, createTestAgent, deleteTestAgent, createTestTask, deleteTestTask } from './helpers'
+import { createTestAgent, deleteTestAgent, createTestTask, deleteTestTask } from './helpers'
 
 const execFileAsync = promisify(execFile)
 
@@ -59,7 +59,7 @@ test.describe('CLI Integration', () => {
   })
 
   test('status overview returns system info', async () => {
-    const { parsed, exitCode } = await mc('status', 'overview')
+    const { exitCode } = await mc('status', 'overview')
     expect(exitCode).toBe(0)
   })
 

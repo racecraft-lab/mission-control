@@ -29,7 +29,7 @@ vi.mock('better-sqlite3', () => ({
         }
         return undefined
       },
-      all: (...args: any[]) => {
+      all: () => {
         const name = dbPath ? String(dbPath).split('/').pop() || '' : ''
         const rows = dbRowsByName[name] || dbRowsByName.default || {}
         if (query.includes('PRAGMA table_info(session)')) {

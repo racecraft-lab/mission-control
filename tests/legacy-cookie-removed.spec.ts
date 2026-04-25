@@ -25,7 +25,7 @@ test.describe('Legacy Cookie Auth Removed (Issue #7)', () => {
     }])
 
     // Try to access the main page — should redirect to login
-    const response = await page.goto('/')
+    await page.goto('/')
     const url = page.url()
     expect(url).toContain('/login')
   })

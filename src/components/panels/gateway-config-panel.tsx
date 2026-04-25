@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
-import { schemaType, normalizeSchema, extractSchemaTags } from '@/lib/config-schema-utils'
+import { schemaType, normalizeSchema } from '@/lib/config-schema-utils'
 import type { JsonSchema } from '@/lib/config-schema-utils'
 
 type FormMode = 'form' | 'json'
@@ -76,18 +76,6 @@ function deepSet(obj: Record<string, unknown>, path: string[], value: unknown): 
     : {}
   return { ...obj, [head]: deepSet(child, tail, value) }
 }
-
-/** Get a value at a path in an object */
-function deepGet(obj: unknown, path: string[]): unknown {
-  let current = obj
-  for (const key of path) {
-    if (current == null || typeof current !== 'object') return undefined
-    current = (current as Record<string, unknown>)[key]
-  }
-  return current
-}
-
-const collectTags = extractSchemaTags
 
 /** Check if a field matches search query */
 function matchesSearch(key: string, schema: JsonSchema, query: string): boolean {
@@ -848,7 +836,7 @@ function FieldWrapper({ label, help, path, children }: {
 
 // ── Object Field (collapsible) ─────────────────────────────────────────────
 
-function ObjectField({ fieldKey, label, help, schema, value, path, onPatch }: {
+function ObjectField({ label, help, schema, value, path, onPatch }: {
   fieldKey: string
   label: string
   help?: string

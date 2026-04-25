@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { useSmartPoll } from '@/lib/use-smart-poll'
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts'
 
 interface CpuData {
   usagePercent: number

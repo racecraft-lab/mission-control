@@ -43,8 +43,8 @@ const QUICK_NAV_COMMANDS: Array<{ panel: string; titleKey: string; title: string
 ]
 
 export function HeaderBar() {
-  const { connection, sessions, unreadNotificationCount, activeTenant, activeProject, dashboardMode } = useMissionControl()
-  const { isConnected, reconnect } = useWebSocket()
+  const { connection, sessions, unreadNotificationCount, activeTenant, activeProject } = useMissionControl()
+  const { reconnect } = useWebSocket()
   const navigateToPanel = useNavigateToPanel()
   const prefetchPanel = usePrefetchPanel()
   const th = useTranslations('header')

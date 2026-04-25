@@ -41,11 +41,6 @@ export async function GET(request: NextRequest) {
       ? Math.round((fleetTokens.filter(t => t >= agentTokensPerTask).length / fleetTokens.length) * 100)
       : 50
 
-    // Fleet average cost
-    const fleetAvgCost = fleet.length > 0
-      ? fleet.reduce((sum, f) => sum + f.costPerTask, 0) / fleet.length
-      : 0
-
     // Tool analysis
     const mostUsed = toolPatterns.topTools.slice(0, 5)
     const leastEffective = toolPatterns.topTools

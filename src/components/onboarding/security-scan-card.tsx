@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Loader } from '@/components/ui/loader'
 
 type CheckSeverity = 'critical' | 'high' | 'medium' | 'low'
 type FixSafety = 'safe' | 'requires-restart' | 'requires-review' | 'manual-only'
@@ -83,7 +82,7 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
   os: { label: 'OS Security', icon: 'S' },
 }
 
-export function SecurityScanCard({ compact = false, autoScan = false }: { compact?: boolean; autoScan?: boolean }) {
+export function SecurityScanCard({ autoScan = false }: { compact?: boolean; autoScan?: boolean }) {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

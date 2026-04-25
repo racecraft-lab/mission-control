@@ -17,8 +17,6 @@ import type { PluginIntegrationDef } from '@/lib/plugins'
 // Integration registry
 // ---------------------------------------------------------------------------
 
-type BuiltinCategory = 'ai' | 'search' | 'social' | 'messaging' | 'devtools' | 'security' | 'infra' | 'productivity' | 'browser'
-
 interface IntegrationDef {
   id: string
   name: string

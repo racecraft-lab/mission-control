@@ -95,7 +95,7 @@ test.describe('Workflows CRUD', () => {
 
   test('full lifecycle: create → list → update → delete', async ({ request }) => {
     // Create
-    const { id, name, res: createRes } = await createTestWorkflow(request)
+    const { id, res: createRes } = await createTestWorkflow(request)
     expect(createRes.status()).toBe(201)
 
     // List

@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useMissionControl, Conversation } from '@/store'
 import { useSmartPoll } from '@/lib/use-smart-poll'
 import { createClientLogger } from '@/lib/client-logger'
-import { Button } from '@/components/ui/button'
 import { SessionKindAvatar, SessionKindPill } from './session-kind-brand'
 
 const log = createClientLogger('ConversationList')
@@ -135,7 +134,6 @@ export function ConversationList({ onNewConversation: _onNewConversation }: Conv
     markConversationRead,
     sessionAttention,
     setSessionAttention,
-    addSplitPane,
   } = useMissionControl()
   const [search, setSearch] = useState('')
   const [initialLoading, setInitialLoading] = useState(conversations.length === 0)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
-import { runSecurityScan, FIX_SAFETY, type CheckSeverity, type FixSafety, type Check } from '@/lib/security-scan'
+import { runSecurityScan, FIX_SAFETY, type CheckSeverity, type FixSafety } from '@/lib/security-scan'
 
 type FixScope = 'safe' | 'safe+restart' | 'all'
 

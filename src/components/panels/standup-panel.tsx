@@ -159,14 +159,6 @@ export function StandupPanel() {
     })
   }
 
-  // Format time for display
-  const formatTime = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
   // Get priority color
   const getPriorityColor = (priority: string) => {
     const colors: Record<string, string> = {

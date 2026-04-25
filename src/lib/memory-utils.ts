@@ -5,7 +5,6 @@
 
 import { readdir, readFile, stat } from 'fs/promises'
 import { join, relative, extname, basename, dirname } from 'path'
-import { logger } from './logger'
 
 // ─── Wiki-link extraction ────────────────────────────────────────
 
