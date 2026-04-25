@@ -26,8 +26,9 @@ const capturesDir = resolve(REPO_ROOT, args.captures || 'docs/_captures')
 const diffsDir = resolve(REPO_ROOT, args.output || 'docs/_diffs')
 await mkdir(diffsDir, { recursive: true })
 
-const threshold = manifest.diff?.thresholdPixels ?? 2500
+const defaultThreshold = manifest.diff?.thresholdPixels ?? 2500
 const perPixelDelta = manifest.diff?.perPixelDelta ?? 0.1
+const panelThreshold = (panel) => panel.diff?.thresholdPixels ?? defaultThreshold
 
 const results = []
 for (const panel of manifest.panels) {
@@ -69,12 +70,13 @@ for (const panel of manifest.panels) {
     await writeFile(diffPath, PNG.sync.write(diff))
   }
 
+  const panelLimit = panelThreshold(panel)
   results.push({
     id: panel.id,
-    status: delta <= threshold ? 'pass' : 'fail',
+    status: delta <= panelLimit ? 'pass' : 'fail',
     panel: panel.png,
     deltaPixels: delta,
-    thresholdPixels: threshold,
+    thresholdPixels: panelLimit,
     diffPath: delta > 0 ? `docs/_diffs/${basename(panel.png)}` : null,
   })
 }
@@ -85,7 +87,7 @@ const summary = {
   passed: results.filter(r => r.status === 'pass').length,
   failed: failed.length,
   missing: results.filter(r => r.status.startsWith('missing')).length,
-  thresholdPixels: threshold,
+  thresholdPixels: defaultThreshold,
   results,
 }
 

@@ -85,7 +85,11 @@
       "url": "/activity",
       "sources": [
         "src/components/panels/activity-feed-panel.tsx"
-      ]
+      ],
+      "diff": {
+        "thresholdPixels": 50000,
+        "_note": "Activity feed shows server-generated relative timestamps (X ago) and live websocket retry events. The seed POSTs run on the real server clock — frozen browser Date can't reach those — so 'X ago' labels render different text widths between baseline and diff runs. 50000 px (~1% of frame) absorbs that without masking the structural layout."
+      }
     },
     {
       "id": "cost-tracking",
