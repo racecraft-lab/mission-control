@@ -36,13 +36,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install minimatch
+        run: npm install --no-save --no-audit --no-fund minimatch@9
+
       - name: Match changed files against manifest
         id: match
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const { minimatch } = await import('minimatch');
+            const { minimatch } = require('minimatch');
 
             const manifest = JSON.parse(
               fs.readFileSync('docs/screenshot-manifest.json', 'utf8')
