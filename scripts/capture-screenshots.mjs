@@ -13,7 +13,7 @@
 //   node scripts/capture-screenshots.mjs --auth=interactive --storage=.mc-auth.json
 
 import { chromium } from '@playwright/test'
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises'
+import { readFile, mkdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -298,30 +298,6 @@ async function markOnboardingSkipped(context) {
     console.log(`[capture] interface_mode=full: ${modeRes.status()}`)
   } catch (e) {
     console.warn(`[capture] onboarding skip failed: ${e.message}`)
-  } finally {
-    await page.close()
-  }
-}
-
-async function dismissOnboardingOnce(context) {
-  const page = await context.newPage()
-  try {
-    await page.goto(MC_URL, { waitUntil: 'domcontentloaded' })
-    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null)
-    // Try every plausible dismissal: a "Skip setup" link/button, then storage flag.
-    const dismissed = await page.evaluate(() => {
-      const candidates = Array.from(document.querySelectorAll('button, a, [role="button"]'))
-      const t = (el) => (el.textContent || '').trim().toLowerCase()
-      const skip = candidates.find(el => /^skip(\s+setup)?$/.test(t(el)))
-      if (skip) { skip.click(); return 'skip-clicked' }
-      try { window.sessionStorage.setItem('mc-onboarding-dismissed', '1') } catch (_) {}
-      try { window.localStorage.setItem('mc-onboarding-dismissed', '1') } catch (_) {}
-      return 'storage-set'
-    })
-    console.log(`[capture] onboarding dismissal: ${dismissed}`)
-    await page.waitForTimeout(800)
-  } catch (e) {
-    console.warn(`[capture] onboarding dismiss failed: ${e.message}`)
   } finally {
     await page.close()
   }

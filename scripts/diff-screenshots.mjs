@@ -11,7 +11,7 @@
 import pixelmatch from 'pixelmatch'
 import { PNG } from 'pngjs'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
