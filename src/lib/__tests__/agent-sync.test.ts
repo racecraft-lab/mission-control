@@ -227,13 +227,13 @@ describe('syncAgentsFromConfig', () => {
         agents: {
           list: [
             {
-              id: 'focusengine-macos-dev',
-              name: 'FocusEngine macOS Dev',
+              id: 'product-line-a-platform-dev',
+              name: 'Product Line A Platform Dev',
               workspace,
               agentDir: path.join(tempDir, 'agent'),
               model: { primary: 'openai-codex/gpt-5.4' },
               identity: {
-                name: 'FocusEngine macOS Dev',
+                name: 'Product Line A Platform Dev',
                 theme: 'coder',
               },
             },
@@ -265,9 +265,9 @@ describe('syncAgentsFromConfig', () => {
       INSERT INTO agents (name, role, session_key, soul_content, status, created_at, updated_at, config)
       VALUES (?, ?, ?, ?, 'offline', ?, ?, ?)
     `).run(
-      'focusengine-macos-dev',
+      'product-line-a-platform-dev',
       'agent',
-      'agent:focusengine-macos-dev:main',
+      'agent:product-line-a-platform-dev:main',
       null,
       1,
       1,
@@ -292,7 +292,7 @@ describe('syncAgentsFromConfig', () => {
 
     const preview = await previewSyncDiff()
     expect(preview.newAgents).toEqual([])
-    expect(preview.updatedAgents).toEqual(['FocusEngine macOS Dev'])
+    expect(preview.updatedAgents).toEqual(['Product Line A Platform Dev'])
     expect(preview.onlyInMC).toEqual([])
 
     const result = await syncAgentsFromConfig('tester')
@@ -300,8 +300,8 @@ describe('syncAgentsFromConfig', () => {
     expect(result.updated).toBe(1)
     expect(result.agents).toEqual([
       {
-        id: 'focusengine-macos-dev',
-        name: 'FocusEngine macOS Dev',
+        id: 'product-line-a-platform-dev',
+        name: 'Product Line A Platform Dev',
         action: 'updated',
       },
     ])
@@ -310,7 +310,7 @@ describe('syncAgentsFromConfig', () => {
       SELECT name, role, session_key, config, soul_content
       FROM agents
       WHERE session_key = ?
-    `).get('agent:focusengine-macos-dev:main') as {
+    `).get('agent:product-line-a-platform-dev:main') as {
       name: string
       role: string
       session_key: string
@@ -318,9 +318,9 @@ describe('syncAgentsFromConfig', () => {
       soul_content: string | null
     }
 
-    expect(row.name).toBe('FocusEngine macOS Dev')
+    expect(row.name).toBe('Product Line A Platform Dev')
     expect(row.role).toBe('coder')
-    expect(JSON.parse(row.config).openclawId).toBe('focusengine-macos-dev')
+    expect(JSON.parse(row.config).openclawId).toBe('product-line-a-platform-dev')
     expect(row.soul_content).toContain('synced soul')
     expect(logAuditEvent).toHaveBeenCalled()
     expect(broadcast).toHaveBeenCalledWith('agent.created', expect.objectContaining({ updated: 1 }))

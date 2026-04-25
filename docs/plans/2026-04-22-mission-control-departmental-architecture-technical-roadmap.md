@@ -15,7 +15,7 @@ tags:
 status: active
 type: technical-roadmap
 name: mission-control-departmental-architecture
-owner: fgabelmannjr
+owner: operator
 ---
 
 # Mission Control Departmental Architecture — Technical Roadmap
@@ -27,7 +27,7 @@ owner: fgabelmannjr
 1. **Additive migrations only.** No destructive schema changes. Every migration is individually revertible.
 2. **Feature flags for every new runtime behavior.** All flags default OFF. Flipping ON is an explicit operator action per product line.
 3. **Ship each phase to production** behind its flag before enabling. Deploy code ≠ activate behavior.
-4. **Dev-first, flag-scoped canary on live.** Write and commit changes in `~/mission-control` (dev worktree, `codex/openclaw-nodes-fallback`). Promote via PR merge to `main` → `git fetch` + `pnpm build` + restart `mission-control.service` for `~/mission-control-sync` (the live worktree). The "canary" is a feature flag flipped for ONE workspace (e.g., the facility workspace or a dedicated test workspace) on the live service, validated, then promoted to wider workspaces. There is no separate canary environment on HAL; there is ONE live MC and flag-scoping provides the safety.
+4. **Dev-first, flag-scoped canary on live.** Write and commit changes in `~/mission-control` (dev worktree, `codex/openclaw-nodes-fallback`). Promote via PR merge to `main` → `git fetch` + `pnpm build` + restart `mission-control.service` for `~/mission-control-sync` (the live worktree). The "canary" is a feature flag flipped for ONE workspace (e.g., the facility workspace or a dedicated test workspace) on the live service, validated, then promoted to wider workspaces. There is no separate canary environment on the OpenClaw node; there is ONE live MC and flag-scoping provides the safety.
 5. **Upstream compat gate** on every PR: cherry-pick candidates from `builderz-labs/main` should still apply cleanly.
 
 ## Phase Map (At a Glance)
@@ -41,8 +41,8 @@ owner: fgabelmannjr
 | 4 | `ready_for_owner` state + two-step terminal | Yes | `FEATURE_TWO_STEP_TERMINAL` | Phase 7 |
 | 5 | Area-label GitHub sync | Yes | `FEATURE_AREA_LABEL_ROUTING` | Phase 7 |
 | 6 | Disposition logging + audit panel | Yes | `FEATURE_DISPOSITION_LOGGING` | Phase 7 |
-| 7 | FocusEngine pilot — end-to-end smoke | Pilot gate | `PILOT_FOCUSENGINE_E2E` | Phase 8 |
-| 8 | Racecraft Lab onboarding | Post-pilot | — | — |
+| 7 | Product Line A pilot — end-to-end smoke | Pilot gate | `PILOT_PRODUCT_LINE_A_E2E` | Phase 8 |
+| 8 | Product Line B onboarding | Post-pilot | — | — |
 
 ---
 
@@ -54,7 +54,7 @@ Five additive migrations plus seed. Pure schema work. No runtime behavior change
 
 ### Deliverables
 
-- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / HAL to `global`.
+- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / OpenClaw to `global`.
 - **M54** — rename `agents.workspace_path` → `agents.sandbox_path` (D2 deconfliction).
 - **M55** — rebuild `tasks.status` CHECK constraint with `ready_for_owner` added.
 - **M56** — `task_templates` gains `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, `external_terminal_event`.
@@ -125,8 +125,8 @@ Introduce the product-line switcher in the header, wire Zustand `activeWorkspace
 - [P1-AC1] With flag OFF, UI renders identically to pre-Phase-1. Zero regression.
 - [P1-AC2] With flag ON and `activeWorkspace = null`, UI renders identically to flag-OFF (facility view = aggregate).
 - [P1-AC3] With flag ON and `activeWorkspace = facility`, every panel (including aggregate ones) includes facility-workspace data.
-- [P1-AC4] With flag ON and `activeWorkspace = focusengine` (pre-seeded), filtered panels show only FocusEngine data; aggregate panels show everything.
-- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → FocusEngine → {QA, Dev, ...} → {agents}.
+- [P1-AC4] With flag ON and `activeWorkspace = product-line-a` (pre-seeded), filtered panels show only Product Line A data; aggregate panels show everything.
+- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → Product Line A → {QA, Dev, ...} → {agents}.
 - [P1-AC6] Cross-tab state sync: switching in tab A reflects in tab B.
 
 ### Rollback
@@ -364,25 +364,25 @@ Flip `FEATURE_DISPOSITION_LOGGING` OFF. INSERT becomes no-op. Table remains; que
 
 ---
 
-## Phase 7 — FocusEngine Pilot (End-to-End Smoke)
+## Phase 7 — Product Line A Pilot (End-to-End Smoke)
 
 ### Scope
 
-Activate every Phase 1–6 feature flag, seed FocusEngine workspace + templates + project-agent assignments, and run the pilot on issue #110 (per [[OpenClaw macOS Node - FocusEngine Issue Workflow Smoke Plan]]).
+Activate every Phase 1–6 feature flag, seed Product Line A workspace + templates + project-agent assignments, and run the pilot on issue #110 (per [[OpenClaw macOS Node - Product Line A Issue Workflow Smoke Plan]]).
 
 ### Deliverables
 
-- **Seed script**: `scripts/seed-focusengine-workspace.ts`:
+- **Seed script**: `scripts/seed-product-line-a-workspace.ts`:
   - Ensure `facility` workspace exists (idempotent).
-  - Create FocusEngine workspace (`slug='focusengine'`, `display_name='FocusEngine'`).
+  - Create Product Line A workspace (`slug='product-line-a'`, `display_name='Product Line A'`).
   - Create per-department projects (QA, Dev, macOS App, DevSecOps, UI, Marketing, Customer Service).
-  - Populate `project_agent_assignments` mapping roles to the six `focusengine-macos-*` agents.
-  - Insert the FocusEngine workflow-family templates: `focusengine_issue_triage`, `focusengine_remediation_plan`, `focusengine_specialist_route`, `focusengine_owner_review`, `focusengine_close_issue`, `focusengine_dev_implementation`, `focusengine_review`.
-  - Set `FocusEngine workspace.github_repo = 'fgabelmannjr/focusengine'` (or canonical repo).
+  - Populate `project_agent_assignments` mapping roles to the six `product-line-a-platform-*` agents.
+  - Insert the Product Line A workflow-family templates: `product-line-a_issue_triage`, `product-line-a_remediation_plan`, `product-line-a_specialist_route`, `product-line-a_owner_review`, `product-line-a_close_issue`, `product-line-a_dev_implementation`, `product-line-a_review`.
+  - Set `Product Line A workspace.github_repo = '<org>/product-line-a-repo'` (or canonical repo).
 - **Flag activation**: enable all Phase 1–6 flags in the product-line scope.
-- **Pilot trigger**: label FocusEngine issue #110 with `mc:inbox` + `priority:*` + `area:dev` (or appropriate area). Verify:
+- **Pilot trigger**: label Product Line A issue #110 with `mc:inbox` + `priority:*` + `area:dev` (or appropriate area). Verify:
   - MC ingests it via `pullFromGitHub`.
-  - Routes to FocusEngine › Dev project.
+  - Routes to Product Line A › Dev project.
   - Triage template runs → researcher agent produces structured output.
   - Scheduler advances chain → plan → dev → review → Aegis → ready_for_owner.
   - Operator merges PR on GitHub → task → `done`.
@@ -400,7 +400,7 @@ Activate every Phase 1–6 feature flag, seed FocusEngine workspace + templates 
 
 ### Rollback
 
-Per-flag rollback. Worst case: flip `PILOT_FOCUSENGINE_E2E` OFF and revert to explicit operator assignment (Pattern 1 from [[Mission Control - Practical Use of Tasks, Workflows, and Pipelines]]).
+Per-flag rollback. Worst case: flip `PILOT_PRODUCT_LINE_A_E2E` OFF and revert to explicit operator assignment (Pattern 1 from [[Mission Control - Practical Use of Tasks, Workflows, and Pipelines]]).
 
 ### Estimated Work
 
@@ -408,30 +408,30 @@ Per-flag rollback. Worst case: flip `PILOT_FOCUSENGINE_E2E` OFF and revert to ex
 
 ---
 
-## Phase 8 — Racecraft Lab Onboarding (Scale Validation)
+## Phase 8 — Product Line B Onboarding (Scale Validation)
 
 ### Scope
 
-Onboard Racecraft Lab platform as the second product line. Validate that the architecture scales — < 1 operator-hour from zero to running.
+Onboard Product Line B platform as the second product line. Validate that the architecture scales — < 1 operator-hour from zero to running.
 
 ### Deliverables
 
-- **Seed script parameterization**: `scripts/seed-product-line.ts product_line_slug agent_prefix github_repo`. Generalize the FocusEngine seed.
-- **Agent roster**: spin up `racecraftlab-*-dev`, `-ui`, `-qa`, `-devsecops`, `-planner`, `-research` sandboxes (six new docker containers).
-- **Template family**: adapt FocusEngine templates to Racecraft Lab (likely near-identical; only `agent_role` mappings and repo URL change).
-- **GitHub repo**: set `RacecraftLab workspace.github_repo = 'racecraft-lab/platform'` (or canonical repo).
-- **First smoke**: a real Racecraft Lab issue flows through the pipeline.
+- **Seed script parameterization**: `scripts/seed-product-line.ts product_line_slug agent_prefix github_repo`. Generalize the Product Line A seed.
+- **Agent roster**: spin up `product-line-b-platform-*-dev`, `-ui`, `-qa`, `-devsecops`, `-planner`, `-research` sandboxes (six new docker containers).
+- **Template family**: adapt Product Line A templates to Product Line B (likely near-identical; only `agent_role` mappings and repo URL change).
+- **GitHub repo**: set `ProductLineB workspace.github_repo = '<org>/product-line-b-repo'` (or canonical repo).
+- **First smoke**: a real Product Line B issue flows through the pipeline.
 
 ### Acceptance Criteria
 
 - [P8-AC1] End-to-end onboarding (seed + agent provision + first task) completes in < 1 operator-hour.
-- [P8-AC2] Racecraft Lab's agents are strictly isolated from FocusEngine's (D4a strict-twin verified).
+- [P8-AC2] Product Line B's agents are strictly isolated from Product Line A's (D4a strict-twin verified).
 - [P8-AC3] Facility agents (Aegis, Security Guardian) serve both product lines without code change.
 - [P8-AC4] Dashboard disposition widget shows metrics per-workspace, demonstrating hybrid switcher behavior works at 2-product-line scale.
 
 ### Rollback
 
-Disable Racecraft Lab workspace (set `disabled_at`). FocusEngine unaffected.
+Disable Product Line B workspace (set `disabled_at`). Product Line A unaffected.
 
 ### Estimated Work
 
@@ -449,8 +449,8 @@ Phase 0 (migrations)
     │        └─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
     │        └─→ Phase 6 (disposition logging) ── depends on Phase 3 for advanceTaskChain hook
     ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
-    └─→ Phase 7 (FocusEngine pilot) ── depends on ALL of Phase 1–6
-             └─→ Phase 8 (Racecraft Lab onboarding)
+    └─→ Phase 7 (Product Line A pilot) ── depends on ALL of Phase 1–6
+             └─→ Phase 8 (Product Line B onboarding)
 ```
 
 Phase 0 MUST land first. Phases 1, 2, 5 can ship in parallel. Phase 3 gates 4 and 6. Phase 7 gates 8.
@@ -490,7 +490,7 @@ Each phase is independently rollback-safe:
 
 - **Schema migrations** (Phase 0) — per-migration reverse scripts.
 - **Feature flags** (Phases 1–6) — flip OFF → behavior reverts to pre-phase.
-- **Pilot** (Phase 7) — flip `PILOT_FOCUSENGINE_E2E` OFF; workspace remains, templates remain, but the auto-chain stops; operator can fall back to explicit task assignment (Pattern 1).
+- **Pilot** (Phase 7) — flip `PILOT_PRODUCT_LINE_A_E2E` OFF; workspace remains, templates remain, but the auto-chain stops; operator can fall back to explicit task assignment (Pattern 1).
 - **Product-line onboarding** (Phase 8) — `workspace.disabled_at = NOW()`; sync pauses; agents still run but no new work dispatched.
 
 No destructive rollback required at any phase.

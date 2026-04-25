@@ -4,8 +4,8 @@ up:
 related:
   - "[[Mission Control Departmental Architecture - Current State]]"
   - "[[Mission Control Departmental Architecture - Decisions]]"
-  - "[[OpenClaw macOS Node - FocusEngine Agent Team and Aegis]]"
-  - "[[OpenClaw macOS Node - FocusEngine Issue Workflow Smoke Plan]]"
+  - "[[OpenClaw macOS Node - Product Line A Agent Team and Aegis]]"
+  - "[[OpenClaw macOS Node - Product Line A Issue Workflow Smoke Plan]]"
   - "[[OpenClaw macOS Node - Mission Control Integration]]"
   - "[[Mission Control - Practical Use of Tasks, Workflows, and Pipelines]]"
 created: "2026-04-22"
@@ -13,7 +13,7 @@ tags: [mission-control, prd, speckit-pro, departmental-architecture]
 status: active
 type: prd
 name: mission-control-departmental-architecture
-owner: fgabelmannjr
+owner: operator
 ---
 
 # Mission Control Departmental Architecture PRD
@@ -32,18 +32,18 @@ This PRD should preserve the durable **why**, **what**, **success criteria**, an
 
 ## Goal
 
-Extend the `racecraft-lab/mission-control` fork (upstream `builderz-labs/mission-control`) to support a **facility → product-line → department** operating model, starting with FocusEngine as the first product line and Quality Assurance as the first department. Enable automated multi-stage workflows (researcher → planner → dev → reviewer → Aegis) while preserving every existing single-workspace deployment byte-compatibly.
+Extend the `racecraft-lab/mission-control` fork (upstream `builderz-labs/mission-control`) to support a **facility → product-line → department** operating model, starting with Product Line A as the first product line and Quality Assurance as the first department. Enable automated multi-stage workflows (researcher → planner → dev → reviewer → Aegis) while preserving every existing single-workspace deployment byte-compatibly.
 
 ## Architecture
 
 Mission Control remains the source of truth. The existing `tenant → workspace → project → task` hierarchy is retained without SQL rename — `workspace` formally represents a **product line** at the UI/domain layer, `project` represents a **department**, and `project_agent_assignments.role` represents the **stage role** an agent plays in a task-chain template.
 
-A new **task pipeline engine** auto-chains tasks based on declarative routing rules evaluated against structured agent output. **Aegis is refactored** from per-workspace resolution to facility-wide via a new `scope='global'` flag on agents. **GitHub sync routes issues** via a new `area:*` label family to the correct department project within a product line's monorepo. **Resource governance** extends the existing Cost Tracker into enforceable WIP limits, blackout/degraded windows, and budget gates before autonomous work is started. Facility electricity / infrastructure usage and cost from HAL's OpenClaw health cron are part of the same governance surface, but only through a fork-only optional adapter.
+A new **task pipeline engine** auto-chains tasks based on declarative routing rules evaluated against structured agent output. **Aegis is refactored** from per-workspace resolution to facility-wide via a new `scope='global'` flag on agents. **GitHub sync routes issues** via a new `area:*` label family to the correct department project within a product line's monorepo. **Resource governance** extends the existing Cost Tracker into enforceable WIP limits, blackout/degraded windows, and budget gates before autonomous work is started. Facility electricity / infrastructure usage and cost from the OpenClaw health cron are part of the same governance surface, but only through a fork-only optional adapter.
 
 ## Tech Stack
 
 - **Existing**: Next.js 16, React 19, TypeScript 5.7, better-sqlite3 (SQLite), Zustand, xyflow/react, reagraph, pnpm, Node ≥22, existing REST + SSE API surface.
-- **New**: one explicit pinned runtime dependency for schema validation (`ajv`, direct dependency only; never import transitive packages). Schema additions: one new column on `agents` (`scope`), one new state value in the task-status vocabulary (`ready_for_owner`, DB CHECK enforcement only if the live schema proves status is CHECK-constrained), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Agent filesystem "workspace" terminology is renamed to "Sandbox" at UI/config level unless the live DB schema proves an `agents.workspace_path` column exists. HAL/OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
+- **New**: one explicit pinned runtime dependency for schema validation (`ajv`, direct dependency only; never import transitive packages). Schema additions: one new column on `agents` (`scope`), one new state value in the task-status vocabulary (`ready_for_owner`, DB CHECK enforcement only if the live schema proves status is CHECK-constrained), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Agent filesystem "workspace" terminology is renamed to "Sandbox" at UI/config level unless the live DB schema proves an `agents.workspace_path` column exists. OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
 - **Testing**: existing Playwright/Vitest patterns + new migration tests + scheduler unit tests for routing + pilot smoke (see Smoke Plan).
 
 ---
@@ -58,12 +58,12 @@ Every major feature and every roadmap phase must be classified as one of:
 |---|---|
 | `upstream-safe` | additive, opt-in, and reasonable to upstream |
 | `upstream-divergent` | preserves runtime compatibility for current installs but creates schema/state/API divergence that increases permanent-fork pressure unless upstream accepts it |
-| `fork-only optional` | HAL/OpenClaw/local-environment-specific integration that must be absent-safe, config-gated, and disabled by default |
+| `fork-only optional` | OpenClaw/local-environment-specific integration that must be absent-safe, config-gated, and disabled by default |
 
 Non-negotiable rules:
 
 1. **If a change is upstream-divergent, the docs must say so plainly before implementation.**
-2. **HAL/OpenClaw-only features must be adapters, not required core behavior.**
+2. **OpenClaw-only features must be adapters, not required core behavior.**
 3. **If an upstream-safe adapter exists, prefer it over a schema divergence.**
 4. **"Additive migration" does not equal "upstream-safe."** It only means existing deployments are less likely to break at runtime.
 5. **OpenClaw health electricity/infra support is fork-only optional in v1.** If the health files/config are absent, Mission Control must behave exactly as it does today.
@@ -79,7 +79,7 @@ Mission Control's hierarchy supports multi-workspace at the schema layer (50 mig
 5. No telemetry for triage dispositions. Operators cannot answer "how many issues did we triage as OBE last week" without manual GitHub scraping.
 6. Two colliding senses of "workspace" (tenant/product-line hierarchy vs. agent filesystem sandbox) create ambiguity that worsens as the fork evolves.
 
-Result: the fork supports running one product (FocusEngine), one department, manually. It cannot operate a factory.
+Result: the fork supports running one product (Product Line A), one department, manually. It cannot operate a factory.
 
 ## 2) Product Objectives
 
@@ -87,7 +87,7 @@ Result: the fork supports running one product (FocusEngine), one department, man
 
 1. **Departmental object model** — reuse existing hierarchy per D1 (`workspace` = product line, `project` = department, `project_agent_assignments.role` = stage role, `facility` workspace for globals).
 2. **Terminology deconfliction** per D2 (UI "Product Line", TS `ProductLine`, SQL `workspace_id` unchanged; agent filesystem renamed "Sandbox").
-3. **Facility-wide agent scope** per D3 (add `scope='global'` column; refactor Aegis + Security Guardian + HAL to global).
+3. **Facility-wide agent scope** per D3 (add `scope='global'` column; refactor Aegis + Security Guardian + OpenClaw to global).
 4. **Product-line switcher** in header-bar with hybrid panel filtering per D4b.
 5. **Auto-chained task chains** with declarative routing per D5. A "task-chain template" is a domain alias over the live `workflow_templates` table, not a new SQL table. Phase 0 must add explicit workflow-template identity, task binding, and task-chain lineage before implementation.
 6. **`ready_for_owner` state** per D6; **two-step terminal event** for PR-producing tasks per D7.
@@ -95,22 +95,22 @@ Result: the fork supports running one product (FocusEngine), one department, man
 8. **Task disposition logging** per D9.
 9. **Shared task artifact store** per D11.
 10. **Resource governance** per D12, reusing Cost Tracker data to enforce WIP limits, blackout/degraded windows, and budgets.
-11. **FocusEngine GitHub issue remediation workflow family** operational end-to-end (pilot).
+11. **Product Line A GitHub issue remediation workflow family** operational end-to-end (pilot).
 
 ### Success criteria
 
 - **[SC-1] Zero-regression** — every existing single-workspace deployment runs unchanged after applying all migrations. `workspace_id=1` fallback preserved. All new behavior feature-flag-guarded or null-default.
-- **[SC-2] Pilot end-to-end** — one FocusEngine GitHub issue (target: issue #110 per the existing smoke plan) flows **triage → plan → dev → review → Aegis → ready_for_owner → linked PR merged (done)** without operator intervention beyond the final PR merge click.
+- **[SC-2] Pilot end-to-end** — one Product Line A GitHub issue (target: issue #110 per the existing smoke plan) flows **triage → plan → dev → review → Aegis → ready_for_owner → linked PR merged (done)** without operator intervention beyond the final PR merge click.
 - **[SC-3] Switcher fidelity** — product-line switcher filters `task-board-panel`, `agent-squad-panel`, `chat-panel`, `skills-panel`, `project-manager-modal` to `activeWorkspace`; awareness panels (live feed, notifications, dashboard, system monitor, audit trail) remain aggregate.
 - **[SC-4] Global Aegis** — Aegis resolves via `scope='global'` lookup; `aegisAgentByWorkspace` map is either removed or retained only as a backward-compat shim for legacy workspace-scoped Aegis records.
 - **[SC-5] Disposition telemetry** — morning-briefing metric "Last 7d: N triaged, X ACTIONABLE, Y OBE, Z DUPLICATE, W NEEDS_SPECIALIST" queryable from `task_dispositions`.
-- **[SC-6] Second product line onboarding** — Racecraft Lab platform onboarded in < 1 operator-hour given seed templates (Phase 9 validation).
+- **[SC-6] Second product line onboarding** — Product Line B platform onboarded in < 1 operator-hour given seed templates (Phase 9 validation).
 - **[SC-7] Upstream compat preserved** — cherry-picking from `builderz-labs/mission-control` `main` remains viable (no rename of `workspaces` table or `workspace_id` columns).
 - **[SC-8] Artifact handoff durability** — researcher/planner/dev/reviewer/Aegis handoffs are persisted in `task_artifacts`; downstream agents consume MC artifact references rather than reading another agent's sandbox.
 - **[SC-9] Resource governance safety** — WIP, blackout/degraded window, and budget policies block or defer new autonomous work before scheduler dispatch, while Cost Tracker continues to show spend/usage and policy decisions.
 - **[SC-10] Blended cost visibility** — Cost Tracker shows both token/API spend and facility electricity/infra spend from OpenClaw health telemetry, with combined totals available for governance and operator review.
 - **[SC-11] Upstream impact transparency** — every roadmap phase and every major feature is labeled `upstream-safe`, `upstream-divergent`, or `fork-only optional`.
-- **[SC-12] OpenClaw health absence safety** — installs without HAL/OpenClaw health cron artifacts continue to function with no config errors, API breakage, or UI regressions.
+- **[SC-12] OpenClaw health absence safety** — installs without OpenClaw health cron artifacts continue to function with no config errors, API breakage, or UI regressions.
 - **[SC-13] Successor sync parity** — every successor task created by `advanceTaskChain` triggers the same outbound side effects as standard task creation, including GitHub issue creation/update and GNAP push where configured.
 - **[SC-14] Product-line request scoping** — filtered REST endpoints and `/api/events` support an authorized requested workspace/product-line scope; facility view supports authorized aggregate events across the tenant's workspaces.
 
@@ -123,7 +123,7 @@ Result: the fork supports running one product (FocusEngine), one department, man
 - Rename of SQL `workspaces` table (D2 — upstream compat constraint).
 - Replacing the web UI with a CLI (out of scope; covered by the separate 2026-03-20 PRD).
 - Staged workflows for non-GitHub workflow families (Release Readiness, etc.) — deferred to phase 2+.
-- Silently normalizing HAL/OpenClaw-only assumptions into upstream Mission Control core behavior.
+- Silently normalizing OpenClaw-only assumptions into upstream Mission Control core behavior.
 
 ## 3) Compatibility Snapshot
 
@@ -141,7 +141,7 @@ This is the current honest fork-pressure picture.
 - Reading electricity / infra telemetry from `~/.openclaw/health/readings.jsonl`
 - Reading `~/.openclaw/health/current-rate.json`
 - Reading `~/.openclaw/health/cost.json`
-- Any UI or API surfaces that render those HAL/OpenClaw-specific cost metrics
+- Any UI or API surfaces that render those OpenClaw-specific cost metrics
 
 ### Explicitly `upstream-divergent` unless upstream accepts them
 
@@ -160,7 +160,7 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1 unless a live sc
 
 ## 4) Personas
 
-1. **Facility operator** (`fgabelmannjr` today) — runs multiple product lines, needs focus mode + cross-product awareness. Primary user.
+1. **Facility operator** (`operator` today) — runs multiple product lines, needs focus mode + cross-product awareness. Primary user.
 2. **Future product-line owner** — delegate for a single product line. May be ACL-restricted in v2 (D4e deferred).
 3. **Autonomous agent** — **subject** of the system, not a user. Consumes templates, produces structured output matching `output_schema`. **Does NOT** create or choose successor templates.
 4. **External contributor** — files GitHub issues, receives disposition comments on closure, sees `mc:*` / `area:*` / `priority:*` labels.
@@ -282,7 +282,7 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1 unless a live sc
 ### J. Resource governance (D12)
 
 - **FR-J1:** Reuse existing token/cost telemetry (`/cost-tracker`, `/api/tokens`, task-cost reports, provider-subscription detection) as the measurement layer. Do not duplicate token ingestion unless a missing event source is identified.
-- **FR-J1a:** Ingest HAL OpenClaw health telemetry from `~/.openclaw/health/readings.jsonl`, `current-rate.json`, and `cost.json` into Mission Control's cost surface as electricity / infrastructure usage records. Preserve backward compatibility of `/api/tokens` by adding additive response fields or actions rather than breaking existing consumers.
+- **FR-J1a:** Ingest OpenClaw health telemetry from `~/.openclaw/health/readings.jsonl`, `current-rate.json`, and `cost.json` into Mission Control's cost surface as electricity / infrastructure usage records. Preserve backward compatibility of `/api/tokens` by adding additive response fields or actions rather than breaking existing consumers.
 - **FR-J1b:** OpenClaw health electricity / infra support is `fork-only optional` in v1. It must be controlled by a dedicated flag such as `FEATURE_OPENCLAW_HEALTH_COSTS` and an explicit config path. If the flag is OFF or the files/config are absent, Mission Control behaves exactly as it does today.
 - **FR-J1c:** v1 OpenClaw health electricity / infra support requires **no schema migration**. It is implemented as a runtime adapter, not a persistent core-table dependency.
 - **FR-J2:** Add `resource_policies` and `resource_policy_events` tables. Policies are scoped by any combination of workspace/product line, project/department, task status, template slug, agent role, agent, provider, model, and period/window.
@@ -298,20 +298,20 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1 unless a live sc
 - **FR-J10:** Real-time rate windows from OpenClaw health telemetry may drive degraded/blackout policy for high-draw local workloads. Governance must allow operator-defined policy on whether electricity price spikes pause only local-model work or all autonomous work.
 - **FR-J11:** If OpenClaw health telemetry is unavailable, unreadable, or malformed, Mission Control must degrade gracefully: no scheduler crash, no API contract breakage, and no false governance block based on missing infra data.
 
-### K. FocusEngine pilot (pilot)
+### K. Product Line A pilot (pilot)
 
-- **FR-K1:** Seed the `facility` workspace + FocusEngine workspace + per-department projects (QA, Development, DevSecOps, Marketing, Customer Service, Finance). Do not create `macos`, `ui`, `website`, or `docs` projects; represent those as task labels/metadata under the appropriate department.
-- **FR-K2:** Seed the FocusEngine workflow family: `focusengine_issue_triage`, `focusengine_remediation_plan`, `focusengine_specialist_route`, `focusengine_owner_review`, `focusengine_close_issue`, `focusengine_dev_implementation`, `focusengine_review`, `focusengine_aegis` (Aegis is invoked by scheduler, not a template, but the flow is documented).
+- **FR-K1:** Seed the `facility` workspace + Product Line A workspace + per-department projects (QA, Development, DevSecOps, Marketing, Customer Service, Finance). Do not create `macos`, `ui`, `website`, or `docs` projects; represent those as task labels/metadata under the appropriate department.
+- **FR-K2:** Seed the Product Line A workflow family: `product-line-a_issue_triage`, `product-line-a_remediation_plan`, `product-line-a_specialist_route`, `product-line-a_owner_review`, `product-line-a_close_issue`, `product-line-a_dev_implementation`, `product-line-a_review`, `product-line-a_aegis` (Aegis is invoked by scheduler, not a template, but the flow is documented).
 - **FR-K3:** Map agent roles to `project_agent_assignments`:
-  - `researcher` → `focusengine-macos-research`
-  - `planner` → `focusengine-macos-planner`
-  - `dev` → `focusengine-macos-dev`
-  - `ui` → `focusengine-macos-ui`
-  - `devsecops` → `focusengine-macos-devsecops`
-  - `qa` → `focusengine-macos-qa`
-- **FR-K4:** Point FocusEngine workspace's GitHub repo at `fgabelmannjr/focusengine` (or `racecraft-lab/focusengine`, whichever is canonical at rollout).
-- **FR-K5:** Trigger pilot with FocusEngine issue #110 (canonical pilot trigger). The historical smoke plan lives in the operator's Obsidian vault (informational reference; not required for autopilot ingestion). The seed script falls back to a synthetic issue titled `[mc-pilot] synthetic e2e issue` if #110 is unavailable; second smoke on #111 or a second synthetic.
-- **FR-K6:** Treat existing synced FocusEngine GitHub issue tasks as unprocessed intake. Preserve GitHub linkage and sync metadata, move them into FocusEngine triage/intake, and start the new departmental workflow from triage.
+  - `researcher` → `product-line-a-platform-research`
+  - `planner` → `product-line-a-platform-planner`
+  - `dev` → `product-line-a-platform-dev`
+  - `ui` → `product-line-a-platform-ui`
+  - `devsecops` → `product-line-a-platform-devsecops`
+  - `qa` → `product-line-a-platform-qa`
+- **FR-K4:** Point Product Line A workspace's GitHub repo at `<org>/product-line-a-repo` (or `<org>/product-line-a-repo`, whichever is canonical at rollout).
+- **FR-K5:** Trigger pilot with Product Line A issue #110 (canonical pilot trigger). The historical smoke plan lives in the operator's Obsidian vault (informational reference; not required for autopilot ingestion). The seed script falls back to a synthetic issue titled `[mc-pilot] synthetic e2e issue` if #110 is unavailable; second smoke on #111 or a second synthetic.
+- **FR-K6:** Treat existing synced Product Line A GitHub issue tasks as unprocessed intake. Preserve GitHub linkage and sync metadata, move them into Product Line A triage/intake, and start the new departmental workflow from triage.
 
 ## 6) Data Model Changes (Additive Migrations)
 
@@ -481,7 +481,7 @@ CREATE INDEX idx_resource_policy_events_task
 3. Departmental / staged-handoff behavior opt-in, feature-flagged, or null-default.
 4. Aegis is a global facility-wide singleton (D3 formalizes this).
 5. Preserve `builderz/main` upstream compatibility (D2 enforces this).
-6. HAL/OpenClaw-only integrations must remain optional, disabled by default, and absent-safe.
+6. OpenClaw-only integrations must remain optional, disabled by default, and absent-safe.
 
 ## 9) Risks & Mitigations
 
@@ -497,7 +497,7 @@ CREATE INDEX idx_resource_policy_events_task
 | R8 | Feature-flag sprawl — too many flags, unclear defaults | All new flags default to OFF; flipping ON is a manual operator decision per product line. |
 | R9 | ChatGPT Pro / subscribed-provider cost reads as `$0`, hiding runaway usage | D12 separates estimated marginal USD from token/request/session/WIP budgets. Raw usage budgets still enforce even when dollar cost is zero. |
 | R10 | "Additive" schema changes are mistaken for upstream-safe changes | D13 forces explicit compatibility labeling; roadmap must mark schema/state divergence as fork pressure before implementation. |
-| R11 | OpenClaw health electricity integration leaks HAL assumptions into upstream installs | Keep it fork-only optional, runtime-adapter-based, absent-safe, and behind its own flag with no schema migration in v1. |
+| R11 | OpenClaw health electricity integration leaks OpenClaw-node-specific assumptions into upstream installs | Keep it fork-only optional, runtime-adapter-based, absent-safe, and behind its own flag with no schema migration in v1. |
 
 ## 10) Open Questions (deferred)
 
@@ -519,8 +519,8 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 | 5 | Area labels + GitHub sync updates | Yes — fallback to `area:triage` | `upstream-safe` |
 | 6 | Disposition logging + artifact store + audit/admin panels | Yes — purely additive | `upstream-divergent` |
 | 7 | Resource governance + Cost Tracker enforcement | Yes — flag-off default | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` |
-| 8 | FocusEngine pilot (issue #110, then #111) | Gated behind pilot feature flag | Fork rollout only |
-| 9 | Second product line onboarding (Racecraft Lab) | Post-pilot | Fork rollout only |
+| 8 | Product Line A pilot (issue #110, then #111) | Gated behind pilot feature flag | Fork rollout only |
+| 9 | Second product line onboarding (Product Line B) | Post-pilot | Fork rollout only |
 
 ### Autopilot Caveats (per spec)
 
@@ -532,6 +532,6 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 ## 12) Success Measurement
 
 - Every single-workspace deployment passes the existing test suite post-migration: **PASS gate**.
-- FocusEngine issue #110 completes end-to-end through the pipeline with no operator intervention beyond PR merge (the `G_PILOT_MERGE` human gate): **PILOT gate**.
+- Product Line A issue #110 completes end-to-end through the pipeline with no operator intervention beyond PR merge (the `G_PILOT_MERGE` human gate): **PILOT gate**.
 - Disposition dashboard and artifact admin health panels show 7-day rollups / storage health for at least one product line: **TELEMETRY gate**.
 - Second product line onboarding completes in < 1 operator-hour: **SCALE gate** (manual measurement).

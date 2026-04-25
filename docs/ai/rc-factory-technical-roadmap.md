@@ -15,7 +15,7 @@ tags:
 status: active
 type: technical-roadmap
 name: mission-control-departmental-architecture
-owner: fgabelmannjr
+owner: operator
 ---
 
 # Mission Control Departmental Architecture — Technical Roadmap
@@ -27,10 +27,10 @@ owner: fgabelmannjr
 1. **Additive or compatibility-preserving migrations only.** No destructive schema changes. Do not assume column renames or CHECK rebuilds are safe unless the live schema proves the column/constraint exists and rollback compatibility is documented.
 2. **Feature flags for every new runtime behavior.** All flags default OFF. Flipping ON is an explicit operator action per product line, stored in the documented feature-flag storage mechanism.
 3. **Ship each phase to production** behind its flag before enabling. Deploy code ≠ activate behavior.
-4. **Dev-first, flag-scoped canary on live.** Write and commit changes in `~/mission-control` (dev worktree, `codex/openclaw-nodes-fallback`). Promote via PR merge to `main` → `git fetch` + `pnpm build` + restart `next-server` in `~/mission-control-sync` (the live worktree). The "canary" is a feature flag flipped for ONE workspace (e.g., the facility workspace or a dedicated test workspace) on the live service, validated, then promoted to wider workspaces. There is no separate canary environment on HAL; there is ONE live MC and flag-scoping provides the safety.
+4. **Dev-first, flag-scoped canary on live.** Write and commit changes in `~/mission-control` (dev worktree, `codex/openclaw-nodes-fallback`). Promote via PR merge to `main` → `git fetch` + `pnpm build` + restart `next-server` in `~/mission-control-sync` (the live worktree). The "canary" is a feature flag flipped for ONE workspace (e.g., the facility workspace or a dedicated test workspace) on the live service, validated, then promoted to wider workspaces. There is no separate canary environment on the OpenClaw node; there is ONE live MC and flag-scoping provides the safety.
 5. **Upstream compat gate** on every PR: cherry-pick candidates from `builderz-labs/main` should still apply cleanly.
 6. **Prefer upstream-safe extensions over schema divergence.** If the same goal can be achieved with an additive adapter, config path, or feature-flagged runtime hook, choose that before adding schema.
-7. **HAL/OpenClaw-specific features are fork-only adapters.** They must be disabled by default and no-op cleanly when absent.
+7. **OpenClaw-specific features are fork-only adapters.** They must be disabled by default and no-op cleanly when absent.
 
 ## Upstream Impact Rubric
 
@@ -38,7 +38,7 @@ owner: fgabelmannjr
 |---|---|
 | `upstream-safe` | additive, opt-in, and realistic to upstream |
 | `upstream-divergent` | runtime-safe for current installs, but introduces schema/state/API divergence that increases permanent-fork pressure unless upstream accepts it |
-| `fork-only optional` | HAL/OpenClaw/local-environment-specific adapter that must remain absent-safe and disabled by default |
+| `fork-only optional` | OpenClaw/local-environment-specific adapter that must remain absent-safe and disabled by default |
 
 ## Phase Map (At a Glance)
 
@@ -52,8 +52,8 @@ owner: fgabelmannjr
 | 5 | Area-label GitHub sync | Yes | `FEATURE_AREA_LABEL_ROUTING` | `upstream-safe` | Phase 8 |
 | 6 | Disposition logging + artifact store + audit/admin panels | Yes | `FEATURE_DISPOSITION_LOGGING`, `FEATURE_TASK_ARTIFACTS` | `upstream-divergent` | Phase 8 |
 | 7 | Resource governance + Cost Tracker enforcement | Yes | `FEATURE_RESOURCE_GOVERNANCE`, `FEATURE_OPENCLAW_HEALTH_COSTS` | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` | Phase 8 |
-| 8 | FocusEngine pilot — end-to-end smoke | Pilot gate | `PILOT_FOCUSENGINE_E2E` | Fork rollout only | Phase 9 |
-| 9 | Racecraft Lab onboarding | Post-pilot | — | Fork rollout only | — |
+| 8 | Product Line A pilot — end-to-end smoke | Pilot gate | `PILOT_PRODUCT_LINE_A_E2E` | Fork rollout only | Phase 9 |
+| 9 | Product Line B onboarding | Post-pilot | — | Fork rollout only | — |
 
 ## SpecKit-Pro Autopilot Usage
 
@@ -75,7 +75,7 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 - **SPEC-001 is migration-only.** Treat `clarify`, `checklist`, and `analyze` phases as minimal: zero `[NEEDS CLARIFICATION]` markers are expected; checklist gaps should resolve to "N/A — pure-schema spec"; analyze findings are limited to migration safety/idempotency. `/speckit.implement` performs the migration writes and the per-migration smoke checks listed in P0-AC1..AC10.
 - **SPEC-009 has a human gate.** The pilot's "operator merges PR on GitHub" step is recorded as `G_PILOT_MERGE`. Autopilot stops after observing `ready_for_owner` and resumes (or marks complete) when `pullFromGitHub` records the linked PR merge. AC items P8-AC1, P8-AC6, P8-AC7 are explicitly MANUAL and live in the Pilot Smoke Checklist (`docs/qa/pilot-smoke-checklist.md`); they are NOT validated by `gate-validator`. P8-AC5 (PR merge → `done` transition) IS code-checkable via a webhook fixture and remains in the gate set.
 - **Real-system smoke (Phase 8/9) wall-clock ACs are MANUAL:** P8-AC6 ("<4h wall-clock") and P9-AC1 ("<1 operator-hour") cannot be tested by `implement-executor` TDD. Each is recorded only in the Pilot Smoke Checklist and is asserted by the operator after the pilot run.
-- **Issue #110 reproducibility:** if FocusEngine GitHub issue #110 has been closed, deleted, or substantively mutated by the time SPEC-009 runs, the seed script falls back to creating a synthetic test issue with title `[mc-pilot] synthetic e2e issue` and labels `mc:inbox priority:medium area:dev`. The pilot smoke checklist documents both modes.
+- **Issue #110 reproducibility:** if Product Line A GitHub issue #110 has been closed, deleted, or substantively mutated by the time SPEC-009 runs, the seed script falls back to creating a synthetic test issue with title `[mc-pilot] synthetic e2e issue` and labels `mc:inbox priority:medium area:dev`. The pilot smoke checklist documents both modes.
 
 ## SpecKit-Pro Status Policy
 
@@ -98,8 +98,8 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 | SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002 | SPEC-009 | Phase 5 |
 | SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-004 | SPEC-009 | Phase 6 |
 | SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-004 | SPEC-009 | Phase 7 |
-| SPEC-009 | 8 | FocusEngine Pilot End-to-End Smoke | focusengine-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
-| SPEC-010 | 9 | Racecraft Lab Product-Line Onboarding | racecraft-lab-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
+| SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
+| SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
 
 ## Feature Flag Resolution Policy
 
@@ -108,11 +108,11 @@ Every `FEATURE_*` flag named in this roadmap is resolved by a single helper, `re
 1. **Hard-default OFF** — every flag's baseline value is `false`.
 2. **Per-workspace JSON override (M56b storage):** `workspaces.feature_flags JSON` may contain `{ "FEATURE_X": true }` for a specific workspace; that value wins for that workspace.
 3. **Process env override (emergency disable / kill-switch):** `process.env.FEATURE_X === '0'` ALWAYS forces the flag OFF regardless of JSON state. `process.env.FEATURE_X === '1'` does NOT force ON; only JSON can opt a workspace in.
-4. **Global flag without workspace context:** when called with no workspace (e.g., from `auto-route` cron loops), resolution uses `workspace_id = null` → returns OFF unless an env var explicitly forces a value (rare, used only for `PILOT_FOCUSENGINE_E2E`).
+4. **Global flag without workspace context:** when called with no workspace (e.g., from `auto-route` cron loops), resolution uses `workspace_id = null` → returns OFF unless an env var explicitly forces a value (rare, used only for `PILOT_PRODUCT_LINE_A_E2E`).
 
-Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATURE_GLOBAL_AEGIS`, `FEATURE_TASK_PIPELINES`, `FEATURE_TWO_STEP_TERMINAL`, `FEATURE_AREA_LABEL_ROUTING`, `FEATURE_DISPOSITION_LOGGING`, `FEATURE_TASK_ARTIFACTS`, `FEATURE_RESOURCE_GOVERNANCE`, `FEATURE_OPENCLAW_HEALTH_COSTS`, `PILOT_FOCUSENGINE_E2E`) MUST resolve through this helper. Inline `process.env.FEATURE_X` checks are forbidden; CI greps for them and fails on match.
+Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATURE_GLOBAL_AEGIS`, `FEATURE_TASK_PIPELINES`, `FEATURE_TWO_STEP_TERMINAL`, `FEATURE_AREA_LABEL_ROUTING`, `FEATURE_DISPOSITION_LOGGING`, `FEATURE_TASK_ARTIFACTS`, `FEATURE_RESOURCE_GOVERNANCE`, `FEATURE_OPENCLAW_HEALTH_COSTS`, `PILOT_PRODUCT_LINE_A_E2E`) MUST resolve through this helper. Inline `process.env.FEATURE_X` checks are forbidden; CI greps for them and fails on match.
 
-`PILOT_FOCUSENGINE_E2E` is the one exception that may also be flipped via env (it is operator-temporary). All other flags route through `workspaces.feature_flags`.
+`PILOT_PRODUCT_LINE_A_E2E` is the one exception that may also be flipped via env (it is operator-temporary). All other flags route through `workspaces.feature_flags`.
 
 ## Spec Details for Autopilot Setup
 
@@ -223,37 +223,37 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Enables:** SPEC-009
 - **Scope source:** Phase 7 — Resource Governance + Cost Tracker Enforcement
 - **Acceptance criteria source:** Phase 7 Acceptance Criteria
-- **Scope summary:** Extend Cost Tracker into feature-flagged scheduler enforcement for WIP, blackout/degraded windows, budgets, policy events, operator overrides, and optional runtime-only HAL/OpenClaw electricity/infra cost visibility.
+- **Scope summary:** Extend Cost Tracker into feature-flagged scheduler enforcement for WIP, blackout/degraded windows, budgets, policy events, operator overrides, and optional runtime-only OpenClaw electricity/infra cost visibility.
 - **Tool count / tool names:** N/A — not a tool-surface spec
 - **Autopilot notes:** Do not duplicate token/cost telemetry. `FEATURE_RESOURCE_GOVERNANCE=false` preserves legacy scheduler behavior. `FEATURE_OPENCLAW_HEALTH_COSTS` is fork-only optional, runtime-only, absent-safe, and must require no v1 schema migration.
 - **Definition of done:** Phase 7 deliverables are implemented, P7 acceptance criteria pass for legacy behavior, empty-policy allow, WIP limits, blackout/degraded windows, soft/hard budgets, subscription raw-usage enforcement, OpenClaw absence safety, valid telemetry display, and fail-safe policy evaluation.
 
-### SPEC-009: FocusEngine Pilot End-to-End Smoke
+### SPEC-009: Product Line A Pilot End-to-End Smoke
 
 - **Status:** Pending
 - **Priority:** P0
-- **Branch short name:** `focusengine-pilot`
+- **Branch short name:** `product-line-a-pilot`
 - **Dependencies:** SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008
 - **Enables:** SPEC-010
-- **Scope source:** Phase 8 — FocusEngine Pilot (End-to-End Smoke)
+- **Scope source:** Phase 8 — Product Line A Pilot (End-to-End Smoke)
 - **Acceptance criteria source:** Phase 8 Acceptance Criteria
-- **Scope summary:** Activate Phase 1–7 feature flags for FocusEngine, seed the workspace, departments, agent assignments, workflow templates, GitHub repo routing, existing issue intake, conservative governance policies, and run issue #110 then #111 through the full workflow.
+- **Scope summary:** Activate Phase 1–7 feature flags for Product Line A, seed the workspace, departments, agent assignments, workflow templates, GitHub repo routing, existing issue intake, conservative governance policies, and run issue #110 then #111 through the full workflow.
 - **Tool count / tool names:** N/A — not a tool-surface spec
-- **Autopilot notes:** This is an integration smoke spec, not new architecture design. Preserve existing GitHub linkage and sync metadata for previously synced FocusEngine issues. Operator intervention is allowed only for final PR merge in the primary pilot path.
+- **Autopilot notes:** This is an integration smoke spec, not new architecture design. Preserve existing GitHub linkage and sync metadata for previously synced Product Line A issues. Operator intervention is allowed only for final PR merge in the primary pilot path.
 - **Definition of done:** Phase 8 deliverables are implemented, P8 acceptance criteria pass for issue #110 end-to-end, disposition record, stage assignments, Aegis approval, `ready_for_owner → done` transition, audit trail, wall-clock target, and governance compliance.
 
-### SPEC-010: Racecraft Lab Product-Line Onboarding
+### SPEC-010: Product Line B Product-Line Onboarding
 
 - **Status:** Pending
 - **Priority:** P3
-- **Branch short name:** `racecraft-lab-onboarding`
+- **Branch short name:** `product-line-b-onboarding`
 - **Dependencies:** SPEC-009
 - **Enables:** —
-- **Scope source:** Phase 9 — Racecraft Lab Onboarding (Scale Validation)
+- **Scope source:** Phase 9 — Product Line B Onboarding (Scale Validation)
 - **Acceptance criteria source:** Phase 9 Acceptance Criteria
-- **Scope summary:** Generalize product-line seeding, onboard Racecraft Lab as the second product line, provision isolated agents, adapt workflow templates, configure the canonical repo, and run a first real issue smoke.
+- **Scope summary:** Generalize product-line seeding, onboard Product Line B as the second product line, provision isolated agents, adapt workflow templates, configure the canonical repo, and run a first real issue smoke.
 - **Tool count / tool names:** N/A — not a tool-surface spec
-- **Autopilot notes:** Validate scale and repeatability rather than redesigning the architecture. FocusEngine must remain unaffected. Facility agents serve both product lines while product-line agents remain strictly isolated.
+- **Autopilot notes:** Validate scale and repeatability rather than redesigning the architecture. Product Line A must remain unaffected. Facility agents serve both product lines while product-line agents remain strictly isolated.
 - **Definition of done:** Phase 9 deliverables are implemented, P9 acceptance criteria pass for sub-1-hour onboarding, strict agent isolation, shared facility agents, and per-workspace dashboard disposition metrics.
 
 ---
@@ -281,7 +281,7 @@ Foundation migrations/seed steps M53–M61 (eleven additive items, including M56
 
 ### Deliverables
 
-- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / HAL to `global`.
+- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / OpenClaw to `global`.
 - **M54** — agent filesystem "workspace" terminology becomes "Sandbox" at UI/config level. Live schema verification on 2026-04-24 confirms `agents.workspace_path` DOES exist (added by an earlier migration that conditionally runs `ALTER TABLE agents ADD COLUMN workspace_path TEXT`). v1 decision: **keep the column name `workspace_path` as-is**; rename only UI labels, config keys, type names (`AgentSandbox`), error messages, log strings, and external doc copy. No SQL `RENAME COLUMN` ships in v1. A future `M-future` may add `sandbox_path` with a dual-write/cutover plan if upstream parity becomes a requirement.
 - **M55** — add `ready_for_owner` to the application task-status vocabulary. Live schema verification on 2026-04-24 confirms `tasks.status` is `TEXT NOT NULL DEFAULT 'inbox'` with NO database CHECK constraint (only an inline comment listing valid values at `src/lib/schema.sql:9`). M55 therefore makes NO DB-level CHECK change; status enforcement is application-level via the existing TypeScript/Zod validation layer plus `STATUS_LABEL_MAP`. Add `ready_for_owner` to: the TS/Zod status union, `STATUS_LABEL_MAP`, `ALL_STATUS_LABEL_NAMES`, and the kanban column ordering. The DB column itself does not change.
 - **M56** — `workflow_templates` gains task-chain columns: `slug`, `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, `external_terminal_event`. A "task-chain template" is a domain alias over `workflow_templates`, not a new SQL table.
@@ -381,9 +381,9 @@ Introduce the product-line switcher in the header, wire Zustand `activeWorkspace
 
 - [P1-AC1] With flag OFF, the existing Vitest + Playwright test suite (`pnpm test:all`) passes unchanged from the pre-Phase-1 baseline commit. "Zero regression" is defined as: 0 new test failures, 0 changed test counts, and 0 visible diffs in the existing Playwright snapshot suite (`tests/e2e/snapshots/*`).
 - [P1-AC2] With flag ON and `activeWorkspace = null`, the same `pnpm test:all` suite passes unchanged (facility-aggregate view is byte-equivalent to flag-OFF for existing tests).
-- [P1-AC3] The "Facility" dropdown entry corresponds to `activeWorkspace = null` (Facility aggregate view per P1-AC2), **not** the real `workspaces.slug='facility'` row. The real facility workspace is never selected directly through the switcher; it hosts `scope='global'` agents (Aegis, Security Guardian, HAL) that surface across every product-line view. Agent squad and other filtered panels MUST render these globals alongside workspace-scoped agents regardless of `activeWorkspace`.
-- [P1-AC4] With flag ON and `activeWorkspace = focusengine` (pre-seeded), filtered panels show only FocusEngine data; aggregate panels show everything.
-- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → FocusEngine → {QA, Dev, ...} → {agents}.
+- [P1-AC3] The "Facility" dropdown entry corresponds to `activeWorkspace = null` (Facility aggregate view per P1-AC2), **not** the real `workspaces.slug='facility'` row. The real facility workspace is never selected directly through the switcher; it hosts `scope='global'` agents (Aegis, Security Guardian, OpenClaw) that surface across every product-line view. Agent squad and other filtered panels MUST render these globals alongside workspace-scoped agents regardless of `activeWorkspace`.
+- [P1-AC4] With flag ON and `activeWorkspace = product-line-a` (pre-seeded), filtered panels show only Product Line A data; aggregate panels show everything.
+- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → Product Line A → {QA, Dev, ...} → {agents}.
 - [P1-AC6] Cross-tab state sync: a Playwright test that opens two browser contexts, sets `activeWorkspace` in context A, and observes the change reflected in context B within 1s passes. When `BroadcastChannel` is unavailable (older browser stub), the persisted value still propagates after a context-B reload.
 - [P1-AC7] `activeTenant` remains independent from `activeWorkspace`; switching product lines does not mutate tenant context.
 - [P1-AC8] Header no longer labels tenant context as "Workspace." Specifically, ripgrep over `src/components/layout/header-bar.tsx` finds zero string matches for `'workspace'` used as a tenant-context label; tenant context is labeled "Tenant" or shown without a label.
@@ -714,8 +714,8 @@ Mixed:
 - **Scheduler gates**: call the evaluator before `autoRouteInboxTasks`, `dispatchAssignedTasks`, `advanceTaskChain`, and `runAegisReviews`. The exact call sites in `src/lib/task-dispatch.ts` and `src/lib/scheduler.ts` are documented in the SPEC-008 workflow file.
 - **Policy-backed defaults**: preserve current behavior when the flag is OFF; when ON, replace hard-coded `LIMIT 3` and "3+ in-progress tasks" capacity checks with seeded default WIP policies.
 - **Cost Tracker UI extension**: add a "Governance" view/tab showing budget utilization, raw token/request/session usage, WIP by scope, active blackout/degraded windows, upcoming windows, policy decisions, and overrides.
-- **Budget semantics**: separate `estimated_marginal_cost_usd` from raw usage budgets. HAL's OpenAI ChatGPT Pro setup may show `$0` estimated marginal cost, but token/request/session/WIP budgets still enforce.
-- **Electricity / infra ingestion**: behind `FEATURE_OPENCLAW_HEALTH_COSTS`, read HAL OpenClaw health artifacts (`~/.openclaw/health/readings.jsonl`, `current-rate.json`, `cost.json`) into a facility-cost model exposed through the Cost Tracker API/UI.
+- **Budget semantics**: separate `estimated_marginal_cost_usd` from raw usage budgets. the OpenClaw node's OpenAI ChatGPT Pro setup may show `$0` estimated marginal cost, but token/request/session/WIP budgets still enforce.
+- **Electricity / infra ingestion**: behind `FEATURE_OPENCLAW_HEALTH_COSTS`, read OpenClaw health artifacts (`~/.openclaw/health/readings.jsonl`, `current-rate.json`, `cost.json`) into a facility-cost model exposed through the Cost Tracker API/UI.
 - **Blended cost semantics**: keep token/API cost and electricity/infra cost distinct, but expose combined totals for budgeting and operator visibility.
 - **Adapter discipline**: OpenClaw health cost support remains runtime-only in v1. No schema migration. If the files/config are absent, the adapter returns empty data and Cost Tracker / scheduler continue normally.
 - **Policy audit**: write every non-allow decision to `resource_policy_events` and emit activity/notification records for operator visibility.
@@ -727,7 +727,7 @@ Mixed:
 - `src/lib/task-dispatch.ts` — evaluator calls before routing, dispatch, chain advancement, and Aegis review
 - `src/app/api/resource-policies/route.ts` and `src/app/api/resource-policy-events/route.ts` (new)
 - `src/app/api/tokens/route.ts` — expose governance summary data or reuse existing aggregates
-- `src/lib/openclaw-health-costs.ts` (new) — read/normalize electricity rate, power, energy, and cost snapshots from HAL OpenClaw health files
+- `src/lib/openclaw-health-costs.ts` (new) — read/normalize electricity rate, power, energy, and cost snapshots from OpenClaw health files
 - `src/components/panels/cost-tracker-panel.tsx` — governance tab/view
 - `src/components/panels/task-board-panel.tsx` — WIP-limit indicators on columns where useful
 - `src/lib/migrations.ts`, `src/lib/schema.sql` — M60/M61
@@ -737,7 +737,7 @@ Mixed:
 - [P7-AC1] With `FEATURE_RESOURCE_GOVERNANCE=false`, existing scheduler behavior is unchanged.
 - [P7-AC2] With the flag ON and no policies enabled, evaluator returns `allow` and logs no blocking events.
 - [P7-AC3] Agent WIP policy `agent_id=a, limit_kind='in_progress_tasks', limit_value=1` prevents a second task from dispatching to that agent and writes a `defer` or `block` event.
-- [P7-AC4] Project/status WIP policy prevents more than the configured number of FocusEngine Development tasks from entering `in_progress`.
+- [P7-AC4] Project/status WIP policy prevents more than the configured number of Product Line A Development tasks from entering `in_progress`.
 - [P7-AC5] Blackout window policy blocks new autonomous dispatch/chain advancement during the window while allowing already-running work to checkpoint or complete.
 - [P7-AC6] Degraded window policy allows only configured critical/local/approved-provider work.
 - [P7-AC7] Soft budget threshold emits alert/activity and allows work to continue.
@@ -749,7 +749,7 @@ Mixed:
 
 ### Rollback
 
-Flip `FEATURE_RESOURCE_GOVERNANCE` OFF. Scheduler returns to legacy behavior. Tables and events remain for auditability. Existing Cost Tracker views continue to work. If needed, also flip `FEATURE_OPENCLAW_HEALTH_COSTS` OFF to remove the fork-only HAL/OpenClaw infra adapter without affecting governance core.
+Flip `FEATURE_RESOURCE_GOVERNANCE` OFF. Scheduler returns to legacy behavior. Tables and events remain for auditability. Existing Cost Tracker views continue to work. If needed, also flip `FEATURE_OPENCLAW_HEALTH_COSTS` OFF to remove the fork-only OpenClaw infra adapter without affecting governance core.
 
 ### Estimated Work
 
@@ -757,28 +757,28 @@ Flip `FEATURE_RESOURCE_GOVERNANCE` OFF. Scheduler returns to legacy behavior. Ta
 
 ---
 
-## Phase 8 — FocusEngine Pilot (End-to-End Smoke)
+## Phase 8 — Product Line A Pilot (End-to-End Smoke)
 
 ### Scope
 
-Activate every Phase 1–7 feature flag, seed FocusEngine workspace + templates + project-agent assignments, set conservative governance policies, and run the pilot on FocusEngine issue #110 (the canonical pilot trigger — the historical smoke plan lives in the operator's Obsidian vault and is not required to be present in this repo for autopilot execution; the synthetic-fallback path documented above ensures Phase 8 is reproducible without it).
+Activate every Phase 1–7 feature flag, seed Product Line A workspace + templates + project-agent assignments, set conservative governance policies, and run the pilot on Product Line A issue #110 (the canonical pilot trigger — the historical smoke plan lives in the operator's Obsidian vault and is not required to be present in this repo for autopilot execution; the synthetic-fallback path documented above ensures Phase 8 is reproducible without it).
 
 ### Deliverables
 
-- **Seed script**: `scripts/seed-focusengine-workspace.ts`:
+- **Seed script**: `scripts/seed-product-line-a-workspace.ts`:
   - Ensure `facility` workspace exists (idempotent, using `workspaces.name`).
-  - Create FocusEngine workspace (`slug='focusengine'`, `name='FocusEngine'`).
+  - Create Product Line A workspace (`slug='product-line-a'`, `name='Product Line A'`).
   - Create per-department projects (QA, Development, DevSecOps, Marketing, Customer Service, Finance).
   - Seed product-surface/component metadata or labels (macOS App, Website, Documentation, UI, integrations, licensing/billing, onboarding) without creating separate department projects for them.
-  - Populate `project_agent_assignments` mapping roles to the six `focusengine-macos-*` agents.
-  - Insert the FocusEngine workflow-family records into `workflow_templates`, including slugs and task-chain routing fields.
-  - Set the FocusEngine department projects' GitHub repo to `fgabelmannjr/focusengine` (or canonical repo) while preserving repo-level sync ownership/dedupe.
-  - Migrate existing synced FocusEngine GitHub issue tasks as unprocessed intake into FocusEngine triage/intake while preserving GitHub linkage and sync metadata.
+  - Populate `project_agent_assignments` mapping roles to the six `product-line-a-platform-*` agents.
+  - Insert the Product Line A workflow-family records into `workflow_templates`, including slugs and task-chain routing fields.
+  - Set the Product Line A department projects' GitHub repo to `<org>/product-line-a-repo` (or canonical repo) while preserving repo-level sync ownership/dedupe.
+  - Migrate existing synced Product Line A GitHub issue tasks as unprocessed intake into Product Line A triage/intake while preserving GitHub linkage and sync metadata.
 - **Flag activation**: enable all Phase 1–7 flags in the product-line scope.
-- **Governance seed**: enable conservative FocusEngine defaults (for example one active dev task per dev agent, WIP cap per department column, no autonomous work during configured blackout windows, and token/request/session budgets even for subscribed providers).
-- **Pilot trigger**: label FocusEngine issue #110 with `mc:inbox` + `priority:*` + `area:dev` (or appropriate area). If issue #110 is unavailable (closed, deleted, mutated beyond recognition), the seed script falls back to creating a synthetic issue titled `[mc-pilot] synthetic e2e issue` with the same labels in the FocusEngine repo. Verify:
+- **Governance seed**: enable conservative Product Line A defaults (for example one active dev task per dev agent, WIP cap per department column, no autonomous work during configured blackout windows, and token/request/session budgets even for subscribed providers).
+- **Pilot trigger**: label Product Line A issue #110 with `mc:inbox` + `priority:*` + `area:dev` (or appropriate area). If issue #110 is unavailable (closed, deleted, mutated beyond recognition), the seed script falls back to creating a synthetic issue titled `[mc-pilot] synthetic e2e issue` with the same labels in the Product Line A repo. Verify:
   - MC ingests it via `pullFromGitHub`.
-  - Routes to FocusEngine › Dev project.
+  - Routes to Product Line A › Dev project.
   - Triage template runs → researcher agent produces structured output.
   - Scheduler advances chain → plan → dev → review → Aegis → ready_for_owner.
   - Pilot HUMAN GATE `G_PILOT_MERGE`: operator merges PR on GitHub → task → `done` via `pullFromGitHub`. Autopilot stops at `ready_for_owner` and awaits operator action; this is the only intentional human-in-the-loop checkpoint in the otherwise-autonomous workflow.
@@ -803,7 +803,7 @@ Manual (recorded in `docs/qa/pilot-smoke-checklist.md`; NOT validated by `gate-v
 
 ### Rollback
 
-Per-flag rollback. Worst case: flip `PILOT_FOCUSENGINE_E2E` and `FEATURE_RESOURCE_GOVERNANCE` OFF and revert to explicit operator assignment (Pattern 1 from the Mission Control orchestration patterns reference; see `docs/orchestration.md`).
+Per-flag rollback. Worst case: flip `PILOT_PRODUCT_LINE_A_E2E` and `FEATURE_RESOURCE_GOVERNANCE` OFF and revert to explicit operator assignment (Pattern 1 from the Mission Control orchestration patterns reference; see `docs/orchestration.md`).
 
 ### Estimated Work
 
@@ -811,26 +811,26 @@ Per-flag rollback. Worst case: flip `PILOT_FOCUSENGINE_E2E` and `FEATURE_RESOURC
 
 ---
 
-## Phase 9 — Racecraft Lab Onboarding (Scale Validation)
+## Phase 9 — Product Line B Onboarding (Scale Validation)
 
 ### Scope
 
-Onboard Racecraft Lab platform as the second product line. Validate that the architecture scales — < 1 operator-hour from zero to running.
+Onboard Product Line B platform as the second product line. Validate that the architecture scales — < 1 operator-hour from zero to running.
 
 ### Deliverables
 
-- **Seed script parameterization**: `scripts/seed-product-line.ts product_line_slug agent_prefix github_repo`. Generalize the FocusEngine seed.
-- **Agent roster**: spin up `racecraftlab-*-dev`, `-ui`, `-qa`, `-devsecops`, `-planner`, `-research` sandboxes (six new docker containers).
-- **Template family**: adapt FocusEngine templates to Racecraft Lab (likely near-identical; only `agent_role` mappings and repo URL change).
-- **GitHub repo**: set `RacecraftLab workspace.github_repo = 'racecraft-lab/platform'` (or canonical repo).
-- **First smoke**: a real Racecraft Lab issue flows through the pipeline.
+- **Seed script parameterization**: `scripts/seed-product-line.ts product_line_slug agent_prefix github_repo`. Generalize the Product Line A seed.
+- **Agent roster**: spin up `product-line-b-platform-*-dev`, `-ui`, `-qa`, `-devsecops`, `-planner`, `-research` sandboxes (six new docker containers).
+- **Template family**: adapt Product Line A templates to Product Line B (likely near-identical; only `agent_role` mappings and repo URL change).
+- **GitHub repo**: set `ProductLineB workspace.github_repo = '<org>/product-line-b-repo'` (or canonical repo).
+- **First smoke**: a real Product Line B issue flows through the pipeline.
 
 ### Acceptance Criteria
 
 Code-checkable:
 
-- [P9-AC2] Racecraft Lab's agents are strictly isolated from FocusEngine's. Validated by SQL: zero rows in `project_agent_assignments` join across the two workspace_ids share an `agent_name` unless that agent has `agents.scope='global'`.
-- [P9-AC3] Facility agents (Aegis, Security Guardian) serve both product lines without code change. Validated by running the FocusEngine pilot's automated subset (P8 code-checkable ACs) against a Racecraft Lab synthetic issue and asserting Aegis approval succeeds with the same `agents.id`.
+- [P9-AC2] Product Line B's agents are strictly isolated from Product Line A's. Validated by SQL: zero rows in `project_agent_assignments` join across the two workspace_ids share an `agent_name` unless that agent has `agents.scope='global'`.
+- [P9-AC3] Facility agents (Aegis, Security Guardian) serve both product lines without code change. Validated by running the Product Line A pilot's automated subset (P8 code-checkable ACs) against a Product Line B synthetic issue and asserting Aegis approval succeeds with the same `agents.id`.
 - [P9-AC4] Dashboard disposition widget shows metrics per-workspace. Validated by HTTP assertion against `/api/dispositions?workspace_id=<id>` returning workspace-scoped rows.
 
 Manual (recorded in `docs/qa/pilot-smoke-checklist.md`):
@@ -839,7 +839,7 @@ Manual (recorded in `docs/qa/pilot-smoke-checklist.md`):
 
 ### Rollback
 
-Disable Racecraft Lab workspace (set `disabled_at`). FocusEngine unaffected.
+Disable Product Line B workspace (set `disabled_at`). Product Line A unaffected.
 
 ### Estimated Work
 
@@ -858,8 +858,8 @@ Phase 0 (migrations)
     │        └─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
     ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
     ├─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
-    └─→ Phase 8 (FocusEngine pilot) ── depends on ALL of Phase 1–7
-             └─→ Phase 9 (Racecraft Lab onboarding)
+    └─→ Phase 8 (Product Line A pilot) ── depends on ALL of Phase 1–7
+             └─→ Phase 9 (Product Line B onboarding)
 ```
 
 Phase 0 MUST land first. Phases 1, 2, 5 can ship in parallel. Phase 3 gates 4, 6, and 7. Phase 8 gates 9.
@@ -903,7 +903,7 @@ Each phase is independently rollback-safe:
 
 - **Schema migrations** (Phase 0) — manual reverse SQL files at `docs/migrations/rollback-M<53..61>.sql` plus an operator runbook at `docs/migrations/rollback-procedure.md`. The live migration runner (`src/lib/migrations.ts:5-9`) has no `down()` function; rollback is operator-initiated, NOT automatic.
 - **Feature flags** (Phases 1–7) — flip OFF (via `workspaces.feature_flags` JSON or the env-var kill-switch documented in the Feature Flag Resolution Policy) → behavior reverts to pre-phase.
-- **Pilot** (Phase 8) — flip `PILOT_FOCUSENGINE_E2E` OFF; workspace remains, templates remain, but the auto-chain stops; operator can fall back to explicit task assignment (Pattern 1).
+- **Pilot** (Phase 8) — flip `PILOT_PRODUCT_LINE_A_E2E` OFF; workspace remains, templates remain, but the auto-chain stops; operator can fall back to explicit task assignment (Pattern 1).
 - **Product-line onboarding** (Phase 9) — `workspace.disabled_at = NOW()`; sync pauses; agents still run but no new work dispatched.
 
 No destructive rollback required at any phase.

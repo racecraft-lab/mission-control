@@ -39,7 +39,7 @@ Zero-regression migration plan, feature flag strategy, canary rollout path, and 
 | `FEATURE_TWO_STEP_TERMINAL` | OFF | PR-producing tasks transition to `ready_for_owner` after Aegis | Flag OFF → direct `quality_review → done` for all tasks |
 | `FEATURE_AREA_LABEL_ROUTING` | OFF | `pullFromGitHub` routes by `area:*` labels; `pushTaskToGitHub` emits them | Flag OFF → routing falls back to workspace inbox; label not emitted |
 | `FEATURE_DISPOSITION_LOGGING` | OFF | Scheduler inserts into `task_dispositions` on triage completion | Flag OFF → INSERT is no-op; table remains |
-| `PILOT_FOCUSENGINE_E2E` | OFF | FocusEngine pilot with all above flags activated | Flag OFF → fallback to Pattern 1 (explicit operator assignment) |
+| `PILOT_PRODUCT_LINE_A_E2E` | OFF | Product Line A pilot with all above flags activated | Flag OFF → fallback to Pattern 1 (explicit operator assignment) |
 
 ### Flag storage
 
@@ -47,9 +47,9 @@ Flags live in `workspaces.feature_flags JSON` (new column in Phase 0) — one co
 
 Resolution order: request context → workspace flag → tenant default → hardcoded OFF.
 
-## Operational Continuity on HAL (Per-Phase Live-Service Impact)
+## Operational Continuity on the OpenClaw Node (Per-Phase Live-Service Impact)
 
-Verified HAL state (2026-04-22):
+Verified OpenClaw node state (2026-04-22):
 
 - `next-server` runs from `~/mission-control-sync/.next/standalone` → **sync worktree is live**.
 - `openclaw-gateway` runs from `~/openclaw-release-publish-v2026.4.21.7` → **independent of MC worktrees**.
@@ -67,8 +67,8 @@ Verified HAL state (2026-04-22):
 | 4 ready_for_owner | **~30s one restart per deploy** | Flag OFF ⇒ scheduler transitions direct to `done`. New enum value in CHECK constraint but unused until flag ON. |
 | 5 Area labels | **~30s one restart per deploy** | Flag OFF ⇒ sync ignores `area:*` labels; routing falls back to existing inbox behavior. |
 | 6 Disposition log | **~30s one restart per deploy** | Flag OFF ⇒ INSERT is a no-op. Table exists but is quiet. |
-| 7 Pilot | **Zero** | Pilot = flag-flips on already-deployed code; no build/restart. Live service keeps serving other workspaces while FocusEngine workspace is piloted. |
-| 8 Racecraft Lab | **Zero for FocusEngine** | Additive DB rows (new workspace, projects, templates) + new agent sandboxes provisioned via gateway. Gateway does NOT restart. FocusEngine service path untouched. |
+| 7 Pilot | **Zero** | Pilot = flag-flips on already-deployed code; no build/restart. Live service keeps serving other workspaces while Product Line A workspace is piloted. |
+| 8 Product Line B | **Zero for Product Line A** | Additive DB rows (new workspace, projects, templates) + new agent sandboxes provisioned via gateway. Gateway does NOT restart. Product Line A service path untouched. |
 
 **Aggregate downtime across the entire rollout: ~3–4 minutes** split across ~8 restart windows over 7–8 weeks. Each window is a scheduled deploy, not an incident.
 
@@ -100,7 +100,7 @@ Verified HAL state (2026-04-22):
 
 ```
 ┌────────────────────────────────────┐
-│ 1. Merge PR to racecraft-lab/main  │
+│ 1. Merge PR to product-line-b/main  │
 │    (flag OFF by default)           │
 └──────────────┬─────────────────────┘
                │
@@ -121,7 +121,7 @@ Verified HAL state (2026-04-22):
 ┌────────────────────────────────────┐
 │ 4. Enable flag on sync canary      │
 │    (single workspace, e.g.         │
-│    focusengine)                    │
+│    product-line-a)                    │
 └──────────────┬─────────────────────┘
                │
                ▼
@@ -264,17 +264,17 @@ ALTER TABLE agents DROP COLUMN scope;
 
 ### Phase 7 (Pilot)
 
-1. Flip `PILOT_FOCUSENGINE_E2E` OFF.
+1. Flip `PILOT_PRODUCT_LINE_A_E2E` OFF.
 2. All dependent flags remain at their per-workspace settings.
 3. Operator manually assigns tasks via Pattern 1 (explicit assignment).
 4. Existing pilot tasks in flight: if chain is broken mid-flow, operator can (a) manually complete via UI, or (b) delete the task and re-create.
 
-### Phase 8 (Racecraft Lab)
+### Phase 8 (Product Line B)
 
-1. `UPDATE workspaces SET disabled_at = CURRENT_TIMESTAMP WHERE slug = 'racecraft-lab'`.
+1. `UPDATE workspaces SET disabled_at = CURRENT_TIMESTAMP WHERE slug = 'product-line-b'`.
 2. Sync pauses (ignores disabled workspaces).
 3. Agents remain running but no new work dispatched.
-4. FocusEngine unaffected.
+4. Product Line A unaffected.
 
 ## Upstream Merge Discipline
 
@@ -336,15 +336,15 @@ Assuming single-engineer full-time:
 | 7 | Phases 4 + 5 enabled; Phase 6 in-flight | Two-step terminal + area routing live |
 | 8 | Phase 6 enabled; Phase 7 preparing | Disposition logging live |
 | 9 | Phase 7 running (pilot) | Issue #110 end-to-end |
-| 10 | Phase 7 success; Phase 8 preparing | Pilot validated; Racecraft Lab onboarding begins |
+| 10 | Phase 7 success; Phase 8 preparing | Pilot validated; Product Line B onboarding begins |
 
 Multi-engineer: Phases 1, 2, 5 can parallelize, compressing weeks 2–5.
 
 ## What "Done" Means for the Rollout
 
 - All 8 phases shipped.
-- All feature flags enabled on at least FocusEngine workspace.
-- FocusEngine pilot smoke suite passing end-to-end.
-- Racecraft Lab onboarded within the < 1 hour scale target.
+- All feature flags enabled on at least Product Line A workspace.
+- Product Line A pilot smoke suite passing end-to-end.
+- Product Line B onboarded within the < 1 hour scale target.
 - Zero regressions on any single-workspace deployment running pre-change.
 - Upstream cherry-pick test: next `builderz/main` cherry-pick applies without conflict.

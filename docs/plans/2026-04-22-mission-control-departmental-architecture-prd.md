@@ -4,8 +4,8 @@ up:
 related:
   - "[[Mission Control Departmental Architecture - Current State]]"
   - "[[Mission Control Departmental Architecture - Decisions]]"
-  - "[[OpenClaw macOS Node - FocusEngine Agent Team and Aegis]]"
-  - "[[OpenClaw macOS Node - FocusEngine Issue Workflow Smoke Plan]]"
+  - "[[OpenClaw macOS Node - Product Line A Agent Team and Aegis]]"
+  - "[[OpenClaw macOS Node - Product Line A Issue Workflow Smoke Plan]]"
   - "[[OpenClaw macOS Node - Mission Control Integration]]"
   - "[[Mission Control - Practical Use of Tasks, Workflows, and Pipelines]]"
 created: "2026-04-22"
@@ -17,7 +17,7 @@ tags:
 status: active
 type: prd
 name: mission-control-departmental-architecture
-owner: fgabelmannjr
+owner: operator
 ---
 
 # Mission Control Departmental Architecture PRD
@@ -26,7 +26,7 @@ owner: fgabelmannjr
 
 ## Goal
 
-Extend the `racecraft-lab/mission-control` fork (upstream `builderz-labs/mission-control`) to support a **facility → product-line → department** operating model, starting with FocusEngine as the first product line and Quality Assurance as the first department. Enable automated multi-stage workflows (researcher → planner → dev → reviewer → Aegis) while preserving every existing single-workspace deployment byte-compatibly.
+Extend the `racecraft-lab/mission-control` fork (upstream `builderz-labs/mission-control`) to support a **facility → product-line → department** operating model, starting with Product Line A as the first product line and Quality Assurance as the first department. Enable automated multi-stage workflows (researcher → planner → dev → reviewer → Aegis) while preserving every existing single-workspace deployment byte-compatibly.
 
 ## Architecture
 
@@ -47,13 +47,13 @@ A new **task pipeline engine** auto-chains tasks based on declarative routing ru
 Mission Control's hierarchy supports multi-workspace at the schema layer (52 migrations deep, `workspace_id` on 19 tables) but **not at the UI layer** — no workspace switcher exists in `header-bar.tsx`, `workspace_id: 1` is hardcoded as the auth-fallback in `auth.ts` and `rate-limit.ts`. The mismatch causes:
 
 1. Operators cannot scope their view to one product line. All panels effectively render one workspace.
-2. Facility-wide singletons (Aegis, Security Guardian) are resolved per-workspace in `task-dispatch.ts` (`aegisAgentByWorkspace = new Map<number, ReviewAgentRecord>()` — lines ~80, 376), contradicting their design intent per [[OpenClaw macOS Node - FocusEngine Agent Team and Aegis]].
+2. Facility-wide singletons (Aegis, Security Guardian) are resolved per-workspace in `task-dispatch.ts` (`aegisAgentByWorkspace = new Map<number, ReviewAgentRecord>()` — lines ~80, 376), contradicting their design intent per [[OpenClaw macOS Node - Product Line A Agent Team and Aegis]].
 3. No native multi-stage task pipeline exists. [[Mission Control - Practical Use of Tasks, Workflows, and Pipelines]] documents explicitly: *"Mission Control does not currently support ... a native same-task multi-agent handoff lane."* Existing `workflows` are single-step prompt templates; existing `pipelines` are operator-supervised ordered bundles, not task-generating.
 4. GitHub sync is one-to-one (task ↔ issue) without area-label routing. A monorepo serving multiple department kanbans is not representable.
 5. No telemetry for triage dispositions. Operators cannot answer "how many issues did we triage as OBE last week" without manual GitHub scraping.
 6. Two colliding senses of "workspace" (tenant hierarchy vs. agent filesystem sandbox) create ambiguity that worsens as the fork evolves.
 
-Result: the fork supports running one product (FocusEngine), one department, manually. It cannot operate a factory.
+Result: the fork supports running one product (Product Line A), one department, manually. It cannot operate a factory.
 
 ## 2) Product Objectives
 
@@ -61,22 +61,22 @@ Result: the fork supports running one product (FocusEngine), one department, man
 
 1. **Departmental object model** — reuse existing hierarchy per D1 (`workspace` = product line, `project` = department, `project_agent_assignments.role` = stage role, `facility` workspace for globals).
 2. **Terminology deconfliction** per D2 (UI "Product Line", TS `ProductLine`, SQL `workspace_id` unchanged; agent filesystem renamed "Sandbox").
-3. **Facility-wide agent scope** per D3 (add `scope='global'` column; refactor Aegis + Security Guardian + HAL to global).
+3. **Facility-wide agent scope** per D3 (add `scope='global'` column; refactor Aegis + Security Guardian + OpenClaw to global).
 4. **Product-line switcher** in header-bar with hybrid panel filtering per D4b.
 5. **Auto-chained task pipelines** with declarative routing per D5 (extend `task_templates` with `output_schema`, `routing_rules`, `next_template_slug`).
 6. **`ready_for_owner` state** per D6; **two-step terminal event** for PR-producing tasks per D7.
 7. **Monorepo + area-label GitHub routing** per D8.
 8. **Task disposition logging** per D9.
-9. **FocusEngine GitHub issue remediation workflow family** operational end-to-end (pilot).
+9. **Product Line A GitHub issue remediation workflow family** operational end-to-end (pilot).
 
 ### Success criteria
 
 - **[SC-1] Zero-regression** — every existing single-workspace deployment runs unchanged after applying all migrations. `workspace_id=1` fallback preserved. All new behavior feature-flag-guarded or null-default.
-- **[SC-2] Pilot end-to-end** — one FocusEngine GitHub issue (target: issue #110 per the existing smoke plan) flows **triage → plan → dev → review → Aegis → ready_for_owner → merged (done)** without operator intervention beyond the final PR merge click.
+- **[SC-2] Pilot end-to-end** — one Product Line A GitHub issue (target: issue #110 per the existing smoke plan) flows **triage → plan → dev → review → Aegis → ready_for_owner → merged (done)** without operator intervention beyond the final PR merge click.
 - **[SC-3] Switcher fidelity** — product-line switcher filters `task-board-panel`, `agent-squad-panel`, `chat-panel`, `skills-panel`, `project-manager-modal` to `activeWorkspace`; awareness panels (live feed, notifications, dashboard, system monitor, audit trail) remain aggregate.
 - **[SC-4] Global Aegis** — Aegis resolves via `scope='global'` lookup; `aegisAgentByWorkspace` map is either removed or retained only as a backward-compat shim for legacy workspace-scoped Aegis records.
 - **[SC-5] Disposition telemetry** — morning-briefing metric "Last 7d: N triaged, X ACTIONABLE, Y OBE, Z DUPLICATE, W NEEDS_SPECIALIST" queryable from `task_dispositions`.
-- **[SC-6] Second product line onboarding** — Racecraft Lab platform onboarded in < 1 operator-hour given seed templates (Phase 8 validation).
+- **[SC-6] Second product line onboarding** — Product Line B platform onboarded in < 1 operator-hour given seed templates (Phase 8 validation).
 - **[SC-7] Upstream compat preserved** — cherry-picking from `builderz-labs/mission-control` `main` remains viable (no rename of `workspaces` table or `workspace_id` columns).
 
 ### Non-goals (v1)
@@ -91,7 +91,7 @@ Result: the fork supports running one product (FocusEngine), one department, man
 
 ## 3) Personas
 
-1. **Facility operator** (`fgabelmannjr` today) — runs multiple product lines, needs focus mode + cross-product awareness. Primary user.
+1. **Facility operator** (`operator` today) — runs multiple product lines, needs focus mode + cross-product awareness. Primary user.
 2. **Future product-line owner** — delegate for a single product line. May be ACL-restricted in v2 (D4e deferred).
 3. **Autonomous agent** — **subject** of the system, not a user. Consumes templates, produces structured output matching `output_schema`. **Does NOT** create or choose successor templates.
 4. **External contributor** — files GitHub issues, receives disposition comments on closure, sees `mc:*` / `area:*` / `priority:*` labels.
@@ -186,19 +186,19 @@ Result: the fork supports running one product (FocusEngine), one department, man
   GROUP BY disposition;
   ```
 
-### I. FocusEngine pilot (pilot)
+### I. Product Line A pilot (pilot)
 
-- **FR-I1:** Seed the `facility` workspace + FocusEngine workspace + per-department projects (QA, Dev, macOS App, DevSecOps, UI, Marketing, Customer Service).
-- **FR-I2:** Seed the FocusEngine workflow family: `focusengine_issue_triage`, `focusengine_remediation_plan`, `focusengine_specialist_route`, `focusengine_owner_review`, `focusengine_close_issue`, `focusengine_dev_implementation`, `focusengine_review`, `focusengine_aegis` (Aegis is invoked by scheduler, not a template, but the flow is documented).
+- **FR-I1:** Seed the `facility` workspace + Product Line A workspace + per-department projects (QA, Dev, macOS App, DevSecOps, UI, Marketing, Customer Service).
+- **FR-I2:** Seed the Product Line A workflow family: `product-line-a_issue_triage`, `product-line-a_remediation_plan`, `product-line-a_specialist_route`, `product-line-a_owner_review`, `product-line-a_close_issue`, `product-line-a_dev_implementation`, `product-line-a_review`, `product-line-a_aegis` (Aegis is invoked by scheduler, not a template, but the flow is documented).
 - **FR-I3:** Map agent roles to `project_agent_assignments`:
-  - `researcher` → `focusengine-macos-research`
-  - `planner` → `focusengine-macos-planner`
-  - `dev` → `focusengine-macos-dev`
-  - `ui` → `focusengine-macos-ui`
-  - `devsecops` → `focusengine-macos-devsecops`
-  - `qa` → `focusengine-macos-qa`
-- **FR-I4:** Point FocusEngine workspace's GitHub repo at `fgabelmannjr/focusengine` (or `racecraft-lab/focusengine`, whichever is canonical at rollout).
-- **FR-I5:** Trigger pilot with issue #110 (per existing [[OpenClaw macOS Node - FocusEngine Issue Workflow Smoke Plan]]); second smoke on #111.
+  - `researcher` → `product-line-a-platform-research`
+  - `planner` → `product-line-a-platform-planner`
+  - `dev` → `product-line-a-platform-dev`
+  - `ui` → `product-line-a-platform-ui`
+  - `devsecops` → `product-line-a-platform-devsecops`
+  - `qa` → `product-line-a-platform-qa`
+- **FR-I4:** Point Product Line A workspace's GitHub repo at `<org>/product-line-a-repo` (or `<org>/product-line-a-repo`, whichever is canonical at rollout).
+- **FR-I5:** Trigger pilot with issue #110 (per existing [[OpenClaw macOS Node - Product Line A Issue Workflow Smoke Plan]]); second smoke on #111.
 
 ## 5) Data Model Changes (Additive Migrations)
 
@@ -291,12 +291,12 @@ Detailed phasing in [[Mission Control Departmental Architecture - Technical Road
 | 4 | `ready_for_owner` state + two-step terminal | Yes — per-template opt-in |
 | 5 | Area labels + GitHub sync updates | Yes — fallback to `area:triage` |
 | 6 | Disposition logging + audit panel update | Yes — purely additive |
-| 7 | FocusEngine pilot (issue #110, then #111) | Gated behind pilot feature flag |
-| 8 | Second product line onboarding (Racecraft Lab) | Post-pilot |
+| 7 | Product Line A pilot (issue #110, then #111) | Gated behind pilot feature flag |
+| 8 | Second product line onboarding (Product Line B) | Post-pilot |
 
 ## 11) Success Measurement
 
 - Every single-workspace deployment passes the existing test suite post-migration: **PASS gate**.
-- FocusEngine issue #110 completes end-to-end through the pipeline with no operator intervention beyond PR merge: **PILOT gate**.
+- Product Line A issue #110 completes end-to-end through the pipeline with no operator intervention beyond PR merge: **PILOT gate**.
 - Disposition dashboard shows 7-day rollup for at least one product line: **TELEMETRY gate**.
 - Second product line onboarding completes in < 1 operator-hour: **SCALE gate**.

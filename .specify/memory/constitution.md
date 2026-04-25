@@ -42,7 +42,7 @@ viable. Every feature is classified before implementation as:
 |---|---|
 | `upstream-safe` | Additive, opt-in, plausible upstream candidate. |
 | `upstream-divergent` | Runtime-safe for current installs, but adds schema/state/API divergence that grows fork pressure. |
-| `fork-only optional` | HAL/OpenClaw/local-environment-specific adapter that must be absent-safe and disabled by default. |
+| `fork-only optional` | OpenClaw/local-environment-specific adapter that must be absent-safe and disabled by default. |
 
 Hard prohibitions:
 
@@ -54,9 +54,9 @@ Hard prohibitions:
   etc.) that would create merge conflicts — isolate additions to new files
   or extend via hooks.
 
-### III. HAL/OpenClaw Adapter Isolation
+### III. OpenClaw Adapter Isolation
 
-Features that read HAL or OpenClaw artifacts are fork-only adapters. They
+Features that read OpenClaw artifacts are fork-only adapters. They
 must:
 
 - Be disabled by default and guarded by a dedicated feature flag
@@ -93,7 +93,7 @@ All new runtime behavior routes through the single helper
 - **Env kill-switch.** `process.env.FEATURE_X === '0'` forces OFF
   regardless of JSON state. `process.env.FEATURE_X === '1'` does NOT
   force ON — only JSON can opt a workspace in.
-- **Exception:** `PILOT_FOCUSENGINE_E2E` may be flipped via env (operator-
+- **Exception:** `PILOT_PRODUCT_LINE_A_E2E` may be flipped via env (operator-
   temporary pilot switch).
 - **Forbidden.** Inline `process.env.FEATURE_*` checks anywhere in
   runtime code. CI greps and fails on match.
@@ -206,6 +206,82 @@ Every state-changing event produces a durable record:
 - Every artifact publish → `task_artifacts` row with provenance:
   producer agent, workflow-template slug, MIME type, byte size,
   SHA-256, preview text, redaction status, and security-scan status.
+
+### XI. Keep It Simple
+
+The simplest correct solution wins. Clever code is a liability;
+boring code is an asset. Every spec and PR is judged against this
+principle alongside the structural rules above.
+
+Operationalized as:
+
+- Choose the obvious, straightforward solution over the elegant or
+  clever one.
+- If code requires extensive comments to explain WHAT it does (vs.
+  WHY a non-obvious decision was made), it is too complex — refactor
+  it or split the function.
+- One function does one thing. One module owns one responsibility.
+- Avoid nested conditionals deeper than three levels; extract to a
+  separate function or early-return.
+- Prefer explicit code paths over implicit behavior. No magic globals,
+  no monkey-patching, no behavior conditioned on unexported state.
+
+This principle is advisory at PR review time, not CI-enforced. Reviewers
+have standing to require simplification of any change that violates it.
+
+### XII. Avoid Speculative Generality
+
+Build only what the current spec or task requires. Premature
+abstraction creates maintenance burden without delivering value.
+
+Operationalized as:
+
+- Do NOT add features, parameters, configuration knobs, or capabilities
+  beyond what the current spec calls for.
+- Do NOT create abstractions for one-time operations. Three duplicated
+  lines is better than a premature utility function.
+- Do NOT add "just in case" error handling for scenarios that cannot
+  occur given current call sites and type guarantees.
+- Do NOT design for flexibility that has no current consumer.
+- Do NOT introduce feature flags for behavior that has no rollback or
+  per-workspace differentiation requirement (Principle V already
+  governs the flags that exist; this principle prevents adding flags
+  preemptively).
+
+When a spec genuinely needs an extension point in the future, add it
+in the spec that consumes it — not in advance.
+
+### XIII. Defensive Boundaries, Trusting Interior
+
+Errors at system boundaries (HTTP, GitHub webhooks, database, agent
+output, OpenClaw artifacts, child-process exec) MUST be caught,
+classified, and surfaced as structured data. Errors inside the trusted
+interior do not need defensive wrapping.
+
+Operationalized as:
+
+- Every external call (fetch, db query helper, exec, file read of an
+  untrusted path) is wrapped in error handling that converts the
+  failure into a typed result or a structured `activities` row.
+- Partial failures in batch operations MUST NOT fail the entire batch.
+  Per-item success/failure status is preserved at original indices and
+  surfaced in the response payload.
+- Error responses MUST include actionable context: the operation type,
+  the offending item ids, and the failure reason. Never include the
+  raw matched substring of a secret or untrusted user payload — log
+  the rule id or content hash instead.
+- Validation errors MUST identify the specific field and the
+  constraint violated.
+- Timeout errors MUST be distinguishable from logic errors in the
+  emitted `activities` kind.
+- Inside the trusted interior (function-to-function calls within a
+  single module, where types and invariants are guaranteed by Principle
+  IV's tests), do NOT add defensive checks for impossible states. Trust
+  the type system and the surrounding tests.
+
+This principle complements Principle X. Observability and Auditability
+records WHAT happened; this principle ensures the recording never
+crashes the request and never leaks secrets while doing so.
 
 ## Tech Stack Constraints
 
@@ -357,12 +433,12 @@ SpecKit-Pro uses `.worktrees/<number>-<short-name>/` for each spec under
 execution. Work happens in the worktree, never on `main`. The branch is
 pushed to `origin`; PR merge moves the spec to Complete.
 
-### HAL deployment note
+### OpenClaw deployment note
 
-Mission Control runs on HAL from `~/mission-control-sync` on `main`.
+Mission Control runs on the OpenClaw node from `~/mission-control-sync` on `main`.
 Changes to `.specify/` and `.claude/` reach the running service on next
 pull but are not required by `mc-start.sh` — they are operator-side
-tooling only. If operator-side behavior changes, update the HAL section
+tooling only. If operator-side behavior changes, update the OpenClaw deployment section
 of `CLAUDE.md`.
 
 ## Governance
@@ -394,4 +470,4 @@ Compliance checkpoints:
 - Every migration: rollback file present; upstream-compat checklist
   satisfied.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-24
+**Version**: 1.1.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-24
