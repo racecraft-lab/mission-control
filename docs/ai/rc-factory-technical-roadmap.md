@@ -52,7 +52,7 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 - **Tool count / tool names = "N/A":** every spec in this roadmap is non-tool-surface. `/speckit-pro:setup` MUST accept `N/A` as a valid value and skip MCP-tool-related artifacts. The autopilot workflow file should record `tools: []` and not fail the gate on missing tool descriptions.
 - **Wikilinks `[[…]]`:** wikilink references in the PRD and this roadmap point to companion notes in the operator's Obsidian vault and are NOT required for autopilot ingestion. The information needed for autonomous execution is self-contained in this roadmap and the linked PRD (`docs/rc-factory-v1-prd.md`). Consensus agents should treat unresolvable wikilinks as informational only and proceed.
 - **Migration count baseline:** the live `src/lib/migrations.ts` contains 50 migration entries spanning ids `001` through `052` (gap after `029` → `032`). The next available id slot is `053`, which this roadmap uses as `M53`.
-- **SPEC-001 is migration-only.** Treat `clarify`, `checklist`, and `analyze` phases as minimal: zero `[NEEDS CLARIFICATION]` markers are expected; checklist gaps should resolve to "N/A — pure-schema spec"; analyze findings are limited to migration safety/idempotency. `/speckit.implement` performs the migration writes and the per-migration smoke checks listed in P0-AC1..AC10.
+- **SPEC-001 is migration-only.** Treat `clarify`, `checklist`, and `analyze` phases as minimal: zero `[NEEDS CLARIFICATION]` markers are expected; checklist gaps should resolve to "N/A — pure-schema spec"; analyze findings are limited to migration safety, idempotency, rollback-file presence, and the no-SQL safety gates. `/speckit.implement` performs the migration writes and the per-migration smoke checks listed in P0-AC1..AC14.
 - **SPEC-009 has a human gate.** The pilot's "operator merges PR on GitHub" step is recorded as `G_PILOT_MERGE`. Autopilot stops after observing `ready_for_owner` and resumes (or marks complete) when `pullFromGitHub` records the linked PR merge. AC items P8-AC1, P8-AC6, P8-AC7 are explicitly MANUAL and live in the Pilot Smoke Checklist (`docs/qa/pilot-smoke-checklist.md`); they are NOT validated by `gate-validator`. P8-AC5 (PR merge → `done` transition) IS code-checkable via a webhook fixture and remains in the gate set.
 - **Real-system smoke (Phase 8/9) wall-clock ACs are MANUAL:** P8-AC6 ("<4h wall-clock") and P9-AC1 ("<1 operator-hour") cannot be tested by `implement-executor` TDD. Each is recorded only in the Pilot Smoke Checklist and is asserted by the operator after the pilot run.
 - **Issue #110 reproducibility:** if Product Line A GitHub issue #110 has been closed, deleted, or substantively mutated by the time SPEC-009 runs, the seed script falls back to creating a synthetic test issue with title `[mc-pilot] synthetic e2e issue` and labels `mc:inbox priority:medium area:dev`. The pilot smoke checklist documents both modes.
@@ -70,14 +70,14 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 
 | Spec ID | Phase | Spec Name | Short Name | Status | Priority | Depends On | Enables | Source Section |
 |---|---:|---|---|---|---|---|---|---|
-| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Pending | P0 | — | SPEC-002, SPEC-003, SPEC-004, SPEC-006, SPEC-008 | Phase 0 |
-| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | Pending | P1 | SPEC-001 | SPEC-006, SPEC-009 | Phase 1 |
-| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001 | SPEC-004, SPEC-009 | Phase 2 |
-| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
-| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-004 | SPEC-009 | Phase 4 |
+| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Pending | P0 | — | SPEC-002 | Phase 0 |
+| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | Pending | P1 | SPEC-001 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
+| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002 | SPEC-004, SPEC-009 | Phase 2 |
+| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
+| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-002, SPEC-004 | SPEC-009 | Phase 4 |
 | SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002 | SPEC-009 | Phase 5 |
-| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-004 | SPEC-009 | Phase 6 |
-| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-004 | SPEC-009 | Phase 7 |
+| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-002, SPEC-004 | SPEC-009 | Phase 6 |
+| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-002, SPEC-004 | SPEC-009 | Phase 7 |
 | SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
 | SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
 
@@ -86,7 +86,7 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 Every `FEATURE_*` flag named in this roadmap is resolved by a single helper, `resolveFlag(name, ctx)`, exported from `src/lib/feature-flags.ts` (added in SPEC-002 deliverables; consumed by every later phase):
 
 1. **Hard-default OFF** — every flag's baseline value is `false`.
-2. **Per-workspace JSON override (M56b storage):** `workspaces.feature_flags JSON` may contain `{ "FEATURE_X": true }` for a specific workspace; that value wins for that workspace.
+2. **Per-workspace JSON override (M56 storage):** `workspaces.feature_flags JSON` may contain `{ "FEATURE_X": true }` for a specific workspace; that value wins for that workspace.
 3. **Process env override (emergency disable / kill-switch):** `process.env.FEATURE_X === '0'` ALWAYS forces the flag OFF regardless of JSON state. `process.env.FEATURE_X === '1'` does NOT force ON; only JSON can opt a workspace in.
 4. **Global flag without workspace context:** when called with no workspace (e.g., from `auto-route` cron loops), resolution uses `workspace_id = null` → returns OFF unless an env var explicitly forces a value (rare, used only for `PILOT_PRODUCT_LINE_A_E2E`).
 
@@ -102,13 +102,14 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Priority:** P0
 - **Branch short name:** `foundation-migrations`
 - **Dependencies:** —
-- **Enables:** SPEC-002, SPEC-003, SPEC-004, SPEC-006, SPEC-008
+- **Enables:** SPEC-002; later specs consume Phase 0 schema after SPEC-002 adds the shared feature-flag resolver
 - **Scope source:** Phase 0 — Foundation Migrations
 - **Acceptance criteria source:** Phase 0 Acceptance Criteria
-- **Scope summary:** Implement additive migrations and seed steps M53–M61, including agent scope, agent filesystem "Sandbox" terminology, application-level `ready_for_owner` vocabulary support, workflow-template routing columns, task lineage, workspace feature flags, disposition/artifact tables, facility workspace seed, and resource policy tables. No runtime behavior changes ship in this spec.
+- **Scope summary:** Implement additive migrations and seed steps M53–M61, including agent scope, workflow-template routing/artifact-policy columns, task lineage, workspace feature flags, disposition/artifact tables, facility workspace seed, and resource policy tables. Sandbox terminology and `ready_for_owner` runtime vocabulary are explicit no-SQL safety gates here and ship as runtime work in later specs. No UI, config, type, or runtime behavior changes ship in SPEC-001.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** N/A — migration-only/no-new-module spec
 - **Autopilot notes:** Treat migrations as the only implementation surface. Verify live schema truth before assuming `agents.workspace_path` or a `tasks.status` CHECK constraint. Preserve null-default / flag-off compatibility and document upstream-divergent fork pressure.
-- **Definition of done:** Phase 0 deliverables are implemented, P0 acceptance criteria pass, migrations are idempotent on production-shape data, existing tests pass unchanged, and rollback scripts or documented reverse steps exist for each migration.
+- **Definition of done:** Phase 0 deliverables are implemented, P0 acceptance criteria pass, migrations are idempotent on production-shape data, existing tests pass unchanged, and rollback scripts plus documented manual reverse steps exist for each SQL-changing migration or seed.
 
 ### SPEC-002: Product-Line Switcher and activeWorkspace Scoping
 
@@ -116,11 +117,12 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Priority:** P1
 - **Branch short name:** `product-line-switcher`
 - **Dependencies:** SPEC-001
-- **Enables:** SPEC-006, SPEC-009
+- **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 1 — Product-Line Switcher + `activeWorkspace` Scoping
 - **Acceptance criteria source:** Phase 1 Acceptance Criteria
 - **Scope summary:** Add the feature-flagged Product Line switcher, independent `activeWorkspace` state, REST/SSE workspace scoping, filtered-panel behavior, aggregate-panel behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/components/layout/workspace-switcher.tsx`, `src/types/product-line.ts`, `src/lib/feature-flags.ts`
 - **Autopilot notes:** Keep `activeTenant` independent from `activeWorkspace`. The switcher’s Facility entry means aggregate/null view, not direct selection of the real `workspaces.slug='facility'` row. Global agents must appear across product-line views.
 - **Definition of done:** Phase 1 deliverables are implemented, P1 acceptance criteria pass with flag OFF, null aggregate, and selected product-line modes, and no unauthorized workspace data leaks through REST or SSE scoping.
 
@@ -129,12 +131,13 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `global-aegis`
-- **Dependencies:** SPEC-001
+- **Dependencies:** SPEC-001, SPEC-002
 - **Enables:** SPEC-004, SPEC-009
 - **Scope source:** Phase 2 — Aegis Refactor (Facility Singleton)
 - **Acceptance criteria source:** Phase 2 Acceptance Criteria
 - **Scope summary:** Refactor Aegis resolution from workspace-keyed lookup toward facility-wide `scope='global'` resolution, preserving compatibility-mode fallback for legacy workspace-scoped Aegis rows.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/lib/aegis.ts`
 - **Autopilot notes:** Centralize lookup behavior in `getAegis`. Sweep all known Aegis references without changing review semantics. Use the live `quality_reviews.reviewer='aegis'` signal unless a separate migration intentionally changes that model.
 - **Definition of done:** Phase 2 deliverables are implemented, P2 acceptance criteria pass for global-only, workspace-only, and legacy-local scenarios, and scheduler behavior remains unchanged with compatibility mode OFF.
 
@@ -143,12 +146,13 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `task-pipeline-engine`
-- **Dependencies:** SPEC-001, SPEC-003
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-003
 - **Enables:** SPEC-005, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 3 — Task Pipeline Engine + Declarative Routing
 - **Acceptance criteria source:** Phase 3 Acceptance Criteria
 - **Scope summary:** Implement feature-flagged task-chain behavior over `workflow_templates`, including template identity, task lineage, constrained JSON Schema validation using direct pinned `ajv`, safe routing-rule evaluation, successor-task creation, outbound sync parity, and workflow-template editor updates.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/lib/task-create.ts`, `src/lib/output-schema-validator.ts`, `src/lib/routing-rule-evaluator.ts`, `src/types/workflow-template.ts`
 - **Autopilot notes:** Do not introduce a `task_templates` SQL table. A task-chain template is a domain alias over `workflow_templates`. With the feature flag OFF or fields NULL, task completion must behave exactly as before. Phase 3 reads structured output from `tasks.resolution`; Phase 6 later upgrades artifact handoff.
 - **Definition of done:** Phase 3 deliverables are implemented, P3 acceptance criteria pass for valid routing, invalid output, fallback, termination, side-effect parity, dependency pinning, validator constraints, and repository documentation refresh.
 
@@ -157,12 +161,13 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `ready-for-owner`
-- **Dependencies:** SPEC-004
+- **Dependencies:** SPEC-002, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 4 — `ready_for_owner` State + Two-Step Terminal Event
 - **Acceptance criteria source:** Phase 4 Acceptance Criteria
 - **Scope summary:** Add feature-flagged `ready_for_owner` runtime behavior for PR-producing templates, including Kanban lane, GitHub status label, Aegis approval branching, PR-merge transition to `done`, reconciliation alert on issue closure without merged PR, and notification type.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/lib/notifications.ts`
 - **Autopilot notes:** Non-PR-producing templates must continue to complete directly to `done`. `produces_pr=true` tasks must not become `done` until linked PR merge is observed.
 - **Definition of done:** Phase 4 deliverables are implemented, P4 acceptance criteria pass for flag OFF, non-PR templates, PR-producing templates, merged PR transition, closed-issue reconciliation, Kanban rendering, and GitHub label sync.
 
@@ -177,6 +182,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Acceptance criteria source:** Phase 5 Acceptance Criteria
 - **Scope summary:** Add feature-flagged `area:*` label routing and repo-level sync ownership/dedupe so multiple department projects can share one product-line monorepo without duplicate polling or duplicate ingestion.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** N/A unless the optional `projects.area_slug` path introduces new TS/TSX modules; existing-file edits remain outside strict-scope expansion
 - **Autopilot notes:** Keep existing GitHub sync behavior unchanged when the flag is OFF. Use one repo-level owner or equivalent dedupe path per `(workspace_id, github_repo)`; the existing uniqueness constraint is a guardrail, not the routing strategy.
 - **Definition of done:** Phase 5 deliverables are implemented, P5 acceptance criteria pass for no-duplicate ingestion, resolvable area routing, triage fallback, ambiguity activity, outbound area labels, and idempotent label provisioning.
 
@@ -185,12 +191,13 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `disposition-artifacts`
-- **Dependencies:** SPEC-004
+- **Dependencies:** SPEC-002, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 6 — Disposition Logging + Artifact Store + Admin Panels
 - **Acceptance criteria source:** Phase 6 Acceptance Criteria
 - **Scope summary:** Add feature-flagged triage disposition inserts, Mission Control-owned task artifact publishing/consumption, disposition audit view, artifact admin/health surface, dashboard rollups, and documented morning-briefing query integration.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/lib/task-artifacts.ts`, `src/app/api/task-artifacts/route.ts`, `src/app/api/task-artifacts/[id]/route.ts`, `src/components/panels/artifact-admin-panel.tsx`, `src/app/api/dispositions/route.ts`
 - **Autopilot notes:** Insert one disposition row per triage template completion when enabled, but never block task advancement on insert failure. Successor dispatch should consume MC artifact references/previews rather than another agent’s private sandbox.
 - **Definition of done:** Phase 6 deliverables are implemented, P6 acceptance criteria pass for disposition logging, failure isolation, filters, rollups, artifact publish/consume, secret handling, storage health metrics, and admin maintenance actions.
 
@@ -199,12 +206,13 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `resource-governance`
-- **Dependencies:** SPEC-001, SPEC-004
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 7 — Resource Governance + Cost Tracker Enforcement
 - **Acceptance criteria source:** Phase 7 Acceptance Criteria
 - **Scope summary:** Extend Cost Tracker into feature-flagged scheduler enforcement for WIP, blackout/degraded windows, budgets, policy events, operator overrides, and optional runtime-only OpenClaw electricity/infra cost visibility.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `src/lib/resource-governance.ts`, `src/app/api/resource-policies/route.ts`, `src/app/api/resource-policy-events/route.ts`, `src/lib/openclaw-health-costs.ts`
 - **Autopilot notes:** Do not duplicate token/cost telemetry. `FEATURE_RESOURCE_GOVERNANCE=false` preserves legacy scheduler behavior. `FEATURE_OPENCLAW_HEALTH_COSTS` is fork-only optional, runtime-only, absent-safe, and must require no v1 schema migration.
 - **Definition of done:** Phase 7 deliverables are implemented, P7 acceptance criteria pass for legacy behavior, empty-policy allow, WIP limits, blackout/degraded windows, soft/hard budgets, subscription raw-usage enforcement, OpenClaw absence safety, valid telemetry display, and fail-safe policy evaluation.
 
@@ -219,6 +227,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Acceptance criteria source:** Phase 8 Acceptance Criteria
 - **Scope summary:** Activate Phase 1–7 feature flags for Product Line A, seed the workspace, departments, agent assignments, workflow templates, GitHub repo routing, existing issue intake, conservative governance policies, and run issue #110 then #111 through the full workflow.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `scripts/seed-product-line-a-workspace.ts` if authored in TypeScript; otherwise N/A for docs/config/SQL-only seed assets
 - **Autopilot notes:** This is an integration smoke spec, not new architecture design. Preserve existing GitHub linkage and sync metadata for previously synced Product Line A issues. Operator intervention is allowed only for final PR merge in the primary pilot path.
 - **Definition of done:** Phase 8 deliverables are implemented, P8 acceptance criteria pass for issue #110 end-to-end, disposition record, stage assignments, Aegis approval, `ready_for_owner → done` transition, audit trail, wall-clock target, and governance compliance.
 
@@ -233,6 +242,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Acceptance criteria source:** Phase 9 Acceptance Criteria
 - **Scope summary:** Generalize product-line seeding, onboard Product Line B as the second product line, provision isolated agents, adapt workflow templates, configure the canonical repo, and run a first real issue smoke.
 - **Tool count / tool names:** N/A — not a tool-surface spec
+- **Strict Scope:** `scripts/seed-product-line.ts` if authored in TypeScript; otherwise N/A for docs/config/SQL-only seed assets
 - **Autopilot notes:** Validate scale and repeatability rather than redesigning the architecture. Product Line A must remain unaffected. Facility agents serve both product lines while product-line agents remain strictly isolated.
 - **Definition of done:** Phase 9 deliverables are implemented, P9 acceptance criteria pass for sub-1-hour onboarding, strict agent isolation, shared facility agents, and per-workspace dashboard disposition metrics.
 
@@ -253,7 +263,7 @@ These are the points where the owner should explicitly decide whether continued 
 
 ### Scope
 
-Foundation migrations/seed steps M53–M61 (eleven additive items, including M56a and M56b). Pure schema work. No runtime behavior changes.
+Foundation migrations/seed steps M53–M61 (nine additive SQL-changing migrations/seed steps) plus two no-SQL safety gates for Sandbox terminology and `ready_for_owner` status vocabulary. Pure schema work. No UI, config, type, or runtime behavior changes.
 
 ### Upstream Impact
 
@@ -261,23 +271,22 @@ Foundation migrations/seed steps M53–M61 (eleven additive items, including M56
 
 ### Deliverables
 
-- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / OpenClaw to `global`.
-- **M54** — agent filesystem "workspace" terminology becomes "Sandbox" at UI/config level. Live schema verification on 2026-04-24 confirms `agents.workspace_path` DOES exist (added by an earlier migration that conditionally runs `ALTER TABLE agents ADD COLUMN workspace_path TEXT`). v1 decision: **keep the column name `workspace_path` as-is**; rename only UI labels, config keys, type names (`AgentSandbox`), error messages, log strings, and external doc copy. No SQL `RENAME COLUMN` ships in v1. A future `M-future` may add `sandbox_path` with a dual-write/cutover plan if upstream parity becomes a requirement.
-- **M55** — add `ready_for_owner` to the application task-status vocabulary. Live schema verification on 2026-04-24 confirms `tasks.status` is `TEXT NOT NULL DEFAULT 'inbox'` with NO database CHECK constraint (only an inline comment listing valid values at `src/lib/schema.sql:9`). M55 therefore makes NO DB-level CHECK change; status enforcement is application-level via the existing TypeScript/Zod validation layer plus `STATUS_LABEL_MAP`. Add `ready_for_owner` to: the TS/Zod status union, `STATUS_LABEL_MAP`, `ALL_STATUS_LABEL_NAMES`, and the kanban column ordering. The DB column itself does not change.
-- **M56** — `workflow_templates` gains task-chain columns: `slug`, `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, `external_terminal_event`. A "task-chain template" is a domain alias over `workflow_templates`, not a new SQL table.
-- **M56a** — `tasks` gains workflow-template binding and lineage: `workflow_template_id`, `workflow_template_slug`, `parent_task_id`, `root_task_id`, `chain_id`, `chain_stage`.
-- **M56b** — `workspaces.feature_flags JSON` stores per-product-line feature-flag overrides. `NULL` = hardcoded default OFF.
+- **Safety gate: Sandbox terminology** — live schema verification on 2026-04-24 confirms `agents.workspace_path` DOES exist (added by an earlier migration that conditionally runs `ALTER TABLE agents ADD COLUMN workspace_path TEXT`). SPEC-001 keeps the SQL column name `workspace_path` as-is, does not add `sandbox_path`, and does not ship UI/config/type/doc terminology changes. Sandbox runtime/copy cleanup belongs to SPEC-002+.
+- **Safety gate: `ready_for_owner` vocabulary** — live schema verification on 2026-04-24 confirms `tasks.status` is `TEXT NOT NULL DEFAULT 'inbox'` with NO database CHECK constraint (only an inline comment listing valid values at `src/lib/schema.sql:9`). SPEC-001 makes no DB-level CHECK change and does not extend TypeScript/Zod/GitHub-label/Kanban/runtime vocabulary. Application-level support belongs to SPEC-005.
+- **M53** — `agents.scope` column + backfill of Aegis / Security Guardian / HAL (`LOWER(name) IN ('aegis','security-guardian','hal')`) to `global`.
+- **M54** — `workflow_templates` gains task-chain and artifact-policy columns: `slug`, `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, `external_terminal_event`, `allow_redacted_artifacts`. A "task-chain template" is a domain alias over `workflow_templates`, not a new SQL table.
+- **M55** — `tasks` gains workflow-template binding and lineage: `workflow_template_id`, `workflow_template_slug`, `parent_task_id`, `root_task_id`, `chain_id`, `chain_stage`.
+- **M56** — `workspaces.feature_flags JSON` stores per-product-line feature-flag overrides. `NULL` = hardcoded default OFF.
 - **M57** — `task_dispositions` table + index.
 - **M58** — `task_artifacts` table + indexes. Use `workflow_template_slug` in artifact metadata.
-- **M59** — seed `workspaces` with `('facility', 'Facility', tenant_id=1)` using the live `name` column, not `display_name` (idempotent).
+- **M59** — seed `workspaces` with `slug='facility'`, `name='Facility'`, and a resolved default tenant (`ORDER BY active status, id ASC`), using the live `name` column, not `display_name` (idempotent; do not hardcode `tenant_id=1`).
 - **M60** — `resource_policies` table + scope indexes, using `workflow_template_slug` nomenclature.
 - **M61** — `resource_policy_events` table + audit indexes.
 
 ### Files Touched
 
 - `src/lib/migrations.ts` (append migrations/seed steps after verifying live schema shape)
-- `src/lib/schema.sql` (reference only; migrations remain authoritative)
-- `src/types/agent.ts`, `src/types/task.ts`, `src/types/workflow-template.ts`, `src/types/task-artifact.ts` (add TS fields)
+- `src/lib/schema.sql` (read-only reference for schema-shape assertions; do not edit unless fresh-install migration ordering is explicitly tested)
 
 ### Acceptance Criteria
 
@@ -285,24 +294,24 @@ Foundation migrations/seed steps M53–M61 (eleven additive items, including M56
 - [P0-AC2] Migration is idempotent (re-running applies no changes).
 - [P0-AC3] `SELECT * FROM agents WHERE scope='global'` returns the three backfilled globals.
 - [P0-AC4] `SELECT slug, name FROM workspaces WHERE slug='facility'` returns exactly one row.
-- [P0-AC5] `PRAGMA table_info(workflow_templates)` shows the task-chain columns and, if enabled, a non-null/unique slug strategy.
+- [P0-AC5] `PRAGMA table_info(workflow_templates)` shows the task-chain columns plus `allow_redacted_artifacts`; the partial unique index on `(workspace_id, slug)` exists for non-null slugs.
 - [P0-AC6] `PRAGMA table_info(tasks)` shows workflow-template binding and lineage columns.
-- [P0-AC7] `PRAGMA table_info(workspaces)` shows `feature_flags`; default resolution for every new flag is OFF when the column is NULL.
+- [P0-AC7] `PRAGMA table_info(workspaces)` shows `feature_flags`; SPEC-001 validates only the storage column and `NULL` default. Runtime flag resolution is tested in SPEC-002 when `resolveFlag()` is introduced.
 - [P0-AC8] `task_artifacts` table queryable; indexes exist for `(task_id, created_at)` and `(workspace_id, artifact_type)`.
 - [P0-AC9] `resource_policies` and `resource_policy_events` are queryable; indexes exist for policy scope and policy events by task/time.
 - [P0-AC10] Existing test suite passes unchanged (no new behavior yet).
-- [P0-AC11] One `docs/migrations/rollback-M<53..61>.sql` file exists for each migration in this phase; each file contains an idempotent reverse SQL block; CI verifies file presence per migration id.
+- [P0-AC11] One rollback file exists for each SQL-changing migration or seed: `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql`; each file contains an idempotent reverse SQL block; CI verifies file presence per migration id.
 - [P0-AC12] `docs/migrations/rollback-procedure.md` exists and documents reverse order, SQLite DROP COLUMN guidance, and pre-rollback DB snapshot step.
-- [P0-AC13] M55 makes no DB-level CHECK change; ripgrep over the diff for SPEC-001 finds zero occurrences of `CHECK (status` referring to `tasks.status`.
-- [P0-AC14] M54 makes no `ALTER TABLE agents RENAME COLUMN` and no `ALTER TABLE agents ADD COLUMN sandbox_path`; ripgrep over the diff confirms zero such statements.
+- [P0-AC13] The `ready_for_owner` safety gate makes no DB-level CHECK change and no application-level status-vocabulary change; ripgrep over the SPEC-001 diff finds zero occurrences of `CHECK (status`, `ready_for_owner`, or `mc:ready-for-owner` outside docs and rollback commentary.
+- [P0-AC14] The Sandbox terminology safety gate makes no `ALTER TABLE agents RENAME COLUMN`, no `ALTER TABLE agents ADD COLUMN sandbox_path`, and no UI/config/type/doc-copy rename outside SPEC-001 documentation; ripgrep over the diff confirms zero such statements or runtime copy changes.
 
 ### Rollback
 
 The live migration runner (`src/lib/migrations.ts:5-9`) is forward-only — `type Migration = { id: string; up: (db) => void }` has no `down()` function. Rollback for Phase 0 is therefore documented as **manual reverse SQL**, not an automated `down()`:
 
-- Each M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M<53..61>.sql` (created as part of SPEC-001 deliverables) that contains the explicit `DROP COLUMN`/`DROP TABLE`/`DELETE FROM workspaces WHERE slug='facility'` statements.
+- Each SQL-changing M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` (created as part of SPEC-001 deliverables) that contains the explicit `DROP COLUMN`/`DROP TABLE`/`DELETE FROM workspaces WHERE slug='facility'` statements.
 - An operator runbook at `docs/migrations/rollback-procedure.md` describes the reverse order (M61 → M53), the SQLite `ALTER TABLE … DROP COLUMN` caveats (SQLite ≥3.35 supports it; otherwise the `12-step copy-and-rename` procedure is documented inline), and the safety pre-checks (snapshot the DB file first).
-- Rollback is operator-initiated via `pnpm mc db rollback --to <migration-id>` (CLI surface added as part of SPEC-001).
+- Rollback is operator-initiated by manually applying the documented reverse SQL after taking the DB snapshot. SPEC-001 adds no rollback CLI surface.
 - A future spec may extend `Migration` with an optional `down?: (db) => void` and a CLI runner; that work is **out of scope for SPEC-001** and is tracked separately.
 
 ### Estimated Work
@@ -479,7 +488,7 @@ Extend the live `workflow_templates` table with routing machinery (per D5). A "t
   5. If neither resolves, chain terminates normally.
   6. On resolution, build the successor input: inherit `workspace_id`, `project_id`; set binding/lineage fields (`workflow_template_id`, `workflow_template_slug`, `parent_task_id`, `root_task_id`, `chain_id`, `chain_stage = parent.chain_stage + 1`); resolve `assigned_to` from the live join `SELECT a.name FROM project_agent_assignments paa JOIN agents a ON a.name = paa.agent_name WHERE paa.project_id = :project_id AND paa.role = :workflow_template.agent_role LIMIT 1` (note: `project_agent_assignments` is keyed by `agent_name`, not `agent_id`, per the live schema at `src/lib/migrations.ts:825-836`); parametrize description with output variables.
   7. Pass that input to the shared `createTask()` helper (defined above). All outbound sync (GitHub, GNAP), activity logging, ticket-counter allocation, subscriptions, and notifications happen inside `createTask` — successor creation does NOT inline any of that logic. NFR-13 (successor side-effect parity) is enforced structurally by sharing the function, not by parallel implementation.
-- **Template UI**: extend `settings-panel.tsx` workflow-template editor with `slug`, `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, and `external_terminal_event` fields.
+- **Template UI**: extend `settings-panel.tsx` workflow-template editor with `slug`, `output_schema`, `routing_rules`, `next_template_slug`, `produces_pr`, `external_terminal_event`, and `allow_redacted_artifacts` fields.
 - **Repository docs update**: update `docs/orchestration.md` in the implementation repo when declarative auto-chaining ships. The doc should keep manual follow-up tasks as a supported pattern, add a feature-flagged declarative task-chain section, and refresh lifecycle/status terminology.
 
 ### Files Touched
@@ -634,7 +643,7 @@ Log every triage disposition to `task_dispositions` (D9). Add the shared Mission
 - **Insert hook**: in `advanceTaskChain` (Phase 3), after routing resolution, insert a `task_dispositions` row. Fires for every triage template completion regardless of outcome.
 - **Artifact publish path**: `src/lib/task-artifacts.ts` imports inline JSON/Markdown or file-backed outputs from an agent sandbox into MC-controlled artifact storage. Writes provenance, hashes, MIME type, preview text, redaction status, scan status, and audit activity.
 - **Secret detector contract**: `src/lib/secret-detector.ts` is the single redaction/rejection gate. It exports `detectSecrets(content: string | Buffer, mime: string)` returning `{ findings: SecretFinding[], redacted: string | Buffer }`. The detector ships **MC Secret Detector v1**, a curated rule set sourced from gitleaks v8.x default rules (https://github.com/gitleaks/gitleaks/blob/v8.18.0/config/gitleaks.toml) plus Mission Control additions. Rule families included in v1: AWS access key id (`AKIA[0-9A-Z]{16}`), AWS secret access key (40-char base64-ish heuristic plus AWS context), GitHub PAT (`gh[pousr]_[A-Za-z0-9_]{36,}`), GitHub fine-grained PAT, GitHub OAuth (`gho_…`), Google API key (`AIza[0-9A-Za-z_-]{35}`), Slack token, Stripe key (`sk_live_…`, `pk_live_…`), generic `BEGIN PRIVATE KEY` / `BEGIN RSA PRIVATE KEY` PEM blocks, generic `password=`, `api_key=`, `token=`, `secret=` assignments in `.env`-style lines, JWT (`eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`), generic Bearer header, and Anthropic / OpenAI key patterns (`sk-ant-…`, `sk-…`). The exact regex set is checked into `src/lib/secret-detector.rules.ts` and snapshot-tested with positive/negative fixtures.
-- **Redaction policy**: when `detectSecrets` returns ≥1 finding, the artifact publish is REJECTED by default; the producer task gains an `activities` row (kind=`security_violation`) and the publish API returns 422 with the redacted preview. Operator may explicitly opt the workflow template into "redact-and-store" mode (`workflow_templates.allow_redacted_artifacts = 1`); in that mode the redacted content is stored and the original is discarded.
+- **Redaction policy**: when `detectSecrets` returns ≥1 finding, the artifact publish is REJECTED by default; the producer task gains an `activities` row (kind=`security_violation`) and the publish API returns 422 with the redacted preview. Operator may explicitly opt the workflow template into "redact-and-store" mode (`workflow_templates.allow_redacted_artifacts = 1`, added by M54); in that mode the redacted content is stored and the original is discarded.
 - **Secret detector tests** are mandatory: every rule has a positive and negative fixture in `src/lib/__tests__/secret-detector.test.ts`. CI fails if a rule has zero fixtures.
 - **Artifact consume path**: successor task dispatch includes artifact references and safe previews. Raw file content is available only through MC-controlled artifact-read APIs.
 - **Audit panel**: new tab "Dispositions" in `audit-trail-panel.tsx` with filters on `disposition`, `workspace_id`, date range. Pagination for large result sets.
@@ -710,7 +719,6 @@ Mixed:
 - `src/lib/openclaw-health-costs.ts` (new) — read/normalize electricity rate, power, energy, and cost snapshots from OpenClaw health files
 - `src/components/panels/cost-tracker-panel.tsx` — governance tab/view
 - `src/components/panels/task-board-panel.tsx` — WIP-limit indicators on columns where useful
-- `src/lib/migrations.ts`, `src/lib/schema.sql` — M60/M61
 
 ### Acceptance Criteria
 
@@ -831,18 +839,18 @@ Disable Product Line B workspace (set `disabled_at`). Product Line A unaffected.
 
 ```
 Phase 0 (migrations)
-    ├─→ Phase 1 (switcher)
-    ├─→ Phase 2 (Aegis refactor)
-    ├─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
-    │        └─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
-    │        └─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
-    ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
-    ├─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
-    └─→ Phase 8 (Product Line A pilot) ── depends on ALL of Phase 1–7
+    └─→ Phase 1 (switcher + shared feature-flag resolver)
+          ├─→ Phase 2 (Aegis refactor)
+          │     └─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
+          │           ├─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
+          │           ├─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
+          │           └─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
+          ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
+          └─→ Phase 8 (Product Line A pilot) ── depends on ALL of Phase 1–7
              └─→ Phase 9 (Product Line B onboarding)
 ```
 
-Phase 0 MUST land first. Phases 1, 2, 5 can ship in parallel. Phase 3 gates 4, 6, and 7. Phase 8 gates 9.
+Phase 0 MUST land first. Phase 1 MUST land before any later feature-flagged spec because it owns `resolveFlag()`. After Phase 1, Phase 2 and Phase 5 may proceed independently; Phase 3 waits for Phase 2 and gates 4, 6, and 7. Phase 8 gates 9.
 
 Phase 3 also gates the repository documentation refresh for `docs/orchestration.md`; Phase 3 is not shipped until that documentation describes declarative task chains and current lifecycle/status terminology.
 
@@ -861,7 +869,7 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 | 8 | 4.5 | 40 |
 | 9 | 2.5 | 42.5 |
 
-~8–9 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism on independent phases (1 + 2 + 5) compresses to ~6–7 weeks.
+~8–9 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1 (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6–7 weeks.
 
 ## Risk Register (linked to PRD §8)
 
@@ -881,7 +889,7 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 
 Each phase is independently rollback-safe:
 
-- **Schema migrations** (Phase 0) — manual reverse SQL files at `docs/migrations/rollback-M<53..61>.sql` plus an operator runbook at `docs/migrations/rollback-procedure.md`. The live migration runner (`src/lib/migrations.ts:5-9`) has no `down()` function; rollback is operator-initiated, NOT automatic.
+- **Schema migrations** (Phase 0) — manual reverse SQL files at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` plus an operator runbook at `docs/migrations/rollback-procedure.md`. The live migration runner (`src/lib/migrations.ts:5-9`) has no `down()` function; rollback is operator-initiated manual SQL, NOT automatic.
 - **Feature flags** (Phases 1–7) — flip OFF (via `workspaces.feature_flags` JSON or the env-var kill-switch documented in the Feature Flag Resolution Policy) → behavior reverts to pre-phase.
 - **Pilot** (Phase 8) — flip `PILOT_PRODUCT_LINE_A_E2E` OFF; workspace remains, templates remain, but the auto-chain stops; operator can fall back to explicit task assignment (Pattern 1).
 - **Product-line onboarding** (Phase 9) — `workspace.disabled_at = NOW()`; sync pauses; agents still run but no new work dispatched.

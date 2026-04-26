@@ -25,7 +25,7 @@ A new **task pipeline engine** auto-chains tasks based on declarative routing ru
 ## Tech Stack
 
 - **Existing**: Next.js 16, React 19, TypeScript 5.7, better-sqlite3 (SQLite), Zustand, xyflow/react, reagraph, pnpm, Node ≥22, existing REST + SSE API surface.
-- **New**: one explicit pinned runtime dependency for schema validation (`ajv`, direct dependency only; never import transitive packages). Schema additions: one new column on `agents` (`scope`), one new state value in the task-status vocabulary (`ready_for_owner`, DB CHECK enforcement only if the live schema proves status is CHECK-constrained), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Agent filesystem "workspace" terminology is renamed to "Sandbox" at UI/config level unless the live DB schema proves an `agents.workspace_path` column exists. OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
+- **New**: one explicit pinned runtime dependency for schema validation (`ajv`, direct dependency only; never import transitive packages). Schema additions: one new column on `agents` (`scope`), one new state value in the task-status vocabulary (`ready_for_owner`, DB CHECK enforcement only if the live schema proves status is CHECK-constrained), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain/artifact-policy columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Agent filesystem "workspace" terminology is renamed to "Sandbox" at UI/config level while the existing `agents.workspace_path` SQL column remains unchanged. OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
 - **Testing**: existing Playwright/Vitest patterns + new migration tests + scheduler unit tests for routing + pilot smoke (see Smoke Plan).
 
 ---
@@ -138,7 +138,7 @@ This is the current honest fork-pressure picture.
 
 If those schema/state changes are unacceptable as long-term fork pressure, the implementation strategy must change before coding starts.
 
-Agent filesystem "Sandbox" terminology is UI/config-level in v1 unless a live schema inspection proves an `agents.workspace_path` column exists. A DB column rename is not currently assumed.
+Agent filesystem "Sandbox" terminology is UI/config-level in v1. The live schema contains `agents.workspace_path`; v1 keeps that SQL column unchanged and does not add `sandbox_path`.
 
 ## 4) Personas
 
@@ -189,7 +189,7 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1 unless a live sc
 ### D. Task pipeline engine (D5)
 
 - **FR-D1:** The live SQL table is `workflow_templates`. A "task-chain template" is a domain alias over `workflow_templates`, not a separate `task_templates` table.
-- **FR-D1a:** `workflow_templates` gains task-chain columns: `slug TEXT NULL`, `output_schema JSON`, `routing_rules JSON`, `next_template_slug TEXT NULL`, `produces_pr BOOLEAN NOT NULL DEFAULT 0`, and `external_terminal_event TEXT NULL`. `slug` is required for declarative routing once `FEATURE_TASK_PIPELINES` is enabled; it should be unique per workspace when non-null.
+- **FR-D1a:** `workflow_templates` gains task-chain/artifact-policy columns: `slug TEXT NULL`, `output_schema JSON`, `routing_rules JSON`, `next_template_slug TEXT NULL`, `produces_pr BOOLEAN NOT NULL DEFAULT 0`, `external_terminal_event TEXT NULL`, and `allow_redacted_artifacts BOOLEAN NOT NULL DEFAULT 0`. `slug` is required for declarative routing once `FEATURE_TASK_PIPELINES` is enabled; it should be unique per workspace when non-null.
 - **FR-D1b:** `tasks` gains binding/lineage fields before Phase 3 ships: `workflow_template_id INTEGER REFERENCES workflow_templates(id)`, `workflow_template_slug TEXT NULL` for snapshot/readability, `parent_task_id INTEGER REFERENCES tasks(id)`, `root_task_id INTEGER REFERENCES tasks(id)`, `chain_id TEXT NULL`, and `chain_stage INTEGER NULL`. `workflow_template_id` is the canonical binding; slug is a denormalized template identity snapshot used for routing/debugging.
 - **FR-D2:** Agent output validated against `output_schema` using an explicit direct `ajv` dependency at task-completion time. Invalid output → task → `failed`, chain does not advance. Logged to `activities`.
 - **FR-D3:** Routing resolution order on successful completion:
@@ -305,29 +305,30 @@ ALTER TABLE agents ADD COLUMN scope TEXT NOT NULL DEFAULT 'workspace'
   CHECK (scope IN ('workspace','global'));
 UPDATE agents SET scope='global' WHERE LOWER(name) IN ('aegis','security-guardian','hal');
 
--- M54: agent_sandbox_terminology
--- No DB rename unless live schema proves agents.workspace_path exists.
--- Rename user-facing and config-level "agent workspace" terminology to "Sandbox".
--- If a DB column does exist in the live schema, add a separate compatibility migration
--- rather than assuming ALTER TABLE agents RENAME COLUMN is safe.
+-- Phase 0 safety gate, no migration entry:
+-- agents.workspace_path exists and remains unchanged in v1.
+-- SPEC-001 must not rename it and must not add sandbox_path.
+-- UI/config/doc terminology changes ship in SPEC-002+ runtime work.
 
--- M55: task_status_ready_for_owner
--- Add ready_for_owner to the application status vocabulary.
--- Only rebuild a SQLite CHECK constraint if full live ".schema tasks" proves one exists.
+-- Phase 0 safety gate, no migration entry:
+-- tasks.status has no DB CHECK constraint in the live schema.
+-- SPEC-001 must not add or rebuild a status CHECK.
+-- Application-level ready_for_owner vocabulary support ships in SPEC-005.
 
--- M56: workflow_templates_task_chain_routing
+-- M54: workflow_templates_task_chain_routing_and_artifact_policy
 ALTER TABLE workflow_templates ADD COLUMN slug TEXT NULL;
 ALTER TABLE workflow_templates ADD COLUMN output_schema JSON;
 ALTER TABLE workflow_templates ADD COLUMN routing_rules JSON;
 ALTER TABLE workflow_templates ADD COLUMN next_template_slug TEXT NULL;
 ALTER TABLE workflow_templates ADD COLUMN produces_pr BOOLEAN NOT NULL DEFAULT 0;
 ALTER TABLE workflow_templates ADD COLUMN external_terminal_event TEXT NULL;
+ALTER TABLE workflow_templates ADD COLUMN allow_redacted_artifacts BOOLEAN NOT NULL DEFAULT 0;
 -- Add a unique index for non-null slugs per workspace if SQLite version/support permits:
 -- CREATE UNIQUE INDEX idx_workflow_templates_workspace_slug
 --   ON workflow_templates(workspace_id, slug)
 --   WHERE slug IS NOT NULL;
 
--- M56a: tasks_workflow_template_binding_and_lineage
+-- M55: tasks_workflow_template_binding_and_lineage
 ALTER TABLE tasks ADD COLUMN workflow_template_id INTEGER REFERENCES workflow_templates(id);
 ALTER TABLE tasks ADD COLUMN workflow_template_slug TEXT NULL;
 ALTER TABLE tasks ADD COLUMN parent_task_id INTEGER REFERENCES tasks(id);
@@ -338,7 +339,7 @@ CREATE INDEX idx_tasks_workflow_template_id ON tasks(workflow_template_id);
 CREATE INDEX idx_tasks_parent_task_id ON tasks(parent_task_id);
 CREATE INDEX idx_tasks_chain_id ON tasks(chain_id);
 
--- M56b: workspace_feature_flags
+-- M56: workspace_feature_flags
 ALTER TABLE workspaces ADD COLUMN feature_flags JSON;
 -- NULL means all feature flags resolve to hardcoded OFF defaults unless overridden elsewhere.
 
@@ -386,7 +387,10 @@ CREATE INDEX idx_task_artifacts_workspace_type
 
 -- M59: facility_workspace_seed
 INSERT OR IGNORE INTO workspaces (slug, name, tenant_id)
-  VALUES ('facility', 'Facility', 1);
+  SELECT 'facility', 'Facility', id
+  FROM tenants
+  ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, id ASC
+  LIMIT 1;
 
 -- M60: resource_policies
 CREATE TABLE resource_policies (
