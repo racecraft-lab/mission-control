@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": ".tsbuild/spec-strict",
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true
+  },
+  "include": [
+    "src/lib/spec-strict-sentinel.ts",
+    "src/lib/feature-flags.ts",
+    "src/lib/routing-rule-evaluator.ts",
+    "src/lib/output-schema-validator.ts",
+    "src/lib/task-create.ts"
+  ]
+}

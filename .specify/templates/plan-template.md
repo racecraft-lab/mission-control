@@ -26,6 +26,7 @@
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
 **Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
 **Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Strict Scope**: [List every new spec-owned TS/TSX file to add to `tsconfig.spec-strict.json` and `eslint.config.mjs`, or N/A for docs-only/migration-only/no-new-module specs]
 
 ## Constitution Check
 

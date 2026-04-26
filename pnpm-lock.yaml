@@ -141,6 +141,12 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^2.1.9
         version: 2.1.9(vitest@2.1.9(@types/node@22.19.9)(jsdom@26.1.0))
+      eslint-import-resolver-typescript:
+        specifier: 3.10.1
+        version: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.2(jiti@1.21.7))
+      eslint-plugin-import:
+        specifier: 2.32.0
+        version: 2.32.0(@typescript-eslint/parser@8.54.0(eslint@9.39.2(jiti@1.21.7))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.2(jiti@1.21.7))
       jsdom:
         specifier: ^26.0.0
         version: 26.1.0
@@ -156,6 +162,9 @@ importers:
       safe-regex:
         specifier: ^2.1.1
         version: 2.1.1
+      typescript-eslint:
+        specifier: 8.54.0
+        version: 8.54.0(eslint@9.39.2(jiti@1.21.7))(typescript@5.9.3)
       vite-tsconfig-paths:
         specifier: ^5.1.4
         version: 5.1.4(typescript@5.9.3)(vite@5.4.21(@types/node@22.19.9))
