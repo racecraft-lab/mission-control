@@ -753,6 +753,13 @@ Populate this ledger before G7 is marked complete. Every row must cite the comma
 - Guardrail greps found no inline runtime `FEATURE_*` reads outside `src/lib/feature-flags.ts`; gateway and deferred-boundary matches in the implementation diff are documentation guardrails, not new runtime coupling.
 - Open-file/process cleanup check under Codex PID 53107 found only the baseline MCP helper set (`repoprompt_cli`, Jira issue link, GitHub inline comment, PAL, Tavily, mcp-ical, QMD bridge, Computer Use) and no lingering Spec 002 dev server, Playwright worker, or build/test process.
 
+### Post Review Remediation Evidence
+
+- Draft PR #16 opened at https://github.com/racecraft-lab/mission-control/pull/16.
+- Initial PR review check found no comments and no review threads.
+- GitHub checks were pending at the initial post-review-remediation poll: CodeQL, Screenshot Drift Check, and quality-gate.
+- Retrospective artifact: `specs/002-product-line-switcher/retrospective.md`.
+
 ---
 
 ## Lessons Learned
