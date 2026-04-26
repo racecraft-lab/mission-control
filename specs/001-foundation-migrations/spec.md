@@ -80,7 +80,7 @@ As a downstream spec executor, I can depend on the Phase 0 schema surfaces being
 **Acceptance Scenarios**:
 
 1. **Given** SPEC-001 has been applied, **When** a later spec reads the database, **Then** it finds the required Phase 0 schema surfaces ready for downstream implementation work.
-2. **Given** SPEC-001 scope is reviewed, **When** a maintainer checks for non-migration work, **Then** no runtime, UI, config, type, API, CLI, GitHub-label, Kanban, or scheduler changes are included.
+2. **Given** SPEC-001 scope is reviewed, **When** a maintainer checks for non-migration work, **Then** no runtime, UI, config, type, Zod, API, CLI, GitHub-label, Kanban, notification, or scheduler changes are included.
 3. **Given** the `tasks` and `agents` schema are inspected after SPEC-001, **When** the maintainer verifies the safety constraints, **Then** there is no database `CHECK` expansion for `ready_for_owner`, no `sandbox_path`, and no rename of `agents.workspace_path`.
 
 ### Edge Cases
@@ -108,9 +108,9 @@ As a downstream spec executor, I can depend on the Phase 0 schema surfaces being
 - **FR-011**: The system MUST add a queryable `task_artifacts` surface with indexes that support task chronology and workspace artifact lookups.
 - **FR-012**: The system MUST seed exactly one `facility` workspace by resolving the default tenant from live tenant rows using `ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, id ASC`, MUST leave an existing `facility` row unchanged on rerun, and MUST NOT hardcode `tenant_id=1`.
 - **FR-013**: The system MUST add queryable `resource_policies` and `resource_policy_events` surfaces with indexes that support policy-scope access and task/time audit history.
-- **FR-014**: The system MUST leave existing Mission Control runtime behavior unchanged and MUST NOT include UI, config, TypeScript type, Zod, API, CLI, scheduler, GitHub-label, Kanban, or other non-migration product-surface work in SPEC-001; this includes no Sandbox UI/config/type/doc-copy rename work, no `ready_for_owner` application vocabulary work, no `resolveFlag()` or other runtime feature-flag behavior, and no expected new TS/TSX production module additions.
+- **FR-014**: The system MUST leave existing Mission Control runtime behavior unchanged and MUST NOT include UI, config, TypeScript type, Zod, API, CLI, scheduler, GitHub-label, Kanban, notification, or other non-migration product-surface work in SPEC-001; this includes no Sandbox UI/config/type/doc-copy rename work, no `ready_for_owner` application vocabulary, GitHub-label, Kanban, or notification implementation work, no `resolveFlag()` or other runtime feature-flag behavior, and no expected new TS/TSX production module additions.
 - **FR-015**: The system MUST provide one checked-in, idempotent rollback SQL file for each SQL-changing migration or seed from M53 through M61.
-- **FR-016**: The system MUST provide a manual rollback procedure that requires a pre-rollback database snapshot, specifies reverse-order execution from M61 to M53, explains SQLite drop-column considerations, and does not require any automated rollback CLI or `Migration.down()` runner.
+- **FR-016**: The system MUST provide a manual rollback procedure that requires a pre-rollback database snapshot, specifies reverse-order execution from M61 to M53, explains SQLite drop-column considerations for column-backed rollbacks, requires table-backed rollbacks to drop dependent indexes before guarded table drops, limits M59 seed rollback to safe, documented removal of the SPEC-001-created `facility` row only when that row can be identified confidently, and does not require any automated rollback CLI or `Migration.down()` runner.
 - **FR-017**: The system MUST allow existing verification to pass unchanged after the Phase 0 schema tail is added, demonstrating no behavior regression beyond the new persistent schema surfaces.
 
 ### Key Entities *(include if feature involves data)*
@@ -133,7 +133,7 @@ As a downstream spec executor, I can depend on the Phase 0 schema surfaces being
 - **SC-002**: An immediate second execution of the completed migration set produces no duplicate-column errors and no duplicate columns, tables, indexes, or seeded rows.
 - **SC-003**: Post-migration validation shows exactly three backfilled global agents for Aegis, Security Guardian, and HAL, and exactly one `facility` workspace row.
 - **SC-004**: Post-migration validation shows the required workflow-template routing metadata, task lineage fields, workspace feature-flag storage, task dispositions, task artifacts, resource policies, and resource policy events are all queryable.
-- **SC-005**: The rollback package includes reverse SQL coverage for every SQL-changing M53-M61 step and a runbook that instructs operators to snapshot first and roll back in reverse order.
+- **SC-005**: The rollback package includes reverse SQL coverage for every SQL-changing M53-M61 step and a runbook that instructs operators to snapshot first, roll back in reverse order, use SQLite-aware column-removal guidance where needed, drop dependent indexes before guarded table drops, and treat M59 seed deletion as a conditional safe-removal step only.
 - **SC-006**: Existing automated verification passes unchanged after the migration set is introduced, confirming SPEC-001 added persistence only and no new runtime behavior.
 
 ## Assumptions

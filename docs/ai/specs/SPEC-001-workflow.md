@@ -27,7 +27,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 | Specify | `$speckit-specify` | Complete | Generated `specs/001-foundation-migrations/spec.md`; G1 passed with 0 markers |
 | Clarify | `$speckit-clarify` | Complete | Three sessions completed; no unresolved consensus items; G2 passed with 0 markers |
 | Plan | `$speckit-plan` | Complete | Generated plan, research, data model, and quickstart; G3 passed with 0 markers |
-| Checklist | `$speckit-checklist` | Pending | Run data-integrity, rollback-safety, and scope-control checks |
+| Checklist | `$speckit-checklist` | Complete | Three checklist domains completed; 3 total gaps remediated; G4 passed with 0 markers |
 | Tasks | `$speckit-tasks` | Pending | Generate dependency-ordered migration and verification tasks |
 | Analyze | `$speckit-analyze` | Pending | Must find no CRITICAL issues before implementation |
 | Implement | `$speckit-implement` | Pending | TDD-oriented migration implementation and verification |
@@ -362,10 +362,10 @@ Focus on SPEC-001 requirements:
 
 | Checklist | Items | Gaps | Spec References |
 |-----------|-------|------|-----------------|
-| data-integrity | Pending until checklist completes | Pending until checklist completes | P0-AC1..P0-AC10 |
-| rollback-safety | Pending until checklist completes | Pending until checklist completes | P0-AC11..P0-AC12 |
-| scope-control | Pending until checklist completes | Pending until checklist completes | P0-AC13..P0-AC14 |
-| Total | Pending until checklist completes | Pending until checklist completes | All |
+| data-integrity | 13 | 0 | P0-AC1..P0-AC10 |
+| rollback-safety | 11 | 1 found, 1 remediated | P0-AC11..P0-AC12 |
+| scope-control | 10 | 2 found, 2 remediated | P0-AC13..P0-AC14 |
+| Total | 34 | 3 found, 3 remediated; 0 remaining | All |
 
 ### Addressing Gaps
 
@@ -561,16 +561,16 @@ Run the smallest reliable subset first, then broader checks if time permits:
 
 ```text
 racecraft-mission-control/
-├── src/lib/migrations.ts                 # Authoritative migration runner
-├── src/lib/schema.sql                     # Initial schema reference
-├── src/lib/__tests__/                    # Vitest tests and migration-adjacent tests
-├── docs/rc-factory-v1-prd.md             # Product requirements source
-├── docs/ai/rc-factory-technical-roadmap.md
-├── docs/ai/specs/SPEC-001-workflow.md    # This workflow
-├── docs/migrations/                      # Rollback files and rollback runbook
-├── specs/001-foundation-migrations/      # Generated SpecKit artifacts
-├── .specify/memory/constitution.md       # Constitution and project rules
-└── .specify/templates/plan-template.md   # Plan template with Strict Scope field
+|-- src/lib/migrations.ts                 # Authoritative migration runner
+|-- src/lib/schema.sql                    # Initial schema reference
+|-- src/lib/__tests__/                    # Vitest tests and migration-adjacent tests
+|-- docs/rc-factory-v1-prd.md             # Product requirements source
+|-- docs/ai/rc-factory-technical-roadmap.md
+|-- docs/ai/specs/SPEC-001-workflow.md    # This workflow
+|-- docs/migrations/                      # Rollback files and rollback runbook
+|-- specs/001-foundation-migrations/      # Generated SpecKit artifacts
+|-- .specify/memory/constitution.md       # Constitution and project rules
+`-- .specify/templates/plan-template.md   # Plan template with Strict Scope field
 ```
 
 ---

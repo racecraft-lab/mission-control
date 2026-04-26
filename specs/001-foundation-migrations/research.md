@@ -2,7 +2,7 @@
 
 ## Decision 1: Keep the migration runner authoritative and keep `schema.sql` read-only
 
-- **Decision**: Append `M53-M61` only in [`src/lib/migrations.ts`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts) and treat [`src/lib/schema.sql`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/schema.sql) as a reference artifact during SPEC-001.
+- **Decision**: Append `M53-M61` only in `src/lib/migrations.ts` and treat `src/lib/schema.sql` as a reference artifact during SPEC-001.
 - **Rationale**: The workflow prompt states migrations remain authoritative. Keeping schema changes in the existing forward-only migration chain preserves repo truth and avoids fresh-install drift unless later implementation work explicitly tests and documents it.
 - **Alternatives considered**:
   - Update `schema.sql` in parallel now: rejected because the prompt keeps it read-only unless fresh-install ordering is explicitly tested and documented.

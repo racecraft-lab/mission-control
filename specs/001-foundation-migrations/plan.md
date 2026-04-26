@@ -1,22 +1,22 @@
 # Implementation Plan: SPEC-001 Foundation Migrations
 
-**Branch**: `001-foundation-migrations` | **Date**: 2026-04-25 | **Spec**: [`spec.md`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/specs/001-foundation-migrations/spec.md)
+**Branch**: `001-foundation-migrations` | **Date**: 2026-04-25 | **Spec**: `spec.md`
 **Input**: Feature specification from `/specs/001-foundation-migrations/spec.md`
 
 ## Summary
 
-Append migrations `M53` through `M61` to [`src/lib/migrations.ts`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts) to add the RC Factory Phase 0 persistence surfaces only: agent scope, workflow-template routing metadata, task lineage, workspace feature-flag storage, task dispositions, task artifacts, the `facility` workspace seed, and resource-governance tables. Pair every SQL-changing step with checked-in rollback SQL plus a manual rollback runbook, keep all changes additive and rerun-safe, preserve the live schema names already in use, and leave [`src/lib/schema.sql`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/schema.sql) as a read-only reference unless fresh-install ordering is explicitly tested later.
+Append migrations `M53` through `M61` to `src/lib/migrations.ts` to add the RC Factory Phase 0 persistence surfaces only: agent scope, workflow-template routing metadata, task lineage, workspace feature-flag storage, task dispositions, task artifacts, the `facility` workspace seed, and resource-governance tables. Pair every SQL-changing step with checked-in rollback SQL plus a manual rollback runbook, keep all changes additive and rerun-safe, preserve the live schema names already in use, and leave `src/lib/schema.sql` as a read-only reference unless fresh-install ordering is explicitly tested later.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5, SQL, Node.js 22+, Next.js 16  
 **Primary Dependencies**: `better-sqlite3`, Next.js 16, React 19, pnpm  
-**Storage**: SQLite via `better-sqlite3`; migrations in [`src/lib/migrations.ts`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts) remain authoritative, [`src/lib/schema.sql`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/schema.sql) is reference-only  
+**Storage**: SQLite via `better-sqlite3`; migrations in `src/lib/migrations.ts` remain authoritative, `src/lib/schema.sql` is reference-only  
 **Testing**: `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm test:e2e`, plus targeted migration smoke coverage on a copied SQLite database  
 **Target Platform**: Mission Control server runtime on Node.js with a local SQLite database  
 **Project Type**: Single-project web application with a server-side migration runner  
 **Performance Goals**: One forward pass upgrades a migration `052` database without runtime regressions; an immediate second pass produces no duplicate schema objects or seed rows  
-**Constraints**: Strict Scope stays `N/A`; append `M53-M61`; do not rename or remove live schema; do not add UI/API/config/CLI/runtime flag behavior; manual rollback only; preserve `agents.workspace_path`, `workflow_templates`, `workspaces.name`, and the current `tasks.status` contract with no DB `CHECK` expansion  
+**Constraints**: Strict Scope stays `N/A`; append `M53-M61`; do not rename or remove live schema; do not add UI, API, scheduler, config, CLI, TypeScript status union, Zod, GitHub-label, Kanban, notification, or runtime feature-flag behavior; manual rollback only; preserve `agents.workspace_path`, `workflow_templates`, `workspaces.name`, and the current `tasks.status` contract with no DB `CHECK` expansion  
 **Scale/Scope**: Nine migration IDs, nine rollback SQL artifacts, one rollback runbook, no new TS/TSX production modules  
 **Strict Scope**: N/A
 
@@ -27,7 +27,7 @@ Append migrations `M53` through `M61` to [`src/lib/migrations.ts`](/Users/fredri
 ### Pre-Research Gate
 
 - **Migration-only profile**: PASS. The plan is limited to migration entries, rollback SQL, rollback docs, and migration smoke verification.
-- **Schema truthfulness**: PASS. The live repo evidence matches the spec constraints: `workflow_templates` is the existing table in [`src/lib/migrations.ts:118`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts:118), `workspaces.name` is the live display column in [`src/lib/migrations.ts:965`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts:965), `agents.workspace_path` is preserved in [`src/lib/migrations.ts:1041`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/migrations.ts:1041), and `tasks.status` remains `TEXT NOT NULL DEFAULT 'inbox'` without a DB `CHECK` in [`src/lib/schema.sql:9`](/Users/fredrickgabelmann/Documents/Business_Documents/RSE_Documents/Projects/racecraft-mission-control/.worktrees/001-foundation-migrations/src/lib/schema.sql:9).
+- **Schema truthfulness**: PASS. The live repo evidence matches the spec constraints: `workflow_templates` is the existing table in `src/lib/migrations.ts:118`, `workspaces.name` is the live display column in `src/lib/migrations.ts:965`, `agents.workspace_path` is preserved in `src/lib/migrations.ts:1041`, and `tasks.status` remains `TEXT NOT NULL DEFAULT 'inbox'` without a DB `CHECK` in `src/lib/schema.sql:9`.
 - **Additive safety**: PASS. No destructive migration, no column rename, no `sandbox_path`, and no `tasks.status` constraint rebuild are planned.
 - **Rollback safety**: PASS. The design requires `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` plus `docs/migrations/rollback-procedure.md`.
 - **Strict scope ramp**: PASS. No new spec-owned TS/TSX production modules are planned, so `tsconfig.spec-strict.json` and `eslint.config.mjs` remain unchanged.
@@ -105,6 +105,7 @@ docs/
 - Rerun smoke: apply the migration path a second time and verify no duplicate columns, indexes, or seed rows.
 - Rollback smoke: snapshot first, then apply `rollback-M61.sql` through `rollback-M53.sql` in reverse order on the copied database.
 - Repo verification: run the standard `pnpm` build, typecheck, lint, unit, and e2e commands after implementation.
+- Phase 5 task generation must stay limited to migrations, rollback artifacts, and migration verification; do not generate tasks for SPEC-002 `resolveFlag()` or Sandbox cleanup work, or for SPEC-005 `ready_for_owner`, GitHub-label, Kanban, or notification behavior.
 
 ## Complexity Tracking
 
