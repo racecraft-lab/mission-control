@@ -28,7 +28,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 | Clarify | `$speckit-clarify` | Complete | Three sessions completed; no unresolved consensus items; G2 passed with 0 markers |
 | Plan | `$speckit-plan` | Complete | Generated plan, research, data model, and quickstart; G3 passed with 0 markers |
 | Checklist | `$speckit-checklist` | Complete | Three checklist domains completed; 3 total gaps remediated; G4 passed with 0 markers |
-| Tasks | `$speckit-tasks` | Pending | Generate dependency-ordered migration and verification tasks |
+| Tasks | `$speckit-tasks` | Complete | Generated 35 dependency-ordered tasks with full P0-AC1..P0-AC14 coverage; G5 passed |
 | Analyze | `$speckit-analyze` | Pending | Must find no CRITICAL issues before implementation |
 | Implement | `$speckit-implement` | Pending | TDD-oriented migration implementation and verification |
 
@@ -416,10 +416,10 @@ $speckit-tasks
 
 | Metric | Value |
 |--------|-------|
-| Total Tasks | Pending until Tasks completes |
-| Phases | Pending until Tasks completes |
-| Parallel Opportunities | Pending until Tasks completes |
-| User Stories Covered | Pending until Tasks completes |
+| Total Tasks | 35 |
+| Phases | 7 |
+| Parallel Opportunities | 11 |
+| User Stories Covered | 4 |
 
 ---
 
@@ -517,12 +517,12 @@ Run the smallest reliable subset first, then broader checks if time permits:
 
 | Phase | Tasks | Completed | Notes |
 |-------|-------|-----------|-------|
-| 1 - Schema truth and tests | Pending until Tasks completes | 0 | Pending |
-| 2 - M53-M56 columns/indexes | Pending until Tasks completes | 0 | Pending |
-| 3 - M57-M58 persistence tables | Pending until Tasks completes | 0 | Pending |
-| 4 - M59-M61 seeds/policy tables | Pending until Tasks completes | 0 | Pending |
-| 5 - Rollback docs/runbook | Pending until Tasks completes | 0 | Pending |
-| 6 - Verification/bookkeeping | Pending until Tasks completes | 0 | Pending |
+| 1 - Schema truth and tests | T001-T006, T016, T030 | 0 | Pending |
+| 2 - M53-M56 columns/indexes | T007-T010 | 0 | Pending |
+| 3 - M57-M58 persistence tables | T011-T012 | 0 | Pending |
+| 4 - M59-M61 seeds/policy tables | T013-T015 | 0 | Pending |
+| 5 - Rollback docs/runbook | T019-T029 | 0 | Pending |
+| 6 - Verification/bookkeeping | T017-T018, T031-T035 | 0 | Pending |
 
 ---
 
