@@ -191,6 +191,60 @@ function createMigration052Database(): Database.Database {
       github_pr_state TEXT,
       dispatch_attempts INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE user_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE activities (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE quality_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE standup_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE alert_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE direct_connections (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE github_syncs (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE workflow_pipelines (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE pipeline_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE webhooks (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE webhook_deliveries (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE token_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT 1,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      ticket_prefix TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      UNIQUE(workspace_id, slug),
+      UNIQUE(workspace_id, ticket_prefix)
+    );
+    CREATE TABLE adapter_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE security_events (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE agent_trust_scores (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE mcp_call_log (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE eval_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE eval_golden_sets (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE eval_traces (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE agent_api_keys (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE spawn_history (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+    CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, workspace_id INTEGER NOT NULL DEFAULT 1);
+
+    CREATE INDEX IF NOT EXISTS idx_workspaces_slug ON workspaces(slug);
+    CREATE INDEX IF NOT EXISTS idx_workspaces_tenant_id ON workspaces(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_agents_session_key ON agents(session_key);
+    CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+    CREATE INDEX IF NOT EXISTS idx_agents_workspace_id ON agents(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_agents_source ON agents(source);
+    CREATE INDEX IF NOT EXISTS idx_workflow_templates_name ON workflow_templates(name);
+    CREATE INDEX IF NOT EXISTS idx_workflow_templates_created_by ON workflow_templates(created_by);
+    CREATE INDEX IF NOT EXISTS idx_workflow_templates_workspace_id ON workflow_templates(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to);
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_workspace_id ON tasks(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_workspace_project ON tasks(workspace_id, project_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_workspace_status ON projects(workspace_id, status);
   `)
 
   const insertMigration = db.prepare('INSERT INTO schema_migrations (id) VALUES (?)')
@@ -228,6 +282,20 @@ function columns(db: Database.Database, table: string): string[] {
 
 function indexNames(db: Database.Database, table: string): string[] {
   return (db.prepare(`PRAGMA index_list(${table})`).all() as Array<{ name: string }>).map((index) => index.name)
+}
+
+function foreignKeys(db: Database.Database, table: string): Array<{
+  from: string
+  on_delete: string
+  table: string
+  to: string
+}> {
+  return db.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{
+    from: string
+    on_delete: string
+    table: string
+    to: string
+  }>
 }
 
 function tableSql(db: Database.Database, table: string): string {
@@ -349,6 +417,28 @@ describe('SPEC-001 foundation migrations', () => {
     }).toEqual(before)
   })
 
+  it('resumes from a partially applied Phase 0 shape without duplicate objects', () => {
+    const db = createMigration052Database()
+
+    db.exec(`
+      ALTER TABLE agents ADD COLUMN scope TEXT NOT NULL DEFAULT 'workspace' CHECK (scope IN ('workspace','global'));
+      ALTER TABLE workflow_templates ADD COLUMN slug TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_templates_workspace_slug
+        ON workflow_templates(workspace_id, slug)
+        WHERE slug IS NOT NULL;
+      INSERT INTO workspaces (id, slug, name, tenant_id)
+      VALUES (99, 'facility', 'Facility', 2);
+    `)
+
+    expect(() => runMigrations(db)).not.toThrow()
+    expect(columns(db, 'agents').filter((column) => column === 'scope')).toHaveLength(1)
+    expect(columns(db, 'workflow_templates').filter((column) => column === 'slug')).toHaveLength(1)
+    expect(db.prepare(`SELECT COUNT(*) as c FROM workspaces WHERE slug = 'facility'`).get()).toEqual({ c: 1 })
+    expect(
+      db.prepare(`SELECT name, scope FROM agents WHERE name IN ('Aegis', 'Security Guardian', 'HAL') AND scope = 'global'`).all()
+    ).toHaveLength(3)
+  })
+
   it('keeps SPEC-001 no-runtime and no-rename safety gates intact', () => {
     const migrationsSource = readFileSync(join(process.cwd(), 'src', 'lib', 'migrations.ts'), 'utf8')
     const schemaSource = readFileSync(join(process.cwd(), 'src', 'lib', 'schema.sql'), 'utf8')
@@ -358,6 +448,32 @@ describe('SPEC-001 foundation migrations', () => {
     expect(sqlSources).not.toMatch(/ADD\s+COLUMN\s+sandbox_path/i)
     expect(sqlSources).not.toMatch(/ALTER\s+TABLE\s+agents\s+RENAME\s+COLUMN/i)
     expect(sqlSources).not.toMatch(/\bready_for_owner\b/i)
+  })
+
+  it('keeps the facility workspace when rollback sees workspace-scoped dependencies', () => {
+    const db = createMigration052Database()
+    runMigrations(db)
+
+    const facility = db.prepare(`SELECT id FROM workspaces WHERE slug = 'facility'`).get() as { id: number }
+    db.prepare(
+      `
+        INSERT INTO projects (workspace_id, name, slug, ticket_prefix)
+        VALUES (?, 'Facility Ops', 'facility-ops', 'FAC')
+      `
+    ).run(facility.id)
+    db.prepare(
+      `
+        INSERT INTO workflow_templates (name, task_prompt, workspace_id, slug)
+        VALUES ('Facility Review', 'Review facility work', ?, 'facility-review')
+      `
+    ).run(facility.id)
+
+    db.exec(readFileSync(join(process.cwd(), 'docs', 'migrations', 'rollback-M59.sql'), 'utf8'))
+
+    expect(db.prepare(`SELECT COUNT(*) as c FROM workspaces WHERE slug = 'facility'`).get()).toEqual({ c: 1 })
+    expect(db.prepare(`SELECT COUNT(*) as c FROM schema_migrations WHERE id = '059_facility_workspace_seed'`).get()).toEqual({
+      c: 1,
+    })
   })
 
   it('ships executable manual rollback artifacts for M53-M61', () => {
@@ -380,6 +496,22 @@ describe('SPEC-001 foundation migrations', () => {
     expect(columns(db, 'workflow_templates')).not.toContain('slug')
     expect(columns(db, 'tasks')).not.toContain('workflow_template_id')
     expect(columns(db, 'workspaces')).not.toContain('feature_flags')
+    expect(db.prepare(`SELECT COUNT(*) as c FROM agents WHERE name = 'Aegis'`).get()).toEqual({ c: 1 })
+    expect(db.prepare(`SELECT COUNT(*) as c FROM workflow_templates WHERE name = 'Research'`).get()).toEqual({ c: 1 })
+    expect(db.prepare(`SELECT COUNT(*) as c FROM tasks WHERE title = 'Existing task'`).get()).toEqual({ c: 1 })
+    expect(db.prepare(`SELECT COUNT(*) as c FROM workspaces WHERE slug = 'default'`).get()).toEqual({ c: 1 })
+    expect(indexNames(db, 'agents')).toEqual(
+      expect.arrayContaining(['idx_agents_session_key', 'idx_agents_status', 'idx_agents_workspace_id'])
+    )
+    expect(indexNames(db, 'workflow_templates')).toEqual(
+      expect.arrayContaining(['idx_workflow_templates_name', 'idx_workflow_templates_workspace_id'])
+    )
+    expect(indexNames(db, 'tasks')).toEqual(expect.arrayContaining(['idx_tasks_status', 'idx_tasks_workspace_id']))
+    expect(foreignKeys(db, 'workspaces')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ from: 'tenant_id', on_delete: 'CASCADE', table: 'tenants', to: 'id' }),
+      ])
+    )
 
     const droppedTables = db
       .prepare(`

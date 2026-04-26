@@ -199,4 +199,4 @@
 
 - Column-removal rollback for `M53`, `M54`, `M55`, and `M56` uses transactional table rebuilds so the files can be replayed safely even after the SPEC-001 columns are already absent.
 - Table-creation rollback for `M57`, `M58`, `M60`, and `M61` should drop indexes first, then drop tables with existence guards.
-- Seed rollback for `M59` should only remove the SPEC-001-created `facility` row when doing so is safe and documented in the rollback file.
+- Seed rollback for `M59` should only remove the SPEC-001-created `facility` row when no migration-052 workspace-scoped table still references it; otherwise the row and migration marker remain for operator review.

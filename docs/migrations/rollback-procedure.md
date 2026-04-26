@@ -37,7 +37,7 @@ SQLite supports `ALTER TABLE ... DROP COLUMN`, but it does not support `DROP COL
 
 ## Facility Workspace Guard
 
-`rollback-M59.sql` deletes only a workspace with `slug='facility'` and `name='Facility'` when no tasks or agents reference it. If later specs or operators have attached data to that workspace, the row and migration marker remain for operator review.
+`rollback-M59.sql` deletes only a workspace with `slug='facility'` and `name='Facility'` when no migration-052 workspace-scoped table references it. It also enables foreign-key enforcement so Phase 0 tables that still exist can block unsafe deletion. If later specs or operators have attached data to that workspace, the row and migration marker remain for operator review.
 
 ## Post-Rollback Checks
 

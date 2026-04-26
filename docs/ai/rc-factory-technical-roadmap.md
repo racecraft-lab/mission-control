@@ -309,7 +309,7 @@ Foundation migrations/seed steps M53–M61 (nine additive SQL-changing migration
 
 The live migration runner (`src/lib/migrations.ts:5-9`) is forward-only — `type Migration = { id: string; up: (db) => void }` has no `down()` function. Rollback for Phase 0 is therefore documented as **manual reverse SQL**, not an automated `down()`:
 
-- Each SQL-changing M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` (created as part of SPEC-001 deliverables) that contains explicit guarded reverse SQL. M53-M56 use transactional table rebuilds; M57, M58, M60, and M61 use `DROP TABLE`; M59 uses guarded `DELETE FROM workspaces WHERE slug='facility'`.
+- Each SQL-changing M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` (created as part of SPEC-001 deliverables) that contains explicit guarded reverse SQL. M53-M56 use transactional table rebuilds; M57, M58, M60, and M61 use `DROP TABLE`; M59 uses guarded `DELETE FROM workspaces WHERE slug='facility'` only when no migration-052 workspace-scoped table still references the facility row.
 - An operator runbook at `docs/migrations/rollback-procedure.md` describes the reverse order (M61 -> M53), SQLite column-rebuild rollback behavior, and the safety pre-checks (snapshot the DB file first).
 - Rollback is operator-initiated by manually applying the documented reverse SQL after taking the DB snapshot. SPEC-001 adds no rollback CLI surface.
 - A future spec may extend `Migration` with an optional `down?: (db) => void` and a CLI runner; that work is **out of scope for SPEC-001** and is tracked separately.
