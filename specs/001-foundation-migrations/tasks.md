@@ -75,7 +75,7 @@
 ### Implementation for User Story 2
 
 - [ ] T017 [US2] Run the copied-database forward-run and rerun smoke workflow from `specs/001-foundation-migrations/quickstart.md` against `src/lib/migrations.ts`, then verify the sqlite3 queries for global agents, `facility`, workflow-template metadata, task lineage, feature flags, task artifacts, and resource-policy surfaces (P0-AC1, P0-AC2, P0-AC3, P0-AC4, P0-AC5, P0-AC6, P0-AC7, P0-AC8, P0-AC9).
-- [ ] T018 [US2] Run unchanged automated verification with `pnpm test` and `pnpm typecheck` against `src/lib/migrations.ts` and `src/lib/__tests__/migrations-phase0.test.ts` to confirm the migration-only tail does not introduce behavior regressions (P0-AC10).
+- [ ] T018 [US2] Run unchanged automated verification with `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm test:e2e` against `src/lib/migrations.ts` and `src/lib/__tests__/migrations-phase0.test.ts` to confirm the migration-only tail does not introduce behavior regressions (P0-AC10).
 
 **Checkpoint**: The migration tail is rerun-safe and the existing pnpm verification still passes unchanged.
 
@@ -214,5 +214,5 @@ Task: "Create docs/migrations/rollback-M61.sql with idempotent reverse SQL and p
 ## Notes
 
 - `src/lib/schema.sql` remains read-only unless implementation proves a fresh-install gap that is explicitly justified later.
-- No task introduces new production TS/TSX modules.
+- Tasks introduce one test-only TS file at `src/lib/__tests__/migrations-phase0.test.ts` and no new production TS/TSX modules.
 - SPEC-002 `resolveFlag()` and Sandbox cleanup work, plus SPEC-005 `ready_for_owner` runtime behavior, GitHub labels, Kanban, and notifications, are intentionally excluded from this task list.

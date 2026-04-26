@@ -29,7 +29,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 | Plan | `$speckit-plan` | Complete | Generated plan, research, data model, and quickstart; G3 passed with 0 markers |
 | Checklist | `$speckit-checklist` | Complete | Three checklist domains completed; 3 total gaps remediated; G4 passed with 0 markers |
 | Tasks | `$speckit-tasks` | Complete | Generated 35 dependency-ordered tasks with full P0-AC1..P0-AC14 coverage; G5 passed |
-| Analyze | `$speckit-analyze` | Pending | Must find no CRITICAL issues before implementation |
+| Analyze | `$speckit-analyze` | Complete | Found and remediated 2 HIGH issues; G6 passed with 0 CRITICAL/HIGH findings |
 | Implement | `$speckit-implement` | Pending | TDD-oriented migration implementation and verification |
 
 **Status Legend:** Pending | In Progress | Complete | Blocked
@@ -454,7 +454,8 @@ Focus on:
 
 | ID | Severity | Issue | Resolution |
 |----|----------|-------|------------|
-| Pending until Analyze completes | Pending until Analyze completes | Pending until Analyze completes | Pending until Analyze completes |
+| A001 | HIGH | P0-AC10 verification under-covered in tasks | Expanded T018 to run lint, typecheck, test, build, and e2e |
+| A002 | HIGH | Plan said Strict Scope N/A after tasks introduced a TS test harness | Recorded test-only `src/lib/__tests__/migrations-phase0.test.ts` and no new production TS/TSX modules |
 
 ---
 

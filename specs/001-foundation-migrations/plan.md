@@ -16,9 +16,9 @@ Append migrations `M53` through `M61` to `src/lib/migrations.ts` to add the RC F
 **Target Platform**: Mission Control server runtime on Node.js with a local SQLite database  
 **Project Type**: Single-project web application with a server-side migration runner  
 **Performance Goals**: One forward pass upgrades a migration `052` database without runtime regressions; an immediate second pass produces no duplicate schema objects or seed rows  
-**Constraints**: Strict Scope stays `N/A`; append `M53-M61`; do not rename or remove live schema; do not add UI, API, scheduler, config, CLI, TypeScript status union, Zod, GitHub-label, Kanban, notification, or runtime feature-flag behavior; manual rollback only; preserve `agents.workspace_path`, `workflow_templates`, `workspaces.name`, and the current `tasks.status` contract with no DB `CHECK` expansion  
-**Scale/Scope**: Nine migration IDs, nine rollback SQL artifacts, one rollback runbook, no new TS/TSX production modules  
-**Strict Scope**: N/A
+**Constraints**: Append `M53-M61`; do not rename or remove live schema; do not add UI, API, scheduler, config, CLI, TypeScript status union, Zod, GitHub-label, Kanban, notification, or runtime feature-flag behavior; manual rollback only; preserve `agents.workspace_path`, `workflow_templates`, `workspaces.name`, and the current `tasks.status` contract with no DB `CHECK` expansion; and keep any new TypeScript work limited to the planned test-only harness in `src/lib/__tests__/migrations-phase0.test.ts`  
+**Scale/Scope**: Nine migration IDs, nine rollback SQL artifacts, one rollback runbook, one new TS test file, and no new TS/TSX production modules  
+**Strict Scope**: Test-only `src/lib/__tests__/migrations-phase0.test.ts`; no new production TS/TSX modules, so `tsconfig.spec-strict.json` and `eslint.config.mjs` remain unchanged
 
 ## Constitution Check
 
@@ -30,12 +30,12 @@ Append migrations `M53` through `M61` to `src/lib/migrations.ts` to add the RC F
 - **Schema truthfulness**: PASS. The live repo evidence matches the spec constraints: `workflow_templates` is the existing table in `src/lib/migrations.ts:118`, `workspaces.name` is the live display column in `src/lib/migrations.ts:965`, `agents.workspace_path` is preserved in `src/lib/migrations.ts:1041`, and `tasks.status` remains `TEXT NOT NULL DEFAULT 'inbox'` without a DB `CHECK` in `src/lib/schema.sql:9`.
 - **Additive safety**: PASS. No destructive migration, no column rename, no `sandbox_path`, and no `tasks.status` constraint rebuild are planned.
 - **Rollback safety**: PASS. The design requires `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` plus `docs/migrations/rollback-procedure.md`.
-- **Strict scope ramp**: PASS. No new spec-owned TS/TSX production modules are planned, so `tsconfig.spec-strict.json` and `eslint.config.mjs` remain unchanged.
+- **Strict scope ramp**: PASS. The task plan introduces only the test-only harness `src/lib/__tests__/migrations-phase0.test.ts`; no new spec-owned TS/TSX production modules are planned, so `tsconfig.spec-strict.json` and `eslint.config.mjs` remain unchanged.
 - **Package manager**: PASS. The repo uses `pnpm` only.
 
 ### Post-Design Re-Check
 
-- **Constitution status**: PASS. The designed artifacts keep scope migration-only, preserve live schema names, keep runtime behavior out of scope, make rollback explicit, and leave `Strict Scope: N/A`.
+- **Constitution status**: PASS. The designed artifacts keep scope migration-only, preserve live schema names, keep runtime behavior out of scope, make rollback explicit, and record the test-only TypeScript harness without widening production strict scope.
 - **Contracts decision**: PASS. No `contracts/` artifact is generated because SPEC-001 adds internal persistence surfaces only and does not define a new external API, CLI, or protocol contract.
 
 ## Project Structure
@@ -56,6 +56,8 @@ specs/001-foundation-migrations/
 ```text
 src/
 `-- lib/
+    |-- __tests__/
+    |   `-- migrations-phase0.test.ts
     |-- migrations.ts
     `-- schema.sql        # Read-only reference during SPEC-001 planning/implementation
 
@@ -73,7 +75,7 @@ docs/
     `-- rollback-procedure.md
 ```
 
-**Structure Decision**: Keep implementation in the existing single-project layout. The only production code change planned for SPEC-001 is appending the migration tail in `src/lib/migrations.ts`; rollback artifacts live under `docs/migrations/`; existing verification commands remain the entry point for regression checks.
+**Structure Decision**: Keep implementation in the existing single-project layout. The only production code change planned for SPEC-001 is appending the migration tail in `src/lib/migrations.ts`; the only new TypeScript file is the test-only harness `src/lib/__tests__/migrations-phase0.test.ts`; rollback artifacts live under `docs/migrations/`; existing verification commands remain the entry point for regression checks.
 
 ## Phase 0 Research Decisions
 
