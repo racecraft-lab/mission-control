@@ -25,7 +25,7 @@ A new **task pipeline engine** auto-chains tasks based on declarative routing ru
 ## Tech Stack
 
 - **Existing**: Next.js 16, React 19, TypeScript 5.7, better-sqlite3 (SQLite), Zustand, xyflow/react, reagraph, pnpm, Node ≥22, existing REST + SSE API surface.
-- **New**: one explicit pinned runtime dependency for schema validation (`ajv`, direct dependency only; never import transitive packages). Schema additions: one new column on `agents` (`scope`), one new state value in the task-status vocabulary (`ready_for_owner`, DB CHECK enforcement only if the live schema proves status is CHECK-constrained), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain/artifact-policy columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Agent filesystem "workspace" terminology is renamed to "Sandbox" at UI/config level while the existing `agents.workspace_path` SQL column remains unchanged. OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
+- **New**: Phase 0 schema additions only: one new column on `agents` (`scope`), four new tables (`task_dispositions`, `task_artifacts`, `resource_policies`, `resource_policy_events`), a feature-flag storage column on `workspaces` (`feature_flags JSON`), routing/chain/artifact-policy columns on `workflow_templates`, and task-chain binding/lineage columns on `tasks`. Later v1 runtime specs add the pinned schema-validation dependency (`ajv`), the application-level `ready_for_owner` vocabulary, and the UI/config/doc-copy rename from agent filesystem "workspace" to "Sandbox" while the existing `agents.workspace_path` SQL column remains unchanged. OpenClaw electricity / infra cost support is **not** a schema feature in v1; it is a runtime-only optional adapter.
 - **Testing**: existing Playwright/Vitest patterns + new migration tests + scheduler unit tests for routing + pilot smoke (see Smoke Plan).
 
 ---
@@ -130,7 +130,7 @@ This is the current honest fork-pressure picture.
 - `agents.scope` column
 - `workspaces.feature_flags` column
 - task-chain binding/lineage columns on `tasks`
-- task-status vocabulary gaining `ready_for_owner` (DB CHECK change only if live schema verifies one exists)
+- later runtime spec task-status vocabulary gaining `ready_for_owner` with no SPEC-001 DB CHECK change
 - `workflow_templates` gaining slug/routing/output/terminal-event columns for task-chain use
 - `task_dispositions` table
 - `task_artifacts` table
@@ -151,7 +151,7 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1. The live schema
 
 ### A. Object model & naming (D1, D2)
 
-- **FR-A1:** Three-layer naming scheme enforced. UI + TS domain uses "Product Line" / `ProductLine` for SQL workspaces. SQL `workspaces` / `workspace_id` unchanged. Agent filesystem workspace terminology renders as "Sandbox" in UI/config copy. The live schema (verified 2026-04-24 at `src/lib/migrations.ts:1041-1042`) DOES contain `agents.workspace_path`. v1 decision: **keep the SQL column name as-is** (`agents.workspace_path`); rename only UI labels, config keys, TypeScript type names (`AgentSandbox`), error messages, log strings, and external doc copy. v1 ships **NO** `ALTER TABLE agents RENAME COLUMN` and **NO** `ADD COLUMN sandbox_path`. A future spec may revisit this if upstream parity becomes a hard requirement.
+- **FR-A1:** Three-layer naming scheme enforced. UI + TS domain uses "Product Line" / `ProductLine` for SQL workspaces. SQL `workspaces` / `workspace_id` unchanged. Agent filesystem workspace terminology renders as "Sandbox" in UI/config copy in a later v1 spec, not SPEC-001/Phase 0. The live schema (verified 2026-04-24 at `src/lib/migrations.ts:1041-1042`) DOES contain `agents.workspace_path`. v1 decision: **keep the SQL column name as-is** (`agents.workspace_path`); rename only UI labels, config keys, TypeScript type names (`AgentSandbox`), error messages, log strings, and external doc copy. v1 ships **NO** `ALTER TABLE agents RENAME COLUMN` and **NO** `ADD COLUMN sandbox_path`. A future spec may revisit this if upstream parity becomes a hard requirement.
 - **FR-A1a:** `activeTenant` remains tenant/super-admin context only. It MUST NOT be reused as the product-line switcher. The header MUST stop labeling tenant context as "Workspace"; tenant context should be labeled as tenant/facility context, while Product Line selection is represented by a separate `activeWorkspace`.
 - **FR-A2:** `ProductLine` TypeScript type defined as alias/extension of existing `Workspace` type. Exported from `@/types/product-line` and re-exported where convenient.
 - **FR-A3:** A dedicated `facility` workspace (slug = `'facility'`) exists for hosting `scope='global'` agents. Seeded on migration using the live `workspaces.name` column; idempotent.
@@ -495,18 +495,20 @@ CREATE INDEX idx_resource_policy_events_task
 
 Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 
-| Phase | Scope | Ship-safe? | Compatibility class |
-|---|---|---|---|
-| 0 | Foundation migrations (M53–M61) | Yes — runtime-safe | `upstream-divergent` |
-| 1 | Workspace switcher + `activeWorkspace` scoping | Yes — flag-off default | `upstream-safe` |
-| 2 | Aegis refactor (facility singleton) | Yes — shim preserves legacy | `upstream-divergent` |
-| 3 | Task-chain engine + declarative routing over `workflow_templates` | Yes — null-default fields | `upstream-divergent` |
-| 4 | `ready_for_owner` state + two-step terminal | Yes — per-template opt-in | `upstream-divergent` |
-| 5 | Area labels + GitHub sync updates | Yes — fallback to `area:triage` | `upstream-safe` |
-| 6 | Disposition logging + artifact store + audit/admin panels | Yes — purely additive | `upstream-divergent` |
-| 7 | Resource governance + Cost Tracker enforcement | Yes — flag-off default | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` |
-| 8 | Product Line A pilot (issue #110, then #111) | Gated behind pilot feature flag | Fork rollout only |
-| 9 | Second product line onboarding (Product Line B) | Post-pilot | Fork rollout only |
+| Phase | Scope | Status | Ship-safe? | Compatibility class |
+|---|---|---|---|---|
+| 0 | Foundation migrations (M53–M61) | Complete | Yes — runtime-safe | `upstream-divergent` |
+| 1 | Workspace switcher + `activeWorkspace` scoping | Pending | Yes — flag-off default | `upstream-safe` |
+| 2 | Aegis refactor (facility singleton) | Pending | Yes — shim preserves legacy | `upstream-divergent` |
+| 3 | Task-chain engine + declarative routing over `workflow_templates` | Pending | Yes — null-default fields | `upstream-divergent` |
+| 4 | `ready_for_owner` state + two-step terminal | Pending | Yes — per-template opt-in | `upstream-divergent` |
+| 5 | Area labels + GitHub sync updates | Pending | Yes — fallback to `area:triage` | `upstream-safe` |
+| 6 | Disposition logging + artifact store + audit/admin panels | Pending | Yes — purely additive | `upstream-divergent` |
+| 7 | Resource governance + Cost Tracker enforcement | Pending | Yes — flag-off default | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` |
+| 8 | Product Line A pilot (issue #110, then #111) | Pending | Gated behind pilot feature flag | Fork rollout only |
+| 9 | Second product line onboarding (Product Line B) | Pending | Post-pilot | Fork rollout only |
+
+**Phase 0 completion note:** SPEC-001 is complete on PR #15 after HAL UAT acceptance on 2026-04-26. Acceptance evidence: M53-M61 migration markers present, `PRAGMA quick_check` OK, `workspaces.slug='facility'` seeded, Aegis/HAL/Security Guardian backfilled to `scope='global'`, and operator UAT found no blocking regressions in the core app flows.
 
 ### Autopilot Caveats (per spec)
 

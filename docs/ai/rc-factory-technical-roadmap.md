@@ -70,7 +70,7 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 
 | Spec ID | Phase | Spec Name | Short Name | Status | Priority | Depends On | Enables | Source Section |
 |---|---:|---|---|---|---|---|---|---|
-| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Pending | P0 | — | SPEC-002 | Phase 0 |
+| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Complete | P0 | — | SPEC-002 | Phase 0 |
 | SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | Pending | P1 | SPEC-001 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
 | SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002 | SPEC-004, SPEC-009 | Phase 2 |
 | SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
@@ -98,7 +98,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 
 ### SPEC-001: Foundation Migrations
 
-- **Status:** Pending
+- **Status:** Complete
 - **Priority:** P0
 - **Branch short name:** `foundation-migrations`
 - **Dependencies:** —
@@ -110,6 +110,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Strict Scope:** N/A — migration-only/no-new-module spec
 - **Autopilot notes:** Treat migrations as the only implementation surface. Verify live schema truth before assuming `agents.workspace_path` or a `tasks.status` CHECK constraint. Preserve null-default / flag-off compatibility and document upstream-divergent fork pressure.
 - **Definition of done:** Phase 0 deliverables are implemented, P0 acceptance criteria pass, migrations are idempotent on production-shape data, existing tests pass unchanged, and rollback scripts plus documented manual reverse steps exist for each SQL-changing migration or seed.
+- **Completion evidence:** Complete on PR #15 (`001-foundation-migrations`) after local verification and HAL UAT acceptance on 2026-04-26. HAL UAT confirmed M53-M61 migration markers, `PRAGMA quick_check = ok`, the `facility` workspace seed, Aegis/HAL/Security Guardian `scope='global'` backfill, and unchanged core app flows.
 
 ### SPEC-002: Product-Line Switcher and activeWorkspace Scoping
 
@@ -300,8 +301,8 @@ Foundation migrations/seed steps M53–M61 (nine additive SQL-changing migration
 - [P0-AC8] `task_artifacts` table queryable; indexes exist for `(task_id, created_at)` and `(workspace_id, artifact_type)`.
 - [P0-AC9] `resource_policies` and `resource_policy_events` are queryable; indexes exist for policy scope and policy events by task/time.
 - [P0-AC10] Existing test suite passes unchanged (no new behavior yet).
-- [P0-AC11] One rollback file exists for each SQL-changing migration or seed: `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql`; each file contains an idempotent reverse SQL block; CI verifies file presence per migration id.
-- [P0-AC12] `docs/migrations/rollback-procedure.md` exists and documents reverse order, SQLite DROP COLUMN guidance, and pre-rollback DB snapshot step.
+- [P0-AC11] One rollback file exists for each SQL-changing migration or seed: `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql`; each file contains guarded reverse SQL with explicit preconditions, using idempotent `IF EXISTS` forms where SQLite permits them.
+- [P0-AC12] `docs/migrations/rollback-procedure.md` exists and documents reverse order, SQLite column-rebuild rollback guidance, and pre-rollback DB snapshot step.
 - [P0-AC13] The `ready_for_owner` safety gate makes no DB-level CHECK change and no application-level status-vocabulary change; ripgrep over the SPEC-001 diff finds zero occurrences of `CHECK (status`, `ready_for_owner`, or `mc:ready-for-owner` outside docs and rollback commentary.
 - [P0-AC14] The Sandbox terminology safety gate makes no `ALTER TABLE agents RENAME COLUMN`, no `ALTER TABLE agents ADD COLUMN sandbox_path`, and no UI/config/type/doc-copy rename outside SPEC-001 documentation; ripgrep over the diff confirms zero such statements or runtime copy changes.
 
@@ -309,8 +310,8 @@ Foundation migrations/seed steps M53–M61 (nine additive SQL-changing migration
 
 The live migration runner (`src/lib/migrations.ts:5-9`) is forward-only — `type Migration = { id: string; up: (db) => void }` has no `down()` function. Rollback for Phase 0 is therefore documented as **manual reverse SQL**, not an automated `down()`:
 
-- Each SQL-changing M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` (created as part of SPEC-001 deliverables) that contains the explicit `DROP COLUMN`/`DROP TABLE`/`DELETE FROM workspaces WHERE slug='facility'` statements.
-- An operator runbook at `docs/migrations/rollback-procedure.md` describes the reverse order (M61 → M53), the SQLite `ALTER TABLE … DROP COLUMN` caveats (SQLite ≥3.35 supports it; otherwise the `12-step copy-and-rename` procedure is documented inline), and the safety pre-checks (snapshot the DB file first).
+- Each SQL-changing M5x migration ships a paired reverse-SQL file at `docs/migrations/rollback-M53.sql` through `docs/migrations/rollback-M61.sql` (created as part of SPEC-001 deliverables) that contains explicit guarded reverse SQL. M53-M56 use transactional table rebuilds; M57, M58, M60, and M61 use `DROP TABLE`; M59 uses guarded `DELETE FROM workspaces WHERE slug='facility'` only when no migration-052 workspace-scoped table still references the facility row.
+- An operator runbook at `docs/migrations/rollback-procedure.md` describes the reverse order (M61 -> M53), SQLite column-rebuild rollback behavior, and the safety pre-checks (snapshot the DB file first).
 - Rollback is operator-initiated by manually applying the documented reverse SQL after taking the DB snapshot. SPEC-001 adds no rollback CLI surface.
 - A future spec may extend `Migration` with an optional `down?: (db) => void` and a CLI runner; that work is **out of scope for SPEC-001** and is tracked separately.
 
