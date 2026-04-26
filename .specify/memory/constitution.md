@@ -404,6 +404,23 @@ Running setup for a downstream spec before its dependencies merge is
 operator error and will cause consensus disagreement during
 clarify/analyze.
 
+### J. Strict new-module scope
+
+Every spec that introduces new TypeScript or TSX modules must add those
+files to the strict scope in `tsconfig.spec-strict.json` and
+`eslint.config.mjs` as part of the same plan and implementation.
+
+Spec `plan.md` files record this explicitly:
+
+- List every new spec-owned TS/TSX file that enters strict scope.
+- Mark strict scope `N/A` only for docs-only, migration-only, or
+  no-new-module specs.
+- Add future OpenClaw adapter files explicitly; do not rely on a broad
+  `src/lib/openclaw-*` glob that would capture grandfathered code.
+
+Until the post-pilot repo-wide hardening pass lands, existing upstream-owned
+or grandfathered files remain outside this scoped strictness ramp.
+
 ## Development Workflow
 
 ### Commands
@@ -415,7 +432,7 @@ clarify/analyze.
 - `node .next/standalone/server.js` — standalone mode.
 - `pnpm test` — Vitest unit tests.
 - `pnpm test:e2e` — Playwright e2e.
-- `pnpm typecheck` — `tsc --noEmit`.
+- `pnpm typecheck` — `tsc -b --pretty false`.
 - `pnpm lint` — ESLint.
 - `pnpm test:all` — lint + typecheck + test + build + e2e.
 
@@ -470,4 +487,4 @@ Compliance checkpoints:
 - Every migration: rollback file present; upstream-compat checklist
   satisfied.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-24
+**Version**: 1.2.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-26

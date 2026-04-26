@@ -41,5 +41,10 @@
   ],
   "exclude": [
     "node_modules"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.spec-strict.json"
+    }
   ]
 }
