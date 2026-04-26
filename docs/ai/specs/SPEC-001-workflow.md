@@ -538,7 +538,7 @@ Run the smallest reliable subset first, then broader checks if time permits:
 - [x] Prohibited-drift grep checks pass.
 - [x] `docs/ai/rc-factory-technical-roadmap.md` marks SPEC-001 complete in the spec branch after implementation.
 - [x] `docs/rc-factory-v1-prd.md` reflects SPEC-001 completion after implementation.
-- [ ] Branch is pushed for review.
+- [x] Branch is pushed for review.
 
 ---
 
