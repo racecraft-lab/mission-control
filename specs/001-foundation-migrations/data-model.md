@@ -35,11 +35,11 @@
 - **Proposed fields**:
   - `slug`: nullable stable identifier for template lookup
   - `routing_rules`: text/JSON rules payload
-  - `successor_template_slug`: nullable successor reference for simple chaining
+  - `next_template_slug`: nullable successor reference for simple chaining
   - `output_schema`: text/JSON output expectation payload
   - `produces_pr`: integer boolean flag, default off
-  - `terminal_events`: text/JSON terminal event metadata
-  - `artifact_redaction_policy`: text/JSON redaction-policy payload
+  - `external_terminal_event`: nullable external event name emitted at terminal chain states
+  - `allow_redacted_artifacts`: integer boolean flag, default off
 - **Indexes / constraints**:
   - Deterministic partial unique index on `(workspace_id, slug)` where `slug IS NOT NULL`
 - **Validation rules**:
@@ -52,11 +52,14 @@
 - **Purpose**: Track the template origin and parent/ancestor relationships needed for downstream task chaining
 - **Proposed fields**:
   - `workflow_template_id`: nullable reference to the originating template
-  - `predecessor_task_id`: nullable reference to the immediate upstream task
+  - `workflow_template_slug`: nullable denormalized template slug for chain/artifact correlation
+  - `parent_task_id`: nullable reference to the immediate upstream task
   - `root_task_id`: nullable reference to the originating chain root
+  - `chain_id`: nullable stable identifier for all tasks in one chain
+  - `chain_stage`: nullable numeric stage within a chain
 - **Indexes**:
-  - Index for template-origin queries
-  - Indexes for predecessor/root traversal
+  - Indexes for template-origin queries
+  - Indexes for parent/root traversal and chain lookup
 - **Validation rules**:
   - Preserve existing `tasks.status`
   - Do not add or rebuild a DB `CHECK` for status vocabulary
@@ -81,13 +84,12 @@
   - `workspace_id`
   - `disposition`
   - `reason`
-  - `metadata`
-  - `created_by`
-  - `created_at`
+  - `triaged_by_agent_id`
+  - `triaged_at`
 - **Indexes**:
   - Lookup by `task_id`
-  - Lookup by `workspace_id`
-  - Lookup by `(workspace_id, disposition, created_at)`
+  - Lookup by `(workspace_id, triaged_at)`
+  - Lookup by `disposition`
 
 ## Entity: Task Artifact
 
@@ -97,19 +99,28 @@
   - `id`
   - `task_id`
   - `workspace_id`
+  - `project_id`
+  - `producer_agent_id`
+  - `workflow_template_slug`
   - `artifact_type`
-  - `mime_type`
+  - `schema_version`
+  - `storage_kind`
+  - `content_json`
+  - `content_markdown`
   - `storage_uri`
+  - `original_filename`
+  - `mime_type`
   - `sha256`
   - `byte_size`
   - `preview_text`
   - `redaction_status`
-  - `security_status`
-  - `created_by`
+  - `security_scan_status`
+  - `supersedes_artifact_id`
   - `created_at`
 - **Indexes**:
   - Lookup by `task_id, created_at`
-  - Lookup by `workspace_id, artifact_type, created_at`
+  - Lookup by `workspace_id, artifact_type`
+  - Lookup by `workflow_template_slug`
 
 ## Entity: Facility Workspace
 
@@ -131,17 +142,29 @@
 - **Proposed fields**:
   - `id`
   - `workspace_id`
-  - `scope`
-  - `resource_type`
-  - `resource_pattern`
-  - `effect`
-  - `policy_config`
-  - `created_by`
+  - `project_id`
+  - `agent_id`
+  - `agent_role`
+  - `task_status`
+  - `workflow_template_slug`
+  - `provider`
+  - `model`
+  - `policy_type`
+  - `limit_kind`
+  - `limit_value`
+  - `period`
+  - `timezone`
+  - `schedule_json`
+  - `enforcement`
+  - `soft_threshold_pct`
+  - `hard_threshold_pct`
+  - `enabled`
   - `created_at`
   - `updated_at`
 - **Indexes**:
-  - Lookup by `(workspace_id, scope, resource_type)`
-  - Lookup by `(resource_type, effect)`
+  - Lookup by `(workspace_id, project_id, agent_id, policy_type, enabled)`
+  - Lookup by `workflow_template_slug`
+  - Lookup by `enabled`
 
 ## Entity: Resource Policy Event
 
@@ -150,29 +173,30 @@
 - **Proposed fields**:
   - `id`
   - `policy_id`
-  - `workspace_id`
   - `task_id`
-  - `event_type`
+  - `agent_id`
   - `decision`
-  - `details`
-  - `created_by`
+  - `reason`
+  - `observed_value`
+  - `limit_value`
+  - `metadata`
   - `created_at`
 - **Indexes**:
   - Lookup by `(policy_id, created_at)`
   - Lookup by `(task_id, created_at)`
-  - Lookup by `(workspace_id, created_at)`
+  - Lookup by `created_at`
 
 ## Relationship Summary
 
 - `workflow_templates` optionally relate to many `tasks` through `tasks.workflow_template_id`
-- `tasks` optionally self-reference through `predecessor_task_id` and `root_task_id`
+- `tasks` optionally self-reference through `parent_task_id` and `root_task_id`
 - `task_dispositions` belong to one task and one workspace
 - `task_artifacts` belong to one task and one workspace
-- `resource_policy_events` optionally point to one `resource_policy`, one workspace, and one task
+- `resource_policy_events` optionally point to one `resource_policy`, one task, and one agent
 - The `facility` workspace belongs to the live default tenant selected at migration time
 
 ## Rollback Notes
 
-- Column-removal rollback for `M53`, `M54`, `M55`, and `M56` may require SQLite table rebuild patterns in reverse SQL; each rollback file must document preconditions and remain idempotent.
+- Column-removal rollback for `M53`, `M54`, `M55`, and `M56` uses transactional table rebuilds so the files can be replayed safely even after the SPEC-001 columns are already absent.
 - Table-creation rollback for `M57`, `M58`, `M60`, and `M61` should drop indexes first, then drop tables with existence guards.
 - Seed rollback for `M59` should only remove the SPEC-001-created `facility` row when doing so is safe and documented in the rollback file.

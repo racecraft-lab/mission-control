@@ -495,18 +495,18 @@ CREATE INDEX idx_resource_policy_events_task
 
 Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 
-| Phase | Scope | Ship-safe? | Compatibility class |
-|---|---|---|---|
-| 0 | Foundation migrations (M53–M61) | Yes — runtime-safe | `upstream-divergent` |
-| 1 | Workspace switcher + `activeWorkspace` scoping | Yes — flag-off default | `upstream-safe` |
-| 2 | Aegis refactor (facility singleton) | Yes — shim preserves legacy | `upstream-divergent` |
-| 3 | Task-chain engine + declarative routing over `workflow_templates` | Yes — null-default fields | `upstream-divergent` |
-| 4 | `ready_for_owner` state + two-step terminal | Yes — per-template opt-in | `upstream-divergent` |
-| 5 | Area labels + GitHub sync updates | Yes — fallback to `area:triage` | `upstream-safe` |
-| 6 | Disposition logging + artifact store + audit/admin panels | Yes — purely additive | `upstream-divergent` |
-| 7 | Resource governance + Cost Tracker enforcement | Yes — flag-off default | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` |
-| 8 | Product Line A pilot (issue #110, then #111) | Gated behind pilot feature flag | Fork rollout only |
-| 9 | Second product line onboarding (Product Line B) | Post-pilot | Fork rollout only |
+| Phase | Scope | Status | Ship-safe? | Compatibility class |
+|---|---|---|---|---|
+| 0 | Foundation migrations (M53–M61) | Complete | Yes — runtime-safe | `upstream-divergent` |
+| 1 | Workspace switcher + `activeWorkspace` scoping | Pending | Yes — flag-off default | `upstream-safe` |
+| 2 | Aegis refactor (facility singleton) | Pending | Yes — shim preserves legacy | `upstream-divergent` |
+| 3 | Task-chain engine + declarative routing over `workflow_templates` | Pending | Yes — null-default fields | `upstream-divergent` |
+| 4 | `ready_for_owner` state + two-step terminal | Pending | Yes — per-template opt-in | `upstream-divergent` |
+| 5 | Area labels + GitHub sync updates | Pending | Yes — fallback to `area:triage` | `upstream-safe` |
+| 6 | Disposition logging + artifact store + audit/admin panels | Pending | Yes — purely additive | `upstream-divergent` |
+| 7 | Resource governance + Cost Tracker enforcement | Pending | Yes — flag-off default | Mixed: governance core = `upstream-divergent`; OpenClaw health cost adapter = `fork-only optional` |
+| 8 | Product Line A pilot (issue #110, then #111) | Pending | Gated behind pilot feature flag | Fork rollout only |
+| 9 | Second product line onboarding (Product Line B) | Pending | Post-pilot | Fork rollout only |
 
 ### Autopilot Caveats (per spec)
 

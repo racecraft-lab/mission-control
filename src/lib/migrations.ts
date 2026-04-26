@@ -14,6 +14,24 @@ export function registerMigrations(newMigrations: Migration[]): void {
   extraMigrations.push(...newMigrations)
 }
 
+function tableExists(db: Database.Database, table: string): boolean {
+  const row = db
+    .prepare(`SELECT 1 as ok FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(table) as { ok?: number } | undefined
+  return row?.ok === 1
+}
+
+function columnExists(db: Database.Database, table: string, column: string): boolean {
+  if (!tableExists(db, table)) return false
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  return columns.some((entry) => entry.name === column)
+}
+
+function addColumnIfMissing(db: Database.Database, table: string, column: string, definition: string): void {
+  if (!tableExists(db, table) || columnExists(db, table, column)) return
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`)
+}
+
 const migrations: Migration[] = [
   {
     id: '001_init',
@@ -1456,6 +1474,203 @@ const migrations: Migration[] = [
         )),
         updated_at = unixepoch()
       `)
+    }
+  },
+  {
+    id: '053_agent_scope',
+    up(db: Database.Database) {
+      addColumnIfMissing(
+        db,
+        'agents',
+        'scope',
+        `scope TEXT NOT NULL DEFAULT 'workspace' CHECK (scope IN ('workspace','global'))`
+      )
+
+      if (!columnExists(db, 'agents', 'scope')) return
+
+      db.exec(`
+        UPDATE agents
+        SET scope = 'global'
+        WHERE lower(replace(name, ' ', '-')) IN ('aegis', 'security-guardian', 'hal')
+      `)
+    }
+  },
+  {
+    id: '054_workflow_templates_task_chain_routing_and_artifact_policy',
+    up(db: Database.Database) {
+      addColumnIfMissing(db, 'workflow_templates', 'slug', 'slug TEXT')
+      addColumnIfMissing(db, 'workflow_templates', 'output_schema', 'output_schema JSON')
+      addColumnIfMissing(db, 'workflow_templates', 'routing_rules', 'routing_rules JSON')
+      addColumnIfMissing(db, 'workflow_templates', 'next_template_slug', 'next_template_slug TEXT')
+      addColumnIfMissing(db, 'workflow_templates', 'produces_pr', 'produces_pr BOOLEAN NOT NULL DEFAULT 0')
+      addColumnIfMissing(db, 'workflow_templates', 'external_terminal_event', 'external_terminal_event TEXT')
+      addColumnIfMissing(
+        db,
+        'workflow_templates',
+        'allow_redacted_artifacts',
+        'allow_redacted_artifacts BOOLEAN NOT NULL DEFAULT 0'
+      )
+
+      if (columnExists(db, 'workflow_templates', 'workspace_id') && columnExists(db, 'workflow_templates', 'slug')) {
+        db.exec(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_workflow_templates_workspace_slug
+          ON workflow_templates(workspace_id, slug)
+          WHERE slug IS NOT NULL
+        `)
+      }
+    }
+  },
+  {
+    id: '055_tasks_workflow_template_binding_and_lineage',
+    up(db: Database.Database) {
+      addColumnIfMissing(db, 'tasks', 'workflow_template_id', 'workflow_template_id INTEGER REFERENCES workflow_templates(id)')
+      addColumnIfMissing(db, 'tasks', 'workflow_template_slug', 'workflow_template_slug TEXT')
+      addColumnIfMissing(db, 'tasks', 'parent_task_id', 'parent_task_id INTEGER REFERENCES tasks(id)')
+      addColumnIfMissing(db, 'tasks', 'root_task_id', 'root_task_id INTEGER REFERENCES tasks(id)')
+      addColumnIfMissing(db, 'tasks', 'chain_id', 'chain_id TEXT')
+      addColumnIfMissing(db, 'tasks', 'chain_stage', 'chain_stage INTEGER')
+
+      if (!tableExists(db, 'tasks')) return
+
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_workflow_template_id ON tasks(workflow_template_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_workflow_template_slug ON tasks(workflow_template_slug)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_root_task_id ON tasks(root_task_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_chain_id ON tasks(chain_id)`)
+    }
+  },
+  {
+    id: '056_workspace_feature_flags',
+    up(db: Database.Database) {
+      addColumnIfMissing(db, 'workspaces', 'feature_flags', 'feature_flags JSON')
+    }
+  },
+  {
+    id: '057_task_dispositions',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_dispositions (
+          id INTEGER PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          disposition TEXT NOT NULL,
+          reason TEXT,
+          triaged_by_agent_id INTEGER REFERENCES agents(id),
+          triaged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          workspace_id INTEGER NOT NULL REFERENCES workspaces(id)
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_dispositions_task_id ON task_dispositions(task_id)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_dispositions_workspace_triaged_at ON task_dispositions(workspace_id, triaged_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_dispositions_disposition ON task_dispositions(disposition)`)
+    }
+  },
+  {
+    id: '058_task_artifacts',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_artifacts (
+          id INTEGER PRIMARY KEY,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          workspace_id INTEGER NOT NULL REFERENCES workspaces(id),
+          project_id INTEGER REFERENCES projects(id),
+          producer_agent_id INTEGER REFERENCES agents(id),
+          workflow_template_slug TEXT,
+          artifact_type TEXT NOT NULL,
+          schema_version TEXT,
+          storage_kind TEXT NOT NULL CHECK (storage_kind IN ('inline_json','inline_markdown','file','external_uri')),
+          content_json JSON,
+          content_markdown TEXT,
+          storage_uri TEXT,
+          original_filename TEXT,
+          mime_type TEXT,
+          byte_size INTEGER,
+          sha256 TEXT,
+          preview_text TEXT,
+          redaction_status TEXT NOT NULL DEFAULT 'pending',
+          security_scan_status TEXT NOT NULL DEFAULT 'pending',
+          supersedes_artifact_id INTEGER REFERENCES task_artifacts(id),
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_artifacts_task_created_at ON task_artifacts(task_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_artifacts_workspace_type ON task_artifacts(workspace_id, artifact_type)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_task_artifacts_workflow_template_slug ON task_artifacts(workflow_template_slug)`)
+    }
+  },
+  {
+    id: '059_facility_workspace_seed',
+    up(db: Database.Database) {
+      if (!tableExists(db, 'workspaces') || !tableExists(db, 'tenants')) return
+      if (!columnExists(db, 'workspaces', 'tenant_id')) return
+
+      db.exec(`
+        INSERT INTO workspaces (slug, name, tenant_id)
+        SELECT 'facility', 'Facility', id
+        FROM tenants
+        WHERE NOT EXISTS (
+          SELECT 1 FROM workspaces WHERE slug = 'facility'
+        )
+        ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, id ASC
+        LIMIT 1
+      `)
+    }
+  },
+  {
+    id: '060_resource_policies',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS resource_policies (
+          id INTEGER PRIMARY KEY,
+          workspace_id INTEGER REFERENCES workspaces(id),
+          project_id INTEGER REFERENCES projects(id),
+          agent_id INTEGER REFERENCES agents(id),
+          agent_role TEXT,
+          task_status TEXT,
+          workflow_template_slug TEXT,
+          provider TEXT,
+          model TEXT,
+          policy_type TEXT NOT NULL CHECK (policy_type IN ('wip_limit','budget','blackout','degraded_window')),
+          limit_kind TEXT NOT NULL,
+          limit_value REAL,
+          period TEXT,
+          timezone TEXT,
+          schedule_json JSON,
+          enforcement TEXT NOT NULL CHECK (enforcement IN ('alert','defer','pause_new_work','block_dispatch','require_override')),
+          soft_threshold_pct REAL DEFAULT 80,
+          hard_threshold_pct REAL DEFAULT 100,
+          enabled BOOLEAN NOT NULL DEFAULT 1,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_resource_policies_scope
+        ON resource_policies(workspace_id, project_id, agent_id, policy_type, enabled)
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_resource_policies_template ON resource_policies(workflow_template_slug)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_resource_policies_enabled ON resource_policies(enabled)`)
+    }
+  },
+  {
+    id: '061_resource_policy_events',
+    up(db: Database.Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS resource_policy_events (
+          id INTEGER PRIMARY KEY,
+          policy_id INTEGER REFERENCES resource_policies(id),
+          task_id INTEGER REFERENCES tasks(id),
+          agent_id INTEGER REFERENCES agents(id),
+          decision TEXT NOT NULL CHECK (decision IN ('allow','defer','block','override_required','override')),
+          reason TEXT,
+          observed_value REAL,
+          limit_value REAL,
+          metadata JSON,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+      `)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_resource_policy_events_created_at ON resource_policy_events(created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_resource_policy_events_task ON resource_policy_events(task_id, created_at)`)
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_resource_policy_events_policy ON resource_policy_events(policy_id, created_at)`)
     }
   }
 ]

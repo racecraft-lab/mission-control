@@ -16,7 +16,7 @@
 
 - [x] CHK004 Is the required rollback order stated unambiguously as reverse execution from M61 through M53 rather than a generic "undo in reverse" instruction? [Clarity, Spec section Clarifications, Spec section User Story 3, Spec section FR-016, Plan section Verification Strategy]
 - [x] CHK005 Is the pre-rollback database snapshot requirement explicit enough that operators cannot mistake rollback rehearsal for an in-place destructive action? [Clarity, Spec section User Story 3, Spec section FR-016, Spec section Assumptions]
-- [x] CHK006 Is idempotent reverse SQL defined clearly enough to cover partial rollback and already-reversed state where practical, rather than only a clean one-shot rollback path? [Clarity, Spec section Clarifications, Spec section User Story 3, Spec section FR-015]
+- [x] CHK006 Is guarded reverse SQL defined clearly enough to cover partial rollback and already-reversed state where practical, rather than only a clean one-shot rollback path? [Clarity, Spec section Clarifications, Spec section User Story 3, Spec section FR-015]
 
 ## Requirement Consistency
 

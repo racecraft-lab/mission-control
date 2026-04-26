@@ -51,7 +51,7 @@
 
 ## Decision 7: Deliver rollback as manual reverse SQL plus an operator runbook
 
-- **Decision**: Ship one idempotent rollback SQL file per SQL-changing migration or seed (`rollback-M53.sql` through `rollback-M61.sql`) and document snapshot-first reverse-order execution in `docs/migrations/rollback-procedure.md`.
+- **Decision**: Ship one guarded rollback SQL file per SQL-changing migration or seed (`rollback-M53.sql` through `rollback-M61.sql`) and document snapshot-first reverse-order execution in `docs/migrations/rollback-procedure.md`.
 - **Rationale**: The runtime migration path is forward-only by constitution. Checked-in reverse SQL and a runbook give operators a recoverable path without widening product scope into automated rollback support.
 - **Alternatives considered**:
   - Add `down()` handlers or a rollback CLI: rejected because the prompt explicitly forbids automated rollback.
