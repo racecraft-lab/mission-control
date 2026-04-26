@@ -30,7 +30,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 | Checklist | `$speckit-checklist` | Complete | Three checklist domains completed; 3 total gaps remediated; G4 passed with 0 markers |
 | Tasks | `$speckit-tasks` | Complete | Generated 35 dependency-ordered tasks with full P0-AC1..P0-AC14 coverage; G5 passed |
 | Analyze | `$speckit-analyze` | Complete | Found and remediated 2 HIGH issues; G6 passed with 0 CRITICAL/HIGH findings |
-| Implement | `$speckit-implement` | Complete | M53-M61, rollback package, roadmap/PRD status, and full verification matrix completed |
+| Implement | `$speckit-implement` | Complete | M53-M61, rollback package, roadmap/PRD status, full verification matrix, and HAL UAT acceptance completed |
 
 **Status Legend:** Pending | In Progress | Complete | Blocked
 
@@ -538,6 +538,7 @@ Run the smallest reliable subset first, then broader checks if time permits:
 - [x] Prohibited-drift grep checks pass.
 - [x] `docs/ai/rc-factory-technical-roadmap.md` marks SPEC-001 complete in the spec branch after implementation.
 - [x] `docs/rc-factory-v1-prd.md` reflects SPEC-001 completion after implementation.
+- [x] HAL UAT accepted on 2026-04-26 with M53-M61 markers present, DB quick check OK, facility seed present, global-agent backfill verified, and no blocking core-flow regressions observed.
 - [x] Branch is pushed for review.
 
 ---

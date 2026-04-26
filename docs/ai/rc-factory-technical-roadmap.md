@@ -110,6 +110,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Strict Scope:** N/A — migration-only/no-new-module spec
 - **Autopilot notes:** Treat migrations as the only implementation surface. Verify live schema truth before assuming `agents.workspace_path` or a `tasks.status` CHECK constraint. Preserve null-default / flag-off compatibility and document upstream-divergent fork pressure.
 - **Definition of done:** Phase 0 deliverables are implemented, P0 acceptance criteria pass, migrations are idempotent on production-shape data, existing tests pass unchanged, and rollback scripts plus documented manual reverse steps exist for each SQL-changing migration or seed.
+- **Completion evidence:** Complete on PR #15 (`001-foundation-migrations`) after local verification and HAL UAT acceptance on 2026-04-26. HAL UAT confirmed M53-M61 migration markers, `PRAGMA quick_check = ok`, the `facility` workspace seed, Aegis/HAL/Security Guardian `scope='global'` backfill, and unchanged core app flows.
 
 ### SPEC-002: Product-Line Switcher and activeWorkspace Scoping
 

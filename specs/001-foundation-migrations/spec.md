@@ -2,8 +2,10 @@
 
 **Feature Branch**: `001-foundation-migrations`  
 **Created**: 2026-04-25  
-**Status**: Draft  
+**Status**: Complete (HAL UAT accepted 2026-04-26)
 **Input**: User description: "Create a migration-only specification for RC Factory Phase 0 in Mission Control."
+
+**Completion Evidence**: PR #15 branch `001-foundation-migrations` passed local verification and HAL UAT with M53-M61 markers present, DB quick check OK, the `facility` seed present, global-agent backfill verified, and no blocking core-flow regressions observed.
 
 ## Clarifications
 

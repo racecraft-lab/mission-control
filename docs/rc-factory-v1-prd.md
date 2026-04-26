@@ -508,6 +508,8 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 | 8 | Product Line A pilot (issue #110, then #111) | Pending | Gated behind pilot feature flag | Fork rollout only |
 | 9 | Second product line onboarding (Product Line B) | Pending | Post-pilot | Fork rollout only |
 
+**Phase 0 completion note:** SPEC-001 is complete on PR #15 after HAL UAT acceptance on 2026-04-26. Acceptance evidence: M53-M61 migration markers present, `PRAGMA quick_check` OK, `workspaces.slug='facility'` seeded, Aegis/HAL/Security Guardian backfilled to `scope='global'`, and operator UAT found no blocking regressions in the core app flows.
+
 ### Autopilot Caveats (per spec)
 
 - **SPEC-001 (Phase 0)** is migration-only and intentionally degenerate for the SDD funnel. `clarify`, `checklist`, and `analyze` should produce minimal output (no markers, "N/A — pure-schema spec" gaps, migration-safety findings only). The implement phase consists of the migration writes and the per-migration smoke checks listed in P0-AC1..AC14. Rollback for SPEC-001 is documented manual reverse SQL (the live migration runner has no `down()` function).
