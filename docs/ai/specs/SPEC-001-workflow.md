@@ -25,7 +25,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 | Phase | Command | Status | Notes |
 |-------|---------|--------|-------|
 | Specify | `$speckit-specify` | Complete | Generated `specs/001-foundation-migrations/spec.md`; G1 passed with 0 markers |
-| Clarify | `$speckit-clarify` | Pending | Expected to be minimal; resolve only migration-safety ambiguity |
+| Clarify | `$speckit-clarify` | Complete | Three sessions completed; no unresolved consensus items; G2 passed with 0 markers |
 | Plan | `$speckit-plan` | Pending | Produce design artifacts for idempotent migrations and rollback |
 | Checklist | `$speckit-checklist` | Pending | Run data-integrity, rollback-safety, and scope-control checks |
 | Tasks | `$speckit-tasks` | Pending | Generate dependency-ordered migration and verification tasks |
@@ -254,9 +254,9 @@ Focus on SPEC-001 no-runtime scope:
 
 | Session | Focus Area | Questions | Key Outcomes |
 |---------|------------|-----------|--------------|
-| 1 | Migration safety | Pending until Clarify completes | Pending until Clarify completes |
-| 2 | Rollback safety | Pending until Clarify completes | Pending until Clarify completes |
-| 3 | Scope discipline | Pending until Clarify completes | Pending until Clarify completes |
+| 1 | Migration safety | 4 | Added PRAGMA guards for column adds, deterministic index rules, rerun-safe backfills/seeds, and active-first tenant resolution |
+| 2 | Rollback safety | 4 | Required one idempotent rollback SQL file per M53-M61 step, snapshot-first reverse order, and no rollback CLI/down runner |
+| 3 | Scope discipline | 4 | Confirmed only no-SQL safety proofs are in scope; `ready_for_owner`, Sandbox rename work, `resolveFlag()`, and new TS/TSX modules stay out |
 
 ---
 
