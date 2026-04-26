@@ -70,7 +70,7 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 
 | Spec ID | Phase | Spec Name | Short Name | Status | Priority | Depends On | Enables | Source Section |
 |---|---:|---|---|---|---|---|---|---|
-| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Pending | P0 | — | SPEC-002 | Phase 0 |
+| SPEC-001 | 0 | Foundation Migrations | foundation-migrations | In Progress | P0 | — | SPEC-002 | Phase 0 |
 | SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | Pending | P1 | SPEC-001 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
 | SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002 | SPEC-004, SPEC-009 | Phase 2 |
 | SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
@@ -98,7 +98,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 
 ### SPEC-001: Foundation Migrations
 
-- **Status:** Pending
+- **Status:** In Progress
 - **Priority:** P0
 - **Branch short name:** `foundation-migrations`
 - **Dependencies:** —
