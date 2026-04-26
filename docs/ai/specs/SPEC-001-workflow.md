@@ -26,7 +26,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 |-------|---------|--------|-------|
 | Specify | `$speckit-specify` | Complete | Generated `specs/001-foundation-migrations/spec.md`; G1 passed with 0 markers |
 | Clarify | `$speckit-clarify` | Complete | Three sessions completed; no unresolved consensus items; G2 passed with 0 markers |
-| Plan | `$speckit-plan` | Pending | Produce design artifacts for idempotent migrations and rollback |
+| Plan | `$speckit-plan` | Complete | Generated plan, research, data model, and quickstart; G3 passed with 0 markers |
 | Checklist | `$speckit-checklist` | Pending | Run data-integrity, rollback-safety, and scope-control checks |
 | Tasks | `$speckit-tasks` | Pending | Generate dependency-ordered migration and verification tasks |
 | Analyze | `$speckit-analyze` | Pending | Must find no CRITICAL issues before implementation |
@@ -307,11 +307,11 @@ $speckit-plan
 
 | Artifact | Status | Notes |
 |----------|--------|-------|
-| `plan.md` | Pending | Must record Strict Scope N/A |
-| `research.md` | Pending | Use for SQLite/idempotency decisions if needed |
-| `data-model.md` | Pending | Summarize new columns/tables and rollback mapping |
-| `contracts/` | Pending | Usually N/A for migration-only spec |
-| `quickstart.md` | Pending | Migration smoke and rollback verification commands |
+| `plan.md` | Complete | Records Strict Scope N/A and migration-only constitution gates |
+| `research.md` | Complete | Captures eight migration, idempotency, schema-truth, and rollback decisions |
+| `data-model.md` | Complete | Summarizes M53-M61 surfaces, indexes, and rollback mapping |
+| `contracts/` | N/A | Migration-only internal persistence spec with no API/CLI/protocol contract |
+| `quickstart.md` | Complete | Documents forward migration, rerun, rollback rehearsal, and repo verification commands |
 
 ---
 

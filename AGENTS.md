@@ -116,3 +116,10 @@ OpenAPI spec: `openapi.json`. Interactive docs at `/docs` when running.
 - **better-sqlite3**: Native addon -- needs rebuild when switching Node versions (`pnpm rebuild better-sqlite3`)
 - **AUTH_PASS with `#`**: Quote it (`AUTH_PASS="my#pass"`) or use `AUTH_PASS_B64` (base64-encoded)
 - **Gateway optional**: Set `NEXT_PUBLIC_GATEWAY_OPTIONAL=true` for standalone deployments without gateway connectivity
+
+## Active Technologies
+- TypeScript 5, SQL, Node.js 22+, Next.js 16 + `better-sqlite3`, Next.js 16, React 19, pnpm (001-foundation-migrations)
+- SQLite via `better-sqlite3`; migrations in `src/lib/migrations.ts` remain authoritative, `src/lib/schema.sql` is reference-only (001-foundation-migrations)
+
+## Recent Changes
+- 001-foundation-migrations: Added TypeScript 5, SQL, Node.js 22+, Next.js 16 + `better-sqlite3`, Next.js 16, React 19, pnpm
