@@ -24,7 +24,7 @@ Do not start downstream specs from this worktree. SPEC-001 stops after the Phase
 
 | Phase | Command | Status | Notes |
 |-------|---------|--------|-------|
-| Specify | `$speckit-specify` | Pending | Generate migration-only spec from roadmap Phase 0 |
+| Specify | `$speckit-specify` | Complete | Generated `specs/001-foundation-migrations/spec.md`; G1 passed with 0 markers |
 | Clarify | `$speckit-clarify` | Pending | Expected to be minimal; resolve only migration-safety ambiguity |
 | Plan | `$speckit-plan` | Pending | Produce design artifacts for idempotent migrations and rollback |
 | Checklist | `$speckit-checklist` | Pending | Run data-integrity, rollback-safety, and scope-control checks |
@@ -63,7 +63,7 @@ Before starting any phase, verify alignment with `.specify/memory/constitution.m
 | Strict scope ramp | No new spec-owned TS/TSX production module enters strict scope in SPEC-001 | `tsconfig.spec-strict.json` and `eslint.config.mjs` are unchanged unless a real new TS/TSX module is introduced and explicitly justified |
 | Package manager | Use pnpm for repo verification | Lockfile is `pnpm-lock.yaml`; use `pnpm` commands only |
 
-**Constitution Check:** Pending until Specify/Plan output is generated.
+**Constitution Check:** Initial Specify gate verified; no runtime/UI/type/config work entered the spec.
 
 ---
 
@@ -184,13 +184,13 @@ RC Factory v1 requires a compatibility-preserving schema tail before runtime spe
 
 | Metric | Value |
 |--------|-------|
-| Functional Requirements | Pending until Specify completes |
-| User Stories | Pending until Specify completes |
+| Functional Requirements | 17 |
+| User Stories | 4 |
 | Acceptance Criteria | 14 P0 criteria from roadmap |
 
 ### Files Generated
 
-- [ ] `specs/001-foundation-migrations/spec.md`
+- [x] `specs/001-foundation-migrations/spec.md`
 
 ### Traceability Markers
 
