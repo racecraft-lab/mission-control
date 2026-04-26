@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getDatabase, Message } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 /**
  * GET /api/chat/messages/[id] - Get a single message
@@ -16,11 +17,12 @@ export async function GET(
   try {
     const db = getDatabase()
     const { id } = await params
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
 
     const message = db
-      .prepare('SELECT * FROM messages WHERE id = ? AND workspace_id = ?')
-      .get(parseInt(id), workspaceId) as Message | undefined
+      .prepare(`SELECT * FROM messages WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(parseInt(id), ...workspaceFilter.params) as Message | undefined
 
     if (!message) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 })
@@ -33,6 +35,8 @@ export async function GET(
       }
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/chat/messages/[id] error')
     return NextResponse.json({ error: 'Failed to fetch message' }, { status: 500 })
   }
@@ -51,16 +55,18 @@ export async function PATCH(
   try {
     const db = getDatabase()
     const { id } = await params
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const body = await request.json()
 
     const message = db
-      .prepare('SELECT * FROM messages WHERE id = ? AND workspace_id = ?')
-      .get(parseInt(id), workspaceId) as Message | undefined
+      .prepare(`SELECT * FROM messages WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(parseInt(id), ...workspaceFilter.params) as Message | undefined
 
     if (!message) {
       return NextResponse.json({ error: 'Message not found' }, { status: 404 })
     }
+    const workspaceId = (message as Message & { workspace_id: number }).workspace_id
 
     if (body.read) {
       const now = Math.floor(Date.now() / 1000)
@@ -78,6 +84,8 @@ export async function PATCH(
       }
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'PATCH /api/chat/messages/[id] error')
     return NextResponse.json({ error: 'Failed to update message' }, { status: 500 })
   }

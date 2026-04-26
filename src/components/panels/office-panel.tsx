@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { useMissionControl, Agent } from '@/store'
 import { buildOfficeLayout } from '@/lib/office-layout'
+import { appendScopeToPath } from '@/types/product-line'
 
 type ViewMode = 'office' | 'org-chart'
 type OrgSegmentMode = 'category' | 'role' | 'status'
@@ -462,7 +463,7 @@ function pointAlongPath(path: Array<{ x: number; y: number }>, pathLengths: numb
 
 export function OfficePanel() {
   const t = useTranslations('office')
-  const { agents, dashboardMode, currentUser } = useMissionControl()
+  const { agents, dashboardMode, currentUser, activeProductLineScope } = useMissionControl()
   const isLocalMode = dashboardMode === 'local'
   const [localAgents, setLocalAgents] = useState<Agent[]>([])
   const [sessionAgents, setSessionAgents] = useState<Agent[]>([])
@@ -511,7 +512,7 @@ export function OfficePanel() {
 
     try {
       const [agentRes, sessionRes] = await Promise.all([
-        fetch('/api/agents'),
+        fetch(appendScopeToPath('/api/agents', activeProductLineScope)),
         isLocalMode ? fetch('/api/sessions') : Promise.resolve(null),
       ])
 
@@ -586,7 +587,7 @@ export function OfficePanel() {
     }
 
     setLoading(false)
-  }, [isLocalMode])
+  }, [activeProductLineScope, isLocalMode])
 
   useEffect(() => { fetchAgents() }, [fetchAgents])
 

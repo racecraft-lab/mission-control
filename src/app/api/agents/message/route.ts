@@ -9,6 +9,7 @@ import { scanForSecrets } from '@/lib/secret-scanner'
 import { logSecurityEvent } from '@/lib/security-events'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 import { resolveAgentSessionKey } from '@/lib/openclaw-agent-session'
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 export async function POST(request: NextRequest) {
   const auth = requireRole(request, 'operator')
@@ -23,14 +24,15 @@ export async function POST(request: NextRequest) {
     const { to, message } = result.data
     const from = auth.user.display_name || auth.user.username || 'system'
 
-    // Scan message for injection — this gets forwarded directly to an agent
-    const injectionReport = scanAndLogInjection(
+    // Scan before recipient lookup: unsafe forwarded prompt content should be rejected
+    // consistently even when the requested agent name is invalid.
+    const preliminaryInjectionReport = scanAndLogInjection(
       message,
       { context: 'prompt' },
       { agentName: to, source: 'api.agents.message', workspaceId: auth.user.workspace_id ?? 1 }
     )
-    if (!injectionReport.safe) {
-      const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
+    if (!preliminaryInjectionReport.safe) {
+      const criticals = preliminaryInjectionReport.matches.filter(m => m.severity === 'critical')
       if (criticals.length > 0) {
         logger.warn({ to, rules: criticals.map(m => m.rule) }, 'Blocked agent message: injection detected')
         return NextResponse.json(
@@ -40,19 +42,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const secretHits = scanForSecrets(message)
-    if (secretHits.length > 0) {
-      try { logSecurityEvent({ event_type: 'secret_exposure', severity: 'critical', source: 'agent-message', agent_name: from, detail: JSON.stringify({ count: secretHits.length, types: secretHits.map(s => s.type) }), workspace_id: auth.user.workspace_id ?? 1, tenant_id: 1 }) } catch {}
-    }
-
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
     const agent = db
-      .prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?')
-      .get(to, workspaceId) as any
+      .prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`)
+      .get(to, ...workspaceFilter.params) as any
     if (!agent) {
       return NextResponse.json({ error: 'Recipient agent not found' }, { status: 404 })
     }
+    const workspaceId = agent.workspace_id as number
+
+    const secretHits = scanForSecrets(message)
+    if (secretHits.length > 0) {
+      try { logSecurityEvent({ event_type: 'secret_exposure', severity: 'critical', source: 'agent-message', agent_name: from, detail: JSON.stringify({ count: secretHits.length, types: secretHits.map(s => s.type) }), workspace_id: workspaceId, tenant_id: acceptedScope.tenantId }) } catch {}
+    }
+
     const sessionKey = resolveAgentSessionKey(agent)
     if (!sessionKey) {
       return NextResponse.json(
@@ -88,6 +93,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, session_key: sessionKey })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/agents/message error')
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }

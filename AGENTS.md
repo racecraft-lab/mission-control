@@ -116,3 +116,10 @@ OpenAPI spec: `openapi.json`. Interactive docs at `/docs` when running.
 - **better-sqlite3**: Native addon -- needs rebuild when switching Node versions (`pnpm rebuild better-sqlite3`)
 - **AUTH_PASS with `#`**: Quote it (`AUTH_PASS="my#pass"`) or use `AUTH_PASS_B64` (base64-encoded)
 - **Gateway optional**: Set `NEXT_PUBLIC_GATEWAY_OPTIONAL=true` for standalone deployments without gateway connectivity
+
+## Active Technologies
+- TypeScript 5 on Next.js 16 App Router with React 19 + Zustand, better-sqlite3, Tailwind CSS 3, Vitest, Playwright (002-product-line-switcher)
+- SQLite plus localStorage for persisted Product Line scope (002-product-line-switcher)
+
+## Recent Changes
+- 002-product-line-switcher: Added TypeScript 5 on Next.js 16 App Router with React 19 + Zustand, better-sqlite3, Tailwind CSS 3, Vitest, Playwright

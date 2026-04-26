@@ -7,6 +7,7 @@ import { resolveWithin } from '@/lib/paths';
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace';
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces';
 
 function isWithinBase(base: string, candidate: string): boolean {
   if (candidate === base) return true
@@ -42,14 +43,15 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id');
     
     // Get agent by ID or name
     let agent: any;
     if (isNaN(Number(agentId))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params);
     } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(agentId), ...workspaceFilter.params);
     }
     
     if (!agent) {
@@ -104,6 +106,8 @@ export async function GET(
       updated_at: agent.updated_at
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/agents/[id]/soul error');
     return NextResponse.json({ error: 'Failed to fetch SOUL content' }, { status: 500 });
   }
@@ -123,21 +127,23 @@ export async function PUT(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id');
     const body = await request.json();
     const { soul_content, template_name } = body;
     
     // Get agent by ID or name
     let agent: any;
     if (isNaN(Number(agentId))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params);
     } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(agentId), ...workspaceFilter.params);
     }
     
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
     
     let newSoulContent = soul_content;
     
@@ -221,6 +227,8 @@ export async function PUT(
       updated_at: now
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/agents/[id]/soul error');
     return NextResponse.json({ error: 'Failed to update SOUL content' }, { status: 500 });
   }

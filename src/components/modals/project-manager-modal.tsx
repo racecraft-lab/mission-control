@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useFocusTrap } from '@/lib/use-focus-trap'
 import { Button } from '@/components/ui/button'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface Project {
   id: number
@@ -60,13 +62,14 @@ export function ProjectManagerModal({
     github_sync_enabled: boolean
     github_default_branch: string
   }>({ description: '', github_repo: '', deadline: '', color: '', assigned_agents: [], github_sync_enabled: false, github_default_branch: 'main' })
+  const { activeProductLineScope } = useMissionControl()
 
   const load = useCallback(async () => {
     try {
       setLoading(true)
       const [projectsRes, agentsRes] = await Promise.all([
-        fetch('/api/projects?includeArchived=1'),
-        fetch('/api/agents')
+        fetch(appendScopeToPath('/api/projects?includeArchived=1', activeProductLineScope)),
+        fetch(appendScopeToPath('/api/agents', activeProductLineScope))
       ])
       const projectsData = await projectsRes.json()
       if (!projectsRes.ok) throw new Error(projectsData.error || 'Failed to load projects')
@@ -82,7 +85,7 @@ export function ProjectManagerModal({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeProductLineScope])
 
   useEffect(() => {
     load()
@@ -92,7 +95,7 @@ export function ProjectManagerModal({
     e.preventDefault()
     if (!form.name.trim()) return
     try {
-      const response = await fetch('/api/projects', {
+      const response = await fetch(appendScopeToPath('/api/projects', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +116,7 @@ export function ProjectManagerModal({
 
   const archiveProject = async (project: Project) => {
     try {
-      const response = await fetch(`/api/projects/${project.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/projects/${project.id}`, activeProductLineScope), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: project.status === 'active' ? 'archived' : 'active' })
@@ -130,7 +133,7 @@ export function ProjectManagerModal({
   const deleteProject = async (project: Project) => {
     if (!confirm(`Delete project "${project.name}"? Existing tasks will be moved to General.`)) return
     try {
-      const response = await fetch(`/api/projects/${project.id}?mode=delete`, { method: 'DELETE' })
+      const response = await fetch(appendScopeToPath(`/api/projects/${project.id}?mode=delete`, activeProductLineScope), { method: 'DELETE' })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to delete project')
       await load()
@@ -167,7 +170,7 @@ export function ProjectManagerModal({
         github_sync_enabled: editForm.github_sync_enabled ? 1 : 0,
         github_default_branch: editForm.github_default_branch || 'main',
       }
-      const response = await fetch(`/api/projects/${project.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/projects/${project.id}`, activeProductLineScope), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -182,14 +185,14 @@ export function ProjectManagerModal({
       const toRemove = currentAgents.filter(a => !newAgents.includes(a))
 
       for (const agentName of toAdd) {
-        await fetch(`/api/projects/${project.id}/agents`, {
+        await fetch(appendScopeToPath(`/api/projects/${project.id}/agents`, activeProductLineScope), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agent_name: agentName })
         })
       }
       for (const agentName of toRemove) {
-        await fetch(`/api/projects/${project.id}/agents?agent_name=${encodeURIComponent(agentName)}`, {
+        await fetch(appendScopeToPath(`/api/projects/${project.id}/agents?agent_name=${encodeURIComponent(agentName)}`, activeProductLineScope), {
           method: 'DELETE'
         })
       }

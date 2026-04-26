@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { useMissionControl } from '@/store'
 import { useSmartPoll } from '@/lib/use-smart-poll'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface AgentActivity {
   id: number
@@ -54,7 +55,7 @@ const typeIcons: Record<string, string> = {
 
 export function AgentHistoryPanel() {
   const t = useTranslations('agentHistory')
-  const { agents } = useMissionControl()
+  const { agents, activeProductLineScope } = useMissionControl()
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [activities, setActivities] = useState<AgentActivity[]>([])
   const [sessions, setSessions] = useState<SessionInfo[]>([])
@@ -79,7 +80,7 @@ export function AgentHistoryPanel() {
         limit: limit.toString(),
         offset: (page * limit).toString(),
       })
-      const res = await fetch(`/api/activities?${params}`)
+      const res = await fetch(appendScopeToPath(`/api/activities?${params}`, activeProductLineScope))
       if (!res.ok) return
       const data = await res.json()
       setActivities(data.activities || [])
@@ -87,7 +88,7 @@ export function AgentHistoryPanel() {
     } catch { /* silent */ } finally {
       setLoading(false)
     }
-  }, [selectedAgent, page])
+  }, [activeProductLineScope, selectedAgent, page])
 
   const fetchSessions = useCallback(async () => {
     try {

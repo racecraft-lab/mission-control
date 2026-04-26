@@ -4,6 +4,7 @@ import { useEffect, useCallback, useState, useRef } from 'react'
 import { useMissionControl, type Conversation, type ChatAttachment } from '@/store'
 import { useSmartPoll } from '@/lib/use-smart-poll'
 import { createClientLogger } from '@/lib/client-logger'
+import { appendScopeToPath } from '@/types/product-line'
 import { ConversationList } from './conversation-list'
 import { MessageList } from './message-list'
 import { ChatInput } from './chat-input'
@@ -43,6 +44,7 @@ export function ChatWorkspace({ mode = 'embedded', onClose }: ChatWorkspaceProps
     addSplitPane,
     removeSplitPane,
     clearSplitPanes,
+    activeProductLineScope,
   } = useMissionControl()
 
   const pendingIdRef = useRef(-1)
@@ -79,7 +81,7 @@ export function ChatWorkspace({ mode = 'embedded', onClose }: ChatWorkspaceProps
   useEffect(() => {
     async function loadAgents() {
       try {
-        const res = await fetch('/api/agents')
+        const res = await fetch(appendScopeToPath('/api/agents', activeProductLineScope))
         if (!res.ok) return
         const data = await res.json()
         if (data.agents) setAgents(data.agents)
@@ -89,7 +91,7 @@ export function ChatWorkspace({ mode = 'embedded', onClose }: ChatWorkspaceProps
     }
 
     loadAgents()
-  }, [setAgents])
+  }, [activeProductLineScope, setAgents])
 
   // Load messages when conversation changes
   const loadMessages = useCallback(async () => {
@@ -100,14 +102,14 @@ export function ChatWorkspace({ mode = 'embedded', onClose }: ChatWorkspaceProps
     }
 
     try {
-      const res = await fetch(`/api/chat/messages?conversation_id=${encodeURIComponent(activeConversation)}&limit=100`)
+      const res = await fetch(appendScopeToPath(`/api/chat/messages?conversation_id=${encodeURIComponent(activeConversation)}&limit=100`, activeProductLineScope))
       if (!res.ok) return
       const data = await res.json()
       if (data.messages) setChatMessages(data.messages)
     } catch (err) {
       log.error('Failed to load messages:', err)
     }
-  }, [activeConversation, setChatMessages])
+  }, [activeConversation, activeProductLineScope, setChatMessages])
 
   useEffect(() => {
     loadMessages()
@@ -164,7 +166,7 @@ export function ChatWorkspace({ mode = 'embedded', onClose }: ChatWorkspaceProps
     setIsGenerating(true)
 
     try {
-      const res = await fetch('/api/chat/messages', {
+      const res = await fetch(appendScopeToPath('/api/chat/messages', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -550,6 +552,7 @@ function SessionConversationView({
   const [colorDraft, setColorDraft] = useState(session.colorTag || '')
   const [prefBusy, setPrefBusy] = useState(false)
   const [prefError, setPrefError] = useState<string | null>(null)
+  const { activeProductLineScope } = useMissionControl()
   const hasPrefChanges =
     nameDraft.trim() !== (session.displayName || '').trim() ||
     colorDraft !== (session.colorTag || '')
@@ -587,7 +590,7 @@ function SessionConversationView({
       if (isGatewaySession) {
         // Gateway sessions: forward message to the agent via chat messages API
         const agentName = session.agent || session.sessionId.split(':')[1] || 'unknown'
-        const res = await fetch('/api/chat/messages', {
+        const res = await fetch(appendScopeToPath('/api/chat/messages', activeProductLineScope), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

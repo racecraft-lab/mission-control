@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { useSmartPoll } from '@/lib/use-smart-poll'
 import { useMissionControl, type LogEntry, type Session } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 import type { AggregateEvent } from '@/app/api/sessions/transcript/aggregate/route'
 
@@ -217,12 +218,13 @@ export function AgentCommsPanel() {
     sessions,
     connection,
     currentUser,
+    activeProductLineScope,
   } = useMissionControl()
 
   // Fetch DB-backed comms messages
   const fetchComms = useCallback(async () => {
     try {
-      const res = await fetch('/api/agents/comms?limit=200')
+      const res = await fetch(appendScopeToPath('/api/agents/comms?limit=200', activeProductLineScope))
       if (!res.ok) throw new Error('Failed to fetch')
       const json = await res.json()
       setCommsData(json)
@@ -232,7 +234,7 @@ export function AgentCommsPanel() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeProductLineScope])
 
   useSmartPoll(fetchComms, 15000)
 
@@ -254,14 +256,14 @@ export function AgentCommsPanel() {
   // Fetch memory/agent activity events
   const fetchActivities = useCallback(async () => {
     try {
-      const res = await fetch('/api/activities?type=agent_memory_updated,agent_memory_cleared,memory_file_saved,memory_file_created,memory_file_deleted&limit=50')
+      const res = await fetch(appendScopeToPath('/api/activities?type=agent_memory_updated,agent_memory_cleared,memory_file_saved,memory_file_created,memory_file_deleted&limit=50', activeProductLineScope))
       if (!res.ok) return
       const json = await res.json()
       setActivityEvents(json.activities || [])
     } catch {
       // Silent — activities are supplementary
     }
-  }, [])
+  }, [activeProductLineScope])
 
   useSmartPoll(fetchActivities, 30000)
 
@@ -309,7 +311,7 @@ export function AgentCommsPanel() {
     setSending(true)
     setSendError(null)
     try {
-      const res = await fetch('/api/chat/messages', {
+      const res = await fetch(appendScopeToPath('/api/chat/messages', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

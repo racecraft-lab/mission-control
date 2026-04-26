@@ -81,6 +81,8 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 | SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
 | SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
 
+**Current branch note:** SPEC-002 implementation is complete and G7-verified on branch `002-product-line-switcher`, but the SpecKit-Pro index remains `In Progress` until the implementation PR is merged, per the status policy above.
+
 ## Feature Flag Resolution Policy
 
 Every `FEATURE_*` flag named in this roadmap is resolved by a single helper, `resolveFlag(name, ctx)`, exported from `src/lib/feature-flags.ts` (added in SPEC-002 deliverables; consumed by every later phase):
@@ -121,11 +123,12 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 1 — Product-Line Switcher + `activeWorkspace` Scoping
 - **Acceptance criteria source:** Phase 1 Acceptance Criteria
-- **Scope summary:** Add the feature-flagged Product Line switcher, independent `activeWorkspace` state, REST/SSE workspace scoping, filtered-panel behavior, aggregate-panel behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
+- **Scope summary:** Add the feature-flagged Product Line switcher, independent Facility/Product Line scope state, explicit REST/SSE scoping, mode-sensitive panel behavior, Facility aggregate awareness behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
 - **Tool count / tool names:** N/A — not a tool-surface spec
-- **Strict Scope:** `src/components/layout/workspace-switcher.tsx`, `src/types/product-line.ts`, `src/lib/feature-flags.ts`
-- **Autopilot notes:** Keep `activeTenant` independent from `activeWorkspace`. The switcher’s Facility entry means aggregate/null view, not direct selection of the real `workspaces.slug='facility'` row. Global agents must appear across product-line views.
-- **Definition of done:** Phase 1 deliverables are implemented, P1 acceptance criteria pass with flag OFF, null aggregate, and selected product-line modes, and no unauthorized workspace data leaks through REST or SSE scoping.
+- **Strict Scope:** New production modules are limited to `src/components/layout/workspace-switcher.tsx`, `src/types/product-line.ts`, and `src/lib/feature-flags.ts`. Existing store, header, panel, API, and SSE files may be touched only where Phase 1 route/panel matrices require Product Line scope, Facility aggregate behavior, or header terminology fixes.
+- **Autopilot notes:** Keep `activeTenant` independent from Product Line scope. The switcher's synthetic Facility entry means authenticated Facility aggregate view, not direct selection of the real `workspaces.slug='facility'` row. Global agents must appear across product-line views. Skills, local/gateway sessions, transcripts, and multi-facility tenant modeling remain deferred boundaries.
+- **Definition of done:** Phase 1 deliverables are implemented, P1-AC1 through P1-AC16 pass with flag OFF, Facility aggregate, and selected Product Line modes, and no unauthorized workspace data leaks through REST, URL state, cache reuse, BroadcastChannel, or SSE scoping.
+- **Implementation evidence:** G7 passed locally on 2026-04-26 in branch `002-product-line-switcher`: all 50 generated tasks are checked, `pnpm typecheck` passed, `pnpm lint` passed with 0 errors / 11 pre-existing warnings, `pnpm test` passed 106 files / 1035 tests, `pnpm build` passed, `pnpm test:e2e` passed 526 tests, and guardrail greps found no inline runtime `FEATURE_*` reads outside `src/lib/feature-flags.ts` or new runtime gateway/global-boundary drift.
 
 ### SPEC-003: Aegis Facility Singleton Refactor
 
@@ -325,35 +328,54 @@ The live migration runner (`src/lib/migrations.ts:5-9`) is forward-only — `typ
 
 ### Scope
 
-Introduce the product-line switcher in the header, wire Zustand `activeWorkspace`, and apply hybrid filter/aggregate behavior per D4b. `activeTenant` remains the super-admin / tenant context and must not be reused as the Product Line switcher. The header must stop labeling tenant context as "Workspace." Gate everything behind `FEATURE_WORKSPACE_SWITCHER`.
+Introduce the Product Line switcher in the header, wire independent Facility/Product Line scope state, and apply explicit mode-sensitive/Facility-aggregate behavior per D4b. `activeTenant` remains the tenant/facility context and must not be reused as the Product Line switcher. The header must stop labeling tenant context as "Workspace." Gate everything behind `FEATURE_WORKSPACE_SWITCHER`.
 
 ### Upstream Impact
 
 `upstream-safe`. This is additive UI/domain work and a plausible upstream candidate if kept generic.
+
+### UI Mode Transition Contract
+
+SPEC-002 uses these canonical terms: **Facility** is the user-facing aggregate mode, **tenant** is the current authenticated compatibility/data boundary for that Facility, and **Product Line** is the selected workspace operating scope. v1 treats authenticated `tenant_id` as the Facility aggregate boundary and does not introduce multi-facility tenant modeling.
+
+Runtime scope is discriminated even if the existing store keeps `activeWorkspace: Workspace | null` for compatibility:
+
+- `scope.kind = "facility"`: authenticated Facility aggregate mode.
+- `scope.kind = "productLine"`: one authorized workspace id.
+- `activeWorkspace = null` may only be interpreted as Facility after auth/workspace initialization and must never widen access from client input alone.
+
+Requests and cache keys use `scopeKey = tenantId + ":" + ("facility" | productLineId)`.
 
 ### Deliverables
 
 - **Header terminology fix**: `header-bar.tsx` must not render `activeTenant` under a "Workspace" label. Tenant/facility context and Product Line context are separate UI chips/controls.
 - **New component**: `src/components/layout/workspace-switcher.tsx`.
   - Dropdown in `header-bar.tsx`.
-  - Options: all workspaces user can access (`GET /api/workspaces`) plus "Facility" (null) entry.
-  - Persists selection via Zustand `persist` middleware (see new persistence note below).
-- **Zustand store**: `activeWorkspace: Workspace | null` with cross-tab sync.
+  - Options: exactly one synthetic "Facility" aggregate entry plus authorized non-Facility Product Line workspaces from `GET /api/workspaces`.
+  - The real `workspaces.slug='facility'` row is never selectable as the aggregate option and must not create a duplicate Facility option.
+  - Desktop placement: left header context cluster near tenant/facility context.
+  - Mobile placement: compact trigger remains visible at 320, 375, and 390 px in the fixed `h-14` header; long names truncate without pushing out search, notifications, theme, or account controls.
+  - Accessibility: stable accessible name, `aria-controls`, `aria-haspopup`, `aria-expanded`, listbox/options, `aria-selected`, roving focus or `aria-activedescendant`, Escape/outside-click close, Arrow/Home/End navigation, Enter/Space selection, selected state, loading/empty/error rows, and trigger focus return.
+- **Zustand store and transition API**: `activeWorkspace: Workspace | null` plus `setActiveProductLine(productLine | null, options)`.
   - **Live state on 2026-04-24:** `src/store/index.ts:4` imports only `subscribeWithSelector`; there is **no existing `persist` middleware** and **no `BroadcastChannel` cross-tab listener** in this codebase. SPEC-002 must therefore implement cross-tab sync from scratch, not piggyback on a non-existent pattern.
-  - **Implementation contract:** wrap the `activeWorkspace` slice with `zustand/middleware`'s `persist` (storage = `localStorage`, key = `mc:active-workspace:v1`). Add a `BroadcastChannel('mc:active-workspace')` listener so tab A's `setActiveWorkspace` triggers a refresh in tab B. Fall back gracefully when `BroadcastChannel` is unavailable (no-op; only the persisted value is shared at next reload).
-  - **Scope discipline:** only the `activeWorkspace` slice is wrapped; the rest of the store is unaffected. Other slices keep current persistence semantics.
+  - **Implementation contract:** persist only the Product Line scope slice with `zustand/middleware` (storage = `localStorage`, key = `mc:active-workspace:v1`). Validate persisted scope after `/api/workspaces` before rendering mode-sensitive cached data.
+  - **Cross-tab contract:** use `BroadcastChannel('mc:active-workspace')` messages shaped as `{ tenantId, userId/sessionId, productLineId|null, version, originTabId }`; ignore mismatched tenant/session, self echoes, and stale versions. Fall back gracefully when `BroadcastChannel` is unavailable.
+  - **Invalidation contract:** scope transitions clear incompatible `activeProject`, selected task/agent/project/conversation state, scoped modals, scoped filters, and scoped drafts unless stored per `scopeKey`. In-flight requests and mutation completions carry the initiating `scopeKey` and are ignored if stale.
 - **TypeScript domain type**: `type ProductLine = Workspace` alias exported from `@/types/product-line`.
-- **REST scoping contract**: filtered endpoints accept an optional requested `workspace_id`/product-line scope, authorize it with tenant/workspace access checks, then query the requested workspace. Omitted scope preserves existing authenticated-workspace behavior unless the endpoint is explicitly facility aggregate.
-- **SSE scoping contract**: `/api/events` supports authorized product-line filtering for non-null `activeWorkspace` and authorized facility/tenant aggregation for null `activeWorkspace`, without leaking events outside the caller's tenant/access set.
-- **Filtered panels** (pass requested workspace scope when `activeWorkspace` set):
-  - `task-board-panel.tsx` — already has `projectFilter`; extend with `workspaceFilter`.
-  - `agent-squad-panel-phase3.tsx` — group by Facility → ProductLine → Department → Agent.
-  - `project-manager-modal.tsx` — list projects for `activeWorkspace` only.
-  - `chat-panel.tsx`, `chat-page-panel.tsx` — list chats from `activeWorkspace`.
-  - `skills-panel.tsx` — list skills from `activeWorkspace` + facility (default facility-wide).
-- **Aggregate panels** (no change — ignore `activeWorkspace`):
-  - `live-feed.tsx`, `notifications-panel.tsx`, `dashboard.tsx`, `system-monitor-panel.tsx`, `audit-trail-panel.tsx`.
-- **API endpoints**: accept optional `workspace_id` query param where relevant. Null defaults to aggregate.
+- **REST scoping contract**: Product Line requests send `workspace_id=<id>`; Facility requests send `workspace_scope=facility`; requests sending both return `400`; unauthorized workspace ids return `403`; omitted scope is allowed only for feature-flag-off legacy behavior.
+- **URL scoping contract**: mode-sensitive detail URLs carry `workspace_scope=facility` or `workspace_id=<id>`. URL scope is applied only after auth/workspace validation; invalid scope strips scoped entity params and resets to Facility; unscoped entity params are cleared if ownership cannot be proven.
+- **SSE scoping contract**: `/api/events` supports authorized Product Line filtering and authorized Facility aggregation. Workspace-scoped events must include `workspace_id`; selected Product Line clients drop missing/mismatched workspace events; Facility clients receive authorized tenant/facility events; global connection/system events are explicitly whitelisted; EventSource reconnects when scope changes.
+- **Mode-sensitive panels**:
+  - `task-board-panel.tsx` — uses `scopeKey`; clears stale selected task and incompatible project filters on switch.
+  - `agent-squad-panel-phase3.tsx` — group by Facility -> Product Line -> Department -> Agent and include global agents in selected Product Line views.
+  - `project-manager-modal.tsx` — lists projects for selected Product Line or Facility aggregate; incompatible `activeProject` is cleared unless revalidated.
+  - quality-review surfaces — scoped to the initiating task/workspace and protected against stale mutation completions.
+  - DB-backed chat message/conversation surfaces — scoped by Product Line or Facility aggregate.
+- **Facility/global surfaces**:
+  - `live-feed.tsx`, `notifications-panel.tsx`, `dashboard.tsx`, `system-monitor-panel.tsx`, and `audit-trail-panel.tsx` render Facility aggregate data, not stale authenticated-workspace-only data.
+  - `skills-panel.tsx` remains Facility/global. SPEC-002 adds no product-line skill ownership, assignment, permissioning, CRUD, or visibility filters.
+  - Local/gateway sessions and transcripts remain Facility/global. SPEC-002 adds no session-to-workspace transcript mapping.
+- **API route matrix**: tasks root/detail/comment/broadcast/branch routes, project root/detail/agent routes, agent root/detail/subroutes, quality-review routes, DB chat messages/conversations, Facility aggregate awareness routes, and `/api/events` must either accept explicit scope or authorize by resource id joined back to tenant/workspace.
 
 ### Files Touched (estimated)
 
@@ -362,24 +384,30 @@ Introduce the product-line switcher in the header, wire Zustand `activeWorkspace
 - `src/store/index.ts` (add `activeWorkspace` slice + `persist` middleware + `BroadcastChannel` listener; the live store path is `src/store/index.ts`, not `src/store/mission-control-store.ts`)
 - `src/components/panels/task-board-panel.tsx` (~20 lines modified)
 - `src/components/panels/agent-squad-panel-phase3.tsx` (~80 lines — hierarchical grouping logic)
-- `src/components/panels/project-manager-modal.tsx`, `chat-panel.tsx`, `chat-page-panel.tsx`, `skills-panel.tsx` (minor)
-- `src/app/api/tasks/route.ts`, `src/app/api/agents/route.ts`, `src/app/api/projects/route.ts` (accept `workspace_id` query param)
+- `src/components/panels/project-manager-modal.tsx`, chat message/conversation surfaces, and quality-review surfaces (mode-sensitive wiring)
+- `src/components/panels/skills-panel.tsx` (Facility/global boundary only; no product-line skill filtering)
+- `src/app/api/tasks/**`, `src/app/api/agents/**`, `src/app/api/projects/**`, `src/app/api/quality-review/**`, DB chat routes, Facility aggregate awareness routes, and `src/app/api/events/route.ts` (explicit scope or resource-id authorization)
 - `src/types/product-line.ts` (new)
 - `src/lib/feature-flags.ts` (new — see Feature Flag Resolution Policy section)
 
 ### Acceptance Criteria
 
 - [P1-AC1] With flag OFF, the existing Vitest + Playwright test suite (`pnpm test:all`) passes unchanged from the pre-Phase-1 baseline commit. "Zero regression" is defined as: 0 new test failures, 0 changed test counts, and 0 visible diffs in the existing Playwright snapshot suite (`tests/e2e/snapshots/*`).
-- [P1-AC2] With flag ON and `activeWorkspace = null`, the same `pnpm test:all` suite passes unchanged (facility-aggregate view is byte-equivalent to flag-OFF for existing tests).
-- [P1-AC3] The "Facility" dropdown entry corresponds to `activeWorkspace = null` (Facility aggregate view per P1-AC2), **not** the real `workspaces.slug='facility'` row. The real facility workspace is never selected directly through the switcher; it hosts `scope='global'` agents (Aegis, Security Guardian, OpenClaw) that surface across every product-line view. Agent squad and other filtered panels MUST render these globals alongside workspace-scoped agents regardless of `activeWorkspace`.
-- [P1-AC4] With flag ON and `activeWorkspace = product-line-a` (pre-seeded), filtered panels show only Product Line A data; aggregate panels show everything.
-- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → Product Line A → {QA, Dev, ...} → {agents}.
-- [P1-AC6] Cross-tab state sync: a Playwright test that opens two browser contexts, sets `activeWorkspace` in context A, and observes the change reflected in context B within 1s passes. When `BroadcastChannel` is unavailable (older browser stub), the persisted value still propagates after a context-B reload.
-- [P1-AC7] `activeTenant` remains independent from `activeWorkspace`; switching product lines does not mutate tenant context.
-- [P1-AC8] Header no longer labels tenant context as "Workspace." Specifically, ripgrep over `src/components/layout/header-bar.tsx` finds zero string matches for `'workspace'` used as a tenant-context label; tenant context is labeled "Tenant" or shown without a label.
-- [P1-AC9] `/api/tasks`, `/api/agents`, `/api/projects`, and `/api/quality-review` return the authorized requested workspace when `activeWorkspace` is set. Vitest covers the request shape: `GET /api/tasks?workspace_id=2` returns only workspace 2's tasks for an authorized user; returns 403 for an unauthorized user.
-- [P1-AC10] `/api/events` returns authorized product-line-filtered events for a selected product line and authorized aggregate events in facility view. Vitest covers both branches with stubbed event sources.
-- [P1-AC11] `src/store/index.ts` exports the `activeWorkspace` slice wrapped with `persist` middleware (key `mc:active-workspace:v1`, storage `localStorage`); the slice subscribes to a `BroadcastChannel('mc:active-workspace')` and updates state on `message` events. Vitest unit-tests both serialization and broadcast handling with a JSDOM stub.
+- [P1-AC2] With flag ON and Facility scope selected, the same `pnpm test:all` suite passes unchanged for existing tests while new tests may assert explicit Facility aggregate semantics.
+- [P1-AC3] The switcher renders exactly one synthetic "Facility" option. Selecting it stores Facility scope (`activeWorkspace = null` compatibility state) and never selects the real `workspaces.slug='facility'` row.
+- [P1-AC4] With flag ON and a selected Product Line workspace, mode-sensitive panels show only that Product Line's authorized data plus allowed global agents; Facility/global surfaces remain Facility aggregate.
+- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) -> Product Line A -> {QA, Dev, ...} -> {agents}; duplicate global/local names do not merge stats and mutations use ids where ambiguity exists.
+- [P1-AC6] Cross-tab state sync: a Playwright test that opens two browser contexts, sets Product Line scope in context A, and observes the change reflected in context B within 1s passes. Messages include tenant/session guards and stale-version protection. When `BroadcastChannel` is unavailable, the persisted value still propagates after a context-B reload.
+- [P1-AC7] `activeTenant` remains independent from Product Line scope; switching Product Lines does not mutate tenant/facility context.
+- [P1-AC8] Header no longer labels tenant context as "Workspace." Specifically, ripgrep over `src/components/layout/header-bar.tsx` finds zero string matches for `'workspace'` used as a tenant-context label; tenant context is labeled "Tenant", "Facility", or shown without a label.
+- [P1-AC9] Mode-sensitive REST routes implement the explicit request contract: Product Line uses `workspace_id=<id>`, Facility uses `workspace_scope=facility`, both params return `400`, unauthorized workspace ids return `403`, and omitted scope is legacy-only with the feature flag OFF.
+- [P1-AC10] `/api/events` returns authorized Product Line-filtered events and authorized Facility aggregate events. Workspace-scoped events include `workspace_id`; selected clients drop missing/mismatched workspace events; global events without workspace scope are explicitly whitelisted.
+- [P1-AC11] `src/store/index.ts` exports Product Line scope persistence (key `mc:active-workspace:v1`, storage `localStorage`) and BroadcastChannel sync only for the new scope slice. Vitest unit-tests serialization, hydration validation, guarded broadcast handling, and fallback behavior.
+- [P1-AC12] Product terminology is consistent across PRD, roadmap, workflow, generated spec, and UI: Facility is the user-facing aggregate, tenant is the auth/data compatibility boundary, Product Line is workspace scope, and SPEC-002 does not introduce multi-facility tenant modeling.
+- [P1-AC13] Header switcher is responsive and accessible: visible at 320/375/390 px without displacing existing controls, truncates long names, provides loading/empty/error states, uses listbox semantics, and returns focus to the trigger after Escape, outside click, and selection.
+- [P1-AC14] All mode-sensitive fetch/cache keys include `scopeKey = tenantId + ":" + ("facility" | productLineId)`; scope transitions ignore stale in-flight responses and scoped mutation completions.
+- [P1-AC15] URL state is scope-owned: valid scoped URLs resolve after auth/workspace validation; invalid scopes strip scoped entity params and reset to Facility; entity params without provable scope ownership are cleared.
+- [P1-AC16] Deferred boundaries are enforced: SPEC-002 does not implement product-line skill ownership, skill filtering, session-to-workspace transcript mapping, or multi-facility tenant modeling; workflow/checklist/analyze gates fail if artifacts claim otherwise.
 
 ### Rollback
 
@@ -872,7 +900,21 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 
 ~8–9 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1 (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6–7 weeks.
 
-## Risk Register (linked to PRD §8)
+## V2 Readiness Backlog
+
+### V2-001: Tenant-Aware Gateway Isolation
+
+- **Status:** Pending (V2 backlog; excluded from the SpecKit-Pro Spec Index until promoted to a future SPEC)
+- **Priority:** P2 after Product Line B onboarding
+- **Depends On:** SPEC-002, SPEC-008, SPEC-010
+- **Terminology guardrail:** Tenant gateway isolation is keyed to tenant context (`tenant_id` / facility-account boundary). It is not keyed to the seeded `workspaces.slug='facility'` row and not keyed to the null "Facility" aggregate switcher view (`activeWorkspace = null`).
+- **Scope:** Clean current global gateway coupling so a future multi-facility deployment can run multiple tenant gateways from one Mission Control instance. Tenant provisioning already carries `openclaw_home` and `gateway_port`; `owner_gateway` is persisted owner/provisioning metadata today, not a runtime gateway endpoint binding. Runtime behavior is mixed: some startup/backend paths still rely on global `gateways.is_primary` fallback or process-level `OPENCLAW_GATEWAY_*` / `config.gatewayHost` / `config.gatewayPort` defaults, while selected-gateway connect and some health paths can use gateway rows. V2 should add tenant-aware gateway associations, runtime resolution, health probes, config paths, and compatibility fallbacks.
+- **Acceptance criteria source:** PRD FR-A5, SC-15, and R12.
+- **Acceptance checks:** A future V2 spec is not complete until gateway registry/resolution has an explicit tenant context, two tenants can resolve different gateway ports/hosts without data leakage, backend RPC/WS/health paths use the tenant-aware resolver or a documented compatibility fallback, and tests cover selected-gateway connect plus process-global fallback behavior.
+- **Definition of done:** Existing global primary/process-env behavior remains available as a compatibility path for single-tenant installs, but new or touched gateway-facing code does not directly add `OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, or `gateways.is_primary` assumptions outside the approved resolver/adapter surface.
+- **Non-goal for v1:** SPEC-002 must not implement tenant-routed gateway selection. It preserves the boundary by keeping `activeTenant` separate from `activeWorkspace` and avoiding new product-line behavior that depends on tenant-scoped gateway state.
+
+## Risk Register (linked to PRD §9)
 
 | # | Phase Impacted | Mitigation Owner |
 |---|---|---|
@@ -885,6 +927,9 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 | R7 Disposition/artifact store growth | Phase 6 | Quotas, retention, artifact admin maintenance, and revisit partitioning/storage tiering at scale |
 | R8 Feature-flag sprawl | All | Flags default OFF; document in settings-panel |
 | R9 Budget/capacity policy misconfiguration | Phase 7 | Conservative defaults, dry-run mode, audit events, and explicit operator override path |
+| R10 Additive schema changes mistaken for upstream-safe changes | All schema phases | D13 compatibility labeling; roadmap marks schema/state divergence before implementation |
+| R11 OpenClaw health electricity integration leaks OpenClaw-node assumptions upstream | Phase 7 | Fork-only optional adapter, absent-safe runtime checks, and no v1 schema migration for health costs |
+| R12 Global gateway coupling blocks clean multi-facility v2 | V2-001 | Preserve `openclaw_home`/`gateway_port` provisioning data and `owner_gateway` metadata in v1; avoid new process-global gateway assumptions; V2-001 owns tenant-aware gateway registry/resolution before multi-facility operation |
 
 ## Rollback Strategy Summary
 
@@ -906,6 +951,7 @@ No destructive rollback required at any phase.
 - [ ] Does this PR modify any upstream-owned file (`src/app/layout.tsx`, `src/lib/auth.ts`, etc.) in a way that would create merge conflicts? If yes, isolate the change to a new file or extend via hooks.
 - [ ] Does this PR add new migrations? If yes, they MUST be additive.
 - [ ] Does this PR change public API shapes (existing endpoints)? If yes, version the endpoint or preserve the old shape.
+- [ ] Does this PR add or touch gateway-facing code (`OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, `gateways.is_primary`, or gateway health/connect/control routes)? If yes, STOP unless the diff either preserves existing behavior without adding new global gateway assumptions or routes new resolution through a named compatibility helper/adapter with a V2-001 reference.
 - [ ] Feature flag present?
 
 Every phase PR passes through this checklist before merge.

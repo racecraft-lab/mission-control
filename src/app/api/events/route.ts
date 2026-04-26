@@ -1,9 +1,12 @@
 import { NextRequest , NextResponse } from 'next/server'
 import { eventBus, ServerEvent } from '@/lib/event-bus'
 import { requireRole } from '@/lib/auth'
+import { getDatabase } from '@/lib/db'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
+const GLOBAL_EVENT_TYPES = new Set(['connected', 'connection.created', 'connection.disconnected'])
 
 /**
  * GET /api/events - Server-Sent Events stream for real-time DB mutations.
@@ -12,6 +15,15 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const db = getDatabase()
+  let acceptedScope
+  try {
+    acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+  } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+    throw error
+  }
 
   const encoder = new TextEncoder()
 
@@ -26,10 +38,17 @@ export async function GET(request: NextRequest) {
       )
 
       // Forward workspace-scoped server events to this SSE client
-      const userWorkspaceId = auth.user.workspace_id ?? 1
       const handler = (event: ServerEvent) => {
-        // Skip events from other workspaces (if event carries workspace_id)
-        if (event.data?.workspace_id && event.data.workspace_id !== userWorkspaceId) return
+        const eventWorkspaceId = event.data?.workspace_id
+        const isGlobalEvent = GLOBAL_EVENT_TYPES.has(event.type)
+        if (acceptedScope.kind === 'productLine') {
+          if (eventWorkspaceId !== acceptedScope.workspaceId && !isGlobalEvent) return
+        } else if (
+          typeof eventWorkspaceId === 'number' &&
+          !acceptedScope.workspaceIds.includes(eventWorkspaceId)
+        ) {
+          return
+        }
         try {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(event)}\n\n`)

@@ -5,6 +5,15 @@ const requireRole = vi.fn()
 const runOpenClaw = vi.fn()
 const removeAgentFromConfig = vi.fn()
 const prepare = vi.fn()
+const workspace = {
+  id: 1,
+  slug: 'default',
+  name: 'Default',
+  tenant_id: 1,
+  feature_flags: null,
+  created_at: 1,
+  updated_at: 1,
+}
 
 vi.mock('@/lib/auth', () => ({
   requireRole,
@@ -56,10 +65,12 @@ describe('DELETE /api/agents/[id]', () => {
   })
 
   it('removes the agent from OpenClaw config even when workspace deletion is disabled', async () => {
-    const agent = { id: 7, name: 'neo', role: 'tester', config: JSON.stringify({ openclawId: 'neo' }) }
+    const agent = { id: 7, name: 'neo', role: 'tester', workspace_id: 1, config: JSON.stringify({ openclawId: 'neo' }) }
     const selectStmt = { get: vi.fn(() => agent) }
     const deleteStmt = { run: vi.fn() }
+    const workspaceStmt = { get: vi.fn(() => workspace) }
     prepare.mockImplementation((sql: string) => {
+      if (sql.includes('FROM workspaces')) return workspaceStmt
       if (sql.startsWith('SELECT * FROM agents')) return selectStmt
       if (sql.startsWith('DELETE FROM agents')) return deleteStmt
       throw new Error(`Unexpected SQL: ${sql}`)
@@ -83,10 +94,12 @@ describe('DELETE /api/agents/[id]', () => {
   })
 
   it('removes workspace via OpenClaw and then removes the config entry', async () => {
-    const agent = { id: 8, name: 'adam', role: 'tester', config: JSON.stringify({ openclawId: 'adam' }) }
+    const agent = { id: 8, name: 'adam', role: 'tester', workspace_id: 1, config: JSON.stringify({ openclawId: 'adam' }) }
     const selectStmt = { get: vi.fn(() => agent) }
     const deleteStmt = { run: vi.fn() }
+    const workspaceStmt = { get: vi.fn(() => workspace) }
     prepare.mockImplementation((sql: string) => {
+      if (sql.includes('FROM workspaces')) return workspaceStmt
       if (sql.startsWith('SELECT * FROM agents')) return selectStmt
       if (sql.startsWith('DELETE FROM agents')) return deleteStmt
       throw new Error(`Unexpected SQL: ${sql}`)
@@ -108,10 +121,12 @@ describe('DELETE /api/agents/[id]', () => {
   })
 
   it('still deletes the Mission Control agent when config cleanup fails', async () => {
-    const agent = { id: 9, name: 'trinity', role: 'tester', config: JSON.stringify({ openclawId: 'trinity' }) }
+    const agent = { id: 9, name: 'trinity', role: 'tester', workspace_id: 1, config: JSON.stringify({ openclawId: 'trinity' }) }
     const selectStmt = { get: vi.fn(() => agent) }
     const deleteStmt = { run: vi.fn() }
+    const workspaceStmt = { get: vi.fn(() => workspace) }
     prepare.mockImplementation((sql: string) => {
+      if (sql.includes('FROM workspaces')) return workspaceStmt
       if (sql.startsWith('SELECT * FROM agents')) return selectStmt
       if (sql.startsWith('DELETE FROM agents')) return deleteStmt
       throw new Error(`Unexpected SQL: ${sql}`)

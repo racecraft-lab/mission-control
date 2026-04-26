@@ -3,6 +3,7 @@ import { getDatabase } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { readLimiter, mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 import {
   runOutputEvals,
   evalReasoningCoherence,
@@ -23,7 +24,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const agent = searchParams.get('agent')
     const action = searchParams.get('action')
-    const workspaceId = auth.user.workspace_id ?? 1
+    const db = getDatabase()
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (!acceptedScope.workspaceId) {
+      return NextResponse.json({ error: 'workspace_id is required for agent evals' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
 
     if (!agent) {
       return NextResponse.json({ error: 'Missing required parameter: agent' }, { status: 400 })
@@ -32,7 +38,6 @@ export async function GET(request: NextRequest) {
     // History mode
     if (action === 'history') {
       const weeks = parseInt(searchParams.get('weeks') || '4', 10)
-      const db = getDatabase()
 
       const history = db.prepare(`
         SELECT eval_layer, score, passed, detail, created_at
@@ -52,7 +57,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: latest eval results per layer
-    const db = getDatabase()
     const latestByLayer = db.prepare(`
       SELECT e.eval_layer, e.score, e.passed, e.detail, e.created_at
       FROM eval_runs e
@@ -77,6 +81,8 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/agents/evals error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -97,8 +103,12 @@ export async function POST(request: NextRequest) {
       const { agent, layer } = body
       if (!agent) return NextResponse.json({ error: 'Missing: agent' }, { status: 400 })
 
-      const workspaceId = auth.user.workspace_id ?? 1
       const db = getDatabase()
+      const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+      if (!acceptedScope.workspaceId) {
+        return NextResponse.json({ error: 'workspace_id is required for agent eval runs' }, { status: 400 })
+      }
+      const workspaceId = acceptedScope.workspaceId
       const results: EvalResult[] = []
 
       const layers = layer ? [layer] : ['output', 'trace', 'component', 'drift']
@@ -150,8 +160,12 @@ export async function POST(request: NextRequest) {
       const { name, entries } = body
       if (!name) return NextResponse.json({ error: 'Missing: name' }, { status: 400 })
 
-      const workspaceId = auth.user.workspace_id ?? 1
       const db = getDatabase()
+      const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+      if (!acceptedScope.workspaceId) {
+        return NextResponse.json({ error: 'workspace_id is required for agent eval golden sets' }, { status: 400 })
+      }
+      const workspaceId = acceptedScope.workspaceId
 
       db.prepare(`
         INSERT INTO eval_golden_sets (name, entries, created_by, workspace_id)
@@ -165,6 +179,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/agents/evals error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

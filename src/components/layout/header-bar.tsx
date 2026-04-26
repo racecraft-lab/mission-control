@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button'
 import { ThemeSelector } from '@/components/ui/theme-selector'
 import { LanguageSwitcher } from '@/components/ui/language-switcher'
 import { DigitalClock } from '@/components/ui/digital-clock'
+import { WorkspaceSwitcher } from '@/components/layout/workspace-switcher'
 import { getNavigationMetrics, navigationMetricEventName } from '@/lib/navigation-metrics'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface SearchResult {
   type: string
@@ -43,11 +45,12 @@ const QUICK_NAV_COMMANDS: Array<{ panel: string; titleKey: string; title: string
 ]
 
 export function HeaderBar() {
-  const { connection, sessions, unreadNotificationCount, activeTenant, activeProject } = useMissionControl()
+  const { connection, sessions, unreadNotificationCount, activeTenant, activeProject, workspaceSwitcherEnabled, activeProductLineScope } = useMissionControl()
   const { reconnect } = useWebSocket()
   const navigateToPanel = useNavigateToPanel()
   const prefetchPanel = usePrefetchPanel()
   const th = useTranslations('header')
+  const ts = useTranslations('workspaceSwitcher')
 
   const activeSessions = sessions.filter(s => s.active).length
 
@@ -252,7 +255,8 @@ export function HeaderBar() {
     }
     setSearchLoading(true)
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=12`)
+      const searchUrl = appendScopeToPath(`/api/search?q=${encodeURIComponent(q)}&limit=12`, activeProductLineScope)
+      const res = await fetch(searchUrl)
       const data = await res.json()
       const entityResults: SearchResult[] = (data.results || []).map((r: SearchResult) => ({ ...r, source: 'entity' }))
       const merged = [...quickResults, ...entityResults].slice(0, 16)
@@ -264,7 +268,7 @@ export function HeaderBar() {
     } finally {
       setSearchLoading(false)
     }
-  }, [getQuickNavResults])
+  }, [activeProductLineScope, getQuickNavResults])
 
   const handleSearchInput = (value: string) => {
     setSearchQuery(value)
@@ -299,7 +303,8 @@ export function HeaderBar() {
       <div className="h-full flex items-center gap-2 md:gap-3">
         {/* Left: Page title + context */}
         <div className="flex min-w-0 items-center gap-2.5 shrink-0">
-          {activeProject ? (
+          <WorkspaceSwitcher />
+          {!workspaceSwitcherEnabled && activeProject ? (
             <Button
               variant="outline"
               size="xs"
@@ -313,9 +318,9 @@ export function HeaderBar() {
               <span className="text-muted-foreground/40">/</span>
               <span className="font-medium text-foreground truncate">{activeProject.name}</span>
             </Button>
-          ) : activeTenant ? (
+          ) : !workspaceSwitcherEnabled && activeTenant ? (
             <div className="hidden lg:flex items-center gap-1 px-2 py-1 rounded-md bg-secondary/40 text-2xs">
-              <span className="text-muted-foreground">{th('workspace')}</span>
+              <span className="text-muted-foreground">{ts('facility')}</span>
               <span className="text-muted-foreground/40">/</span>
               <span className="font-medium text-foreground truncate max-w-[220px]">{activeTenant.display_name}</span>
             </div>

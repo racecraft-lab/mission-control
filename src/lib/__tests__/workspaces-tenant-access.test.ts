@@ -1,9 +1,13 @@
 import type Database from 'better-sqlite3'
 import { describe, expect, it } from 'vitest'
 import {
+  agentWorkspaceScopePredicate,
+  BadWorkspaceScopeError,
   ensureTenantWorkspaceAccess,
   ensureTenantProjectAccess,
   ForbiddenError,
+  resolveWorkspaceScope,
+  resolveWorkspaceScopeFromRequest,
 } from '@/lib/workspaces'
 
 type Workspace = {
@@ -11,6 +15,7 @@ type Workspace = {
   slug: string
   name: string
   tenant_id: number
+  feature_flags?: string | null
   created_at: number
   updated_at: number
 }
@@ -33,7 +38,9 @@ type AuditEvent = {
 
 class FakeDb {
   readonly workspaces: Workspace[] = [
-    { id: 1, slug: 'default', name: 'Default', tenant_id: 10, created_at: 1, updated_at: 1 },
+    { id: 1, slug: 'default', name: 'Default', tenant_id: 10, feature_flags: '{"FEATURE_WORKSPACE_SWITCHER":true}', created_at: 1, updated_at: 1 },
+    { id: 3, slug: 'facility', name: 'Facility', tenant_id: 10, feature_flags: null, created_at: 1, updated_at: 1 },
+    { id: 4, slug: 'assembly', name: 'Assembly', tenant_id: 10, feature_flags: null, created_at: 1, updated_at: 1 },
     { id: 2, slug: 'other', name: 'Other', tenant_id: 20, created_at: 1, updated_at: 1 },
   ]
 
@@ -87,6 +94,13 @@ class FakeDb {
         }
 
         return undefined
+      },
+      all: (...args: unknown[]) => {
+        if (normalized.includes('from workspaces') && normalized.includes('where tenant_id = ?')) {
+          const tenantId = Number(args[0])
+          return this.workspaces.filter((w) => w.tenant_id === tenantId)
+        }
+        return []
       },
       run: (...args: unknown[]) => {
         if (normalized.startsWith('insert into audit_log')) {
@@ -191,5 +205,83 @@ describe('tenant access guards', () => {
     expect(event.action).toBe('tenant_access_denied')
     expect(event.target_type).toBe('project')
     expect(event.target_id).toBe(202)
+  })
+})
+
+describe('workspace scope resolution', () => {
+  it('requires explicit scope when the workspace switcher flag is enabled', () => {
+    const db = createTestDb()
+    expect(() =>
+      resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks'), {
+        workspace_id: 1,
+        tenant_id: 10,
+      })
+    ).toThrow(BadWorkspaceScopeError)
+  })
+
+  it('accepts synthetic Facility scope and aggregates tenant workspace ids', () => {
+    const db = createTestDb()
+    const scope = resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_scope=facility'), {
+      workspace_id: 1,
+      tenant_id: 10,
+    })
+    expect(scope.kind).toBe('facility')
+    expect(scope.workspaceIds).toEqual([1, 3, 4])
+  })
+
+  it('rejects the real facility row as a Product Line workspace id', () => {
+    const db = createTestDb()
+    expect(() =>
+      resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_id=3'), {
+        workspace_id: 1,
+        tenant_id: 10,
+      })
+    ).toThrow(BadWorkspaceScopeError)
+  })
+
+  it('returns 403 semantics for a well-formed foreign workspace id', () => {
+    const db = createTestDb()
+    expect(() =>
+      resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_id=2'), {
+        workspace_id: 1,
+        tenant_id: 10,
+      })
+    ).toThrow(ForbiddenError)
+  })
+
+  it('includes Facility/global agent workspaces in Product Line agent visibility', () => {
+    const db = createTestDb()
+    const scope = resolveWorkspaceScope(db, new Request('http://mc.test/api/agents?workspace_id=4'), {
+      workspace_id: 1,
+      tenant_id: 10,
+    })
+    const predicate = agentWorkspaceScopePredicate(db, scope, 'workspace_id')
+    expect(predicate.sql).toBe('workspace_id IN (?,?)')
+    expect(predicate.params).toEqual([3, 4])
+  })
+
+  it('accepts body-only scope carriers and rejects query/body conflicts', async () => {
+    const db = createTestDb()
+    const bodyScope = await resolveWorkspaceScopeFromRequest(
+      db,
+      new Request('http://mc.test/api/tasks', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ title: 'Scoped task', workspace_id: 4 }),
+      }),
+      { workspace_id: 1, tenant_id: 10 },
+    )
+    expect(bodyScope.kind).toBe('productLine')
+    expect(bodyScope.workspaceId).toBe(4)
+
+    await expect(resolveWorkspaceScopeFromRequest(
+      db,
+      new Request('http://mc.test/api/tasks?workspace_scope=facility', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ workspace_id: 4 }),
+      }),
+      { workspace_id: 1, tenant_id: 10 },
+    )).rejects.toThrow(BadWorkspaceScopeError)
   })
 })

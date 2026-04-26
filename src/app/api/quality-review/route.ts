@@ -5,6 +5,7 @@ import { validateBody, qualityReviewSchema } from '@/lib/validation'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { eventBus } from '@/lib/event-bus'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
@@ -13,7 +14,8 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase()
     const { searchParams } = new URL(request.url)
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const taskIdsParam = searchParams.get('taskIds')
     const taskId = parseInt(searchParams.get('taskId') || '')
 
@@ -30,9 +32,9 @@ export async function GET(request: NextRequest) {
       const placeholders = ids.map(() => '?').join(',')
       const rows = db.prepare(`
         SELECT * FROM quality_reviews
-        WHERE task_id IN (${placeholders}) AND workspace_id = ?
+        WHERE task_id IN (${placeholders}) AND ${workspaceFilter.sql}
         ORDER BY task_id ASC, created_at DESC
-      `).all(...ids, workspaceId) as Array<{ task_id: number; reviewer?: string; status?: string; created_at?: number }>
+      `).all(...ids, ...workspaceFilter.params) as Array<{ task_id: number; reviewer?: string; status?: string; created_at?: number }>
 
       const byTask: Record<number, { status?: string; reviewer?: string; created_at?: number } | null> = {}
       for (const id of ids) {
@@ -55,13 +57,15 @@ export async function GET(request: NextRequest) {
 
     const reviews = db.prepare(`
       SELECT * FROM quality_reviews
-      WHERE task_id = ? AND workspace_id = ?
+      WHERE task_id = ? AND ${workspaceFilter.sql}
       ORDER BY created_at DESC
       LIMIT 10
-    `).all(taskId, workspaceId)
+    `).all(taskId, ...workspaceFilter.params)
 
     return NextResponse.json({ reviews })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/quality-review error')
     return NextResponse.json({ error: 'Failed to fetch quality reviews' }, { status: 500 })
   }
@@ -80,7 +84,11 @@ export async function POST(request: NextRequest) {
     const { taskId, reviewer, status, notes } = validated.data
 
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for quality reviews' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
 
     const task = db
       .prepare('SELECT id, title FROM tasks WHERE id = ? AND workspace_id = ?')
@@ -113,6 +121,7 @@ export async function POST(request: NextRequest) {
         status: 'done',
         previous_status: 'review',
         updated_at: Math.floor(Date.now() / 1000),
+        workspace_id: workspaceId,
       })
     } else if (status === 'rejected') {
       // Rejected: push back to in_progress with the rejection notes as error_message
@@ -123,11 +132,14 @@ export async function POST(request: NextRequest) {
         status: 'in_progress',
         previous_status: 'review',
         updated_at: Math.floor(Date.now() / 1000),
+        workspace_id: workspaceId,
       })
     }
 
     return NextResponse.json({ success: true, id: result.lastInsertRowid })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/quality-review error')
     return NextResponse.json({ error: 'Failed to create quality review' }, { status: 500 })
   }

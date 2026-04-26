@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getDatabase, logAuditEvent } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, type AcceptedWorkspaceScope } from '@/lib/workspaces'
+
+function isWorkspaceWithinAcceptedScope(workspaceId: number, scope: AcceptedWorkspaceScope) {
+  if (scope.kind === 'productLine') {
+    return scope.workspaceId === workspaceId
+  }
+  return scope.workspaceIds.includes(workspaceId)
+}
 
 /**
  * GET /api/workspaces/[id] - Get a single workspace
@@ -17,24 +25,32 @@ export async function GET(
     const db = getDatabase()
     const { id } = await params
     const tenantId = auth.user.tenant_id ?? 1
+    const workspaceId = Number(id)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, {
+      requireExplicitWhenEnabled: false,
+    })
 
     const workspace = db.prepare(
       'SELECT * FROM workspaces WHERE id = ? AND tenant_id = ?'
-    ).get(Number(id), tenantId)
+    ).get(workspaceId, tenantId)
 
-    if (!workspace) {
+    if (!workspace || !isWorkspaceWithinAcceptedScope(workspaceId, acceptedScope)) {
       return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
     }
 
     // Include agent count
     const stats = db.prepare(
       'SELECT COUNT(*) as agent_count FROM agents WHERE workspace_id = ?'
-    ).get(Number(id)) as { agent_count: number }
+    ).get(workspaceId) as { agent_count: number }
 
     return NextResponse.json({
       workspace: { ...(workspace as any), agent_count: stats.agent_count },
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) {
+      return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+    }
     logger.error({ err: error }, 'GET /api/workspaces/[id] error')
     return NextResponse.json({ error: 'Failed to fetch workspace' }, { status: 500 })
   }

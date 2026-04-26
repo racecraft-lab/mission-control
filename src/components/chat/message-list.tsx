@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { useMissionControl, ChatMessage } from '@/store'
 import { MessageBubble } from './message-bubble'
 import { Button } from '@/components/ui/button'
+import { appendScopeToPath } from '@/types/product-line'
 
 function formatDateGroup(timestamp: number): string {
   const date = new Date(timestamp * 1000)
@@ -47,7 +48,7 @@ function isGroupedWithPrevious(messages: ChatMessage[], index: number): boolean 
 }
 
 export function MessageList() {
-  const { chatMessages, activeConversation, isSendingMessage, updatePendingMessage, removePendingMessage, addChatMessage } = useMissionControl()
+  const { chatMessages, activeConversation, isSendingMessage, updatePendingMessage, removePendingMessage, addChatMessage, activeProductLineScope } = useMissionControl()
   const bottomRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [showNewMessages, setShowNewMessages] = useState(false)
@@ -98,7 +99,7 @@ export function MessageList() {
     updatePendingMessage(msg.id, { pendingStatus: 'sending' })
 
     try {
-      const res = await fetch('/api/chat/messages', {
+      const res = await fetch(appendScopeToPath('/api/chat/messages', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

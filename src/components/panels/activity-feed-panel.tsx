@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { useMissionControl } from '@/store'
 import { useSmartPoll } from '@/lib/use-smart-poll'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface Activity {
   id: number
@@ -214,7 +215,7 @@ function TimelineRow({ activity }: { activity: Activity }) {
 // ── Main Component ──────────────────────────────
 export function ActivityFeedPanel() {
   const t = useTranslations('activityFeed')
-  const { agents } = useMissionControl()
+  const { agents, activeProductLineScope } = useMissionControl()
 
   const [activities, setActivities] = useState<Activity[]>([])
   const [sessions, setSessions] = useState<SessionInfo[]>([])
@@ -245,7 +246,7 @@ export function ActivityFeedPanel() {
         if (isAgentView) params.append('offset', (page * limit).toString())
         if (since && !isAgentView) params.append('since', Math.floor(since / 1000).toString())
 
-        const response = await fetch(`/api/activities?${params}`)
+        const response = await fetch(appendScopeToPath(`/api/activities?${params}`, activeProductLineScope))
         if (!response.ok) throw new Error('Failed to fetch activities')
         const data = await response.json()
 
@@ -268,7 +269,7 @@ export function ActivityFeedPanel() {
         setLoading(false)
       }
     },
-    [selectedAgent, filter.type, limit, page, isAgentView],
+    [activeProductLineScope, selectedAgent, filter.type, limit, page, isAgentView],
   )
 
   const lastRefreshRef = useRef(lastRefresh)

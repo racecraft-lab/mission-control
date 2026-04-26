@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { heavyLimiter } from '@/lib/rate-limit'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 interface SearchResult {
   type: 'task' | 'agent' | 'activity' | 'audit' | 'message' | 'notification' | 'webhook' | 'pipeline'
@@ -34,7 +35,15 @@ export async function GET(request: NextRequest) {
   }
 
   const db = getDatabase()
-  const workspaceId = auth.user.workspace_id ?? 1
+  let acceptedScope
+  try {
+    acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+  } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+    throw error
+  }
+  const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
   const likeQ = `%${query}%`
   const results: SearchResult[] = []
 
@@ -43,9 +52,9 @@ export async function GET(request: NextRequest) {
     try {
       const tasks = db.prepare(`
         SELECT id, title, description, status, assigned_to, created_at
-        FROM tasks WHERE workspace_id = ? AND (title LIKE ? OR description LIKE ? OR assigned_to LIKE ?)
+        FROM tasks WHERE ${workspaceFilter.sql} AND (title LIKE ? OR description LIKE ? OR assigned_to LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, likeQ, limit) as any[]
       for (const t of tasks) {
         results.push({
           type: 'task',
@@ -65,9 +74,9 @@ export async function GET(request: NextRequest) {
     try {
       const agents = db.prepare(`
         SELECT id, name, role, status, last_activity, created_at
-        FROM agents WHERE workspace_id = ? AND (name LIKE ? OR role LIKE ? OR last_activity LIKE ?)
+        FROM agents WHERE ${workspaceFilter.sql} AND (name LIKE ? OR role LIKE ? OR last_activity LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, likeQ, limit) as any[]
       for (const a of agents) {
         results.push({
           type: 'agent',
@@ -87,9 +96,9 @@ export async function GET(request: NextRequest) {
     try {
       const activities = db.prepare(`
         SELECT id, type, actor, description, created_at
-        FROM activities WHERE workspace_id = ? AND (description LIKE ? OR actor LIKE ?)
+        FROM activities WHERE ${workspaceFilter.sql} AND (description LIKE ? OR actor LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, limit) as any[]
       for (const a of activities) {
         results.push({
           type: 'activity',
@@ -130,9 +139,9 @@ export async function GET(request: NextRequest) {
     try {
       const messages = db.prepare(`
         SELECT id, from_agent, to_agent, content, conversation_id, created_at
-        FROM messages WHERE workspace_id = ? AND (content LIKE ? OR from_agent LIKE ?)
+        FROM messages WHERE ${workspaceFilter.sql} AND (content LIKE ? OR from_agent LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, limit) as any[]
       for (const m of messages) {
         results.push({
           type: 'message',
@@ -152,9 +161,9 @@ export async function GET(request: NextRequest) {
     try {
       const webhooks = db.prepare(`
         SELECT id, name, url, events, created_at
-        FROM webhooks WHERE workspace_id = ? AND (name LIKE ? OR url LIKE ?)
+        FROM webhooks WHERE ${workspaceFilter.sql} AND (name LIKE ? OR url LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, limit) as any[]
       for (const w of webhooks) {
         results.push({
           type: 'webhook',
@@ -173,9 +182,9 @@ export async function GET(request: NextRequest) {
     try {
       const pipelines = db.prepare(`
         SELECT id, name, description, created_at
-        FROM workflow_pipelines WHERE workspace_id = ? AND (name LIKE ? OR description LIKE ?)
+        FROM workflow_pipelines WHERE ${workspaceFilter.sql} AND (name LIKE ? OR description LIKE ?)
         ORDER BY created_at DESC LIMIT ?
-      `).all(workspaceId, likeQ, likeQ, limit) as any[]
+      `).all(...workspaceFilter.params, likeQ, likeQ, limit) as any[]
       for (const p of pipelines) {
         results.push({
           type: 'pipeline',

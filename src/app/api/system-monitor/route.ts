@@ -5,12 +5,16 @@ import path from 'node:path'
 import { runCommand } from '@/lib/command'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { getDatabase } from '@/lib/db'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   try {
+    const db = getDatabase()
+    await resolveWorkspaceScopeFromRequest(db, request, auth.user, { requireExplicitWhenEnabled: false })
     const [cpu, memory, disk, gpu, network, processes] = await Promise.all([
       getCpuSnapshot(),
       getMemorySnapshot(),
@@ -30,6 +34,8 @@ export async function GET(request: NextRequest) {
       processes,
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'System monitor API error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

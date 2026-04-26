@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth';
 import { agentHeartbeatLimiter } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { resolveTaskImplementationTarget } from '@/lib/task-routing';
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces';
 
 /**
  * GET /api/agents/[id]/heartbeat - Agent heartbeat check
@@ -26,21 +27,23 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id');
     
     // Get agent by ID or name
     let agent: any;
     if (isNaN(Number(agentId))) {
       // Lookup by name
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params);
     } else {
       // Lookup by ID
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(agentId), ...workspaceFilter.params);
     }
     
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
     
     const workItems: any[] = [];
     const now = Math.floor(Date.now() / 1000);
@@ -171,6 +174,8 @@ export async function GET(
     });
     
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/agents/[id]/heartbeat error');
     return NextResponse.json({ error: 'Failed to perform heartbeat check' }, { status: 500 });
   }
@@ -202,70 +207,81 @@ export async function POST(
     // No body is fine — fall through to standard heartbeat
   }
 
-  const { connection_id, token_usage } = body;
-  const db = getDatabase();
-  const now = Math.floor(Date.now() / 1000);
-  const workspaceId = auth.user.workspace_id ?? 1;
+  try {
+    const { connection_id, token_usage } = body;
+    const db = getDatabase();
+    const now = Math.floor(Date.now() / 1000);
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (!acceptedScope.workspaceId) {
+      return NextResponse.json({ error: 'workspace_id is required for agent heartbeat updates' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
 
-  // Update direct connection heartbeat if connection_id provided
-  if (connection_id) {
-    db.prepare('UPDATE direct_connections SET last_heartbeat = ?, updated_at = ? WHERE connection_id = ? AND status = ? AND workspace_id = ?')
-      .run(now, now, connection_id, 'connected', workspaceId);
-  }
-
-  // Inline token reporting
-  let tokenRecorded = false;
-  if (token_usage && token_usage.model && token_usage.inputTokens != null && token_usage.outputTokens != null) {
-    const resolvedParams = await params;
-    const agentId = resolvedParams.id;
-    let agent: any;
-    if (isNaN(Number(agentId))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
-    } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+    // Update direct connection heartbeat if connection_id provided
+    if (connection_id) {
+      db.prepare('UPDATE direct_connections SET last_heartbeat = ?, updated_at = ? WHERE connection_id = ? AND status = ? AND workspace_id = ?')
+        .run(now, now, connection_id, 'connected', workspaceId);
     }
 
-    if (agent) {
-      const sessionId = `${agent.name}:cli`;
-      const parsedTaskId =
-        token_usage.taskId != null && Number.isFinite(Number(token_usage.taskId))
-          ? Number(token_usage.taskId)
-          : null
-
-      let taskId: number | null = null
-      if (parsedTaskId && parsedTaskId > 0) {
-        const taskRow = db.prepare(
-          'SELECT id FROM tasks WHERE id = ? AND workspace_id = ?'
-        ).get(parsedTaskId, workspaceId) as { id?: number } | undefined
-        if (taskRow?.id) {
-          taskId = taskRow.id
-        } else {
-          logger.warn({ taskId: parsedTaskId, workspaceId, agent: agent.name }, 'Ignoring token usage with unknown taskId')
-        }
+    // Inline token reporting
+    let tokenRecorded = false;
+    if (token_usage && token_usage.model && token_usage.inputTokens != null && token_usage.outputTokens != null) {
+      const resolvedParams = await params;
+      const agentId = resolvedParams.id;
+      let agent: any;
+      if (isNaN(Number(agentId))) {
+        agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+      } else {
+        agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
       }
 
-      db.prepare(
-        `INSERT INTO token_usage (model, session_id, input_tokens, output_tokens, created_at, workspace_id, task_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        token_usage.model,
-        sessionId,
-        token_usage.inputTokens,
-        token_usage.outputTokens,
-        now,
-        workspaceId,
-        taskId
-      );
-      tokenRecorded = true;
+      if (agent) {
+        const sessionId = `${agent.name}:cli`;
+        const parsedTaskId =
+          token_usage.taskId != null && Number.isFinite(Number(token_usage.taskId))
+            ? Number(token_usage.taskId)
+            : null
+
+        let taskId: number | null = null
+        if (parsedTaskId && parsedTaskId > 0) {
+          const taskRow = db.prepare(
+            'SELECT id FROM tasks WHERE id = ? AND workspace_id = ?'
+          ).get(parsedTaskId, workspaceId) as { id?: number } | undefined
+          if (taskRow?.id) {
+            taskId = taskRow.id
+          } else {
+            logger.warn({ taskId: parsedTaskId, workspaceId, agent: agent.name }, 'Ignoring token usage with unknown taskId')
+          }
+        }
+
+        db.prepare(
+          `INSERT INTO token_usage (model, session_id, input_tokens, output_tokens, created_at, workspace_id, task_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ).run(
+          token_usage.model,
+          sessionId,
+          token_usage.inputTokens,
+          token_usage.outputTokens,
+          now,
+          workspaceId,
+          taskId
+        );
+        tokenRecorded = true;
+      }
     }
+
+    // Reuse GET logic for work-items check, then augment response
+    const getResponse = await GET(request, { params });
+    const getBody = await getResponse.json();
+
+    return NextResponse.json({
+      ...getBody,
+      token_recorded: tokenRecorded,
+    });
+  } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
+    logger.error({ err: error }, 'POST /api/agents/[id]/heartbeat error');
+    return NextResponse.json({ error: 'Failed to update heartbeat' }, { status: 500 });
   }
-
-  // Reuse GET logic for work-items check, then augment response
-  const getResponse = await GET(request, { params });
-  const getBody = await getResponse.json();
-
-  return NextResponse.json({
-    ...getBody,
-    token_recorded: tokenRecorded,
-  });
 }

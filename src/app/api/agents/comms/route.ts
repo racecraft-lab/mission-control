@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getDatabase, Message } from "@/lib/db"
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 /**
  * GET /api/agents/comms - Inter-agent communication stats and timeline
@@ -14,7 +15,8 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase()
     const { searchParams } = new URL(request.url)
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
 
     const limit = parseInt(searchParams.get("limit") || "100")
     const offset = parseInt(searchParams.get("offset") || "0")
@@ -38,10 +40,10 @@ export async function GET(request: NextRequest) {
     // 1. Get timeline messages (page latest rows but render chronologically)
     let messagesWhere = `
       FROM messages
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND ${commsPredicate}
     `
-    const messagesParams: any[] = [workspaceId]
+    const messagesParams: any[] = [...workspaceFilter.params]
 
     if (since) {
       messagesWhere += " AND created_at > ?"
@@ -72,13 +74,13 @@ export async function GET(request: NextRequest) {
         COUNT(*) as message_count,
         MAX(created_at) as last_message_at
       FROM messages
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND ${commsPredicate}
         AND to_agent IS NOT NULL
         AND lower(from_agent) NOT IN (${humanPlaceholders})
         AND lower(to_agent) NOT IN (${humanPlaceholders})
     `
-    const graphParams: any[] = [workspaceId, ...humanNames, ...humanNames]
+    const graphParams: any[] = [...workspaceFilter.params, ...humanNames, ...humanNames]
     if (since) {
       graphQuery += " AND created_at > ?"
       graphParams.push(parseInt(since, 10))
@@ -91,7 +93,7 @@ export async function GET(request: NextRequest) {
     const statsQuery = `
       SELECT agent, SUM(sent) as sent, SUM(received) as received FROM (
         SELECT from_agent as agent, COUNT(*) as sent, 0 as received
-        FROM messages WHERE workspace_id = ?
+        FROM messages WHERE ${workspaceFilter.sql}
           AND ${commsPredicate}
           AND to_agent IS NOT NULL
           AND lower(from_agent) NOT IN (${humanPlaceholders})
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
         GROUP BY from_agent
         UNION ALL
         SELECT to_agent as agent, 0 as sent, COUNT(*) as received
-        FROM messages WHERE workspace_id = ?
+        FROM messages WHERE ${workspaceFilter.sql}
           AND ${commsPredicate}
           AND to_agent IS NOT NULL
           AND lower(from_agent) NOT IN (${humanPlaceholders})
@@ -107,16 +109,16 @@ export async function GET(request: NextRequest) {
         GROUP BY to_agent
       ) GROUP BY agent ORDER BY (sent + received) DESC
     `
-    const statsParams = [workspaceId, ...humanNames, ...humanNames, workspaceId, ...humanNames, ...humanNames]
+    const statsParams = [...workspaceFilter.params, ...humanNames, ...humanNames, ...workspaceFilter.params, ...humanNames, ...humanNames]
     const agentStats = db.prepare(statsQuery).all(...statsParams)
 
     // 4. Total count
     let countQuery = `
       SELECT COUNT(*) as total FROM messages
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND ${commsPredicate}
     `
-    const countParams: any[] = [workspaceId]
+    const countParams: any[] = [...workspaceFilter.params]
     if (since) {
       countQuery += " AND created_at > ?"
       countParams.push(parseInt(since, 10))
@@ -129,11 +131,11 @@ export async function GET(request: NextRequest) {
 
     let seededCountQuery = `
       SELECT COUNT(*) as seeded FROM messages
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND ${commsPredicate}
         AND conversation_id LIKE ?
     `
-    const seededParams: any[] = [workspaceId, "conv-multi-%"]
+    const seededParams: any[] = [...workspaceFilter.params, "conv-multi-%"]
     if (since) {
       seededCountQuery += " AND created_at > ?"
       seededParams.push(parseInt(since, 10))
@@ -174,6 +176,8 @@ export async function GET(request: NextRequest) {
       source: { mode: source, seededCount, liveCount },
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, "GET /api/agents/comms error")
     return NextResponse.json({ error: "Failed to fetch agent communications" }, { status: 500 })
   }

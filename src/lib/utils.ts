@@ -29,12 +29,13 @@ export function formatAge(ageStr: string): string {
 
 export function parseTokenUsage(tokens: string): { used: number; total: number; percentage: number } {
   // Parse token strings like "28k/35k (80%)"
-  const match = tokens.match(/(\d+)k?\/(\d+)k?\s*\((\d+)%\)/)
+  const match = tokens.match(/(\d+)(k?)\/(\d+)(k?)\s*\((\d+)%\)/)
   if (!match) return { used: 0, total: 0, percentage: 0 }
+  const [, usedRaw = '0', usedUnit = '', totalRaw = '0', totalUnit = '', percentageRaw = '0'] = match
   
-  const used = parseInt(match[1]) * (match[1].includes('k') ? 1000 : 1)
-  const total = parseInt(match[2]) * (match[2].includes('k') ? 1000 : 1)
-  const percentage = parseInt(match[3])
+  const used = parseInt(usedRaw) * (usedUnit === 'k' ? 1000 : 1)
+  const total = parseInt(totalRaw) * (totalUnit === 'k' ? 1000 : 1)
+  const percentage = parseInt(percentageRaw)
   
   return { used, total, percentage }
 }

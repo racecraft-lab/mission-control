@@ -7,15 +7,17 @@ import { dirname } from 'node:path';
 import { resolveWithin } from '@/lib/paths';
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace';
 import type Database from 'better-sqlite3';
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError, type AcceptedWorkspaceScope } from '@/lib/workspaces';
 
 // 512KB — generous but bounded. Prevents unbounded growth from append mode.
 const MAX_WORKING_MEMORY_SIZE = 512 * 1024;
 
-function getAgentByIdOrName(db: Database.Database, agentId: string, workspaceId: number): any {
+function getAgentByIdOrName(db: Database.Database, agentId: string, scope: AcceptedWorkspaceScope): any {
+  const workspaceFilter = agentWorkspaceScopePredicate(db, scope, 'workspace_id');
   if (isNaN(Number(agentId))) {
-    return db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+    return db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params);
   }
-  return db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+  return db.prepare(`SELECT * FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(agentId), ...workspaceFilter.params);
 }
 
 function agentColumnName(agentId: string): 'name' | 'id' {
@@ -43,12 +45,13 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
 
-    const agent = getAgentByIdOrName(db, agentId, workspaceId);
+    const agent = getAgentByIdOrName(db, agentId, acceptedScope);
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
 
     // Read DB working memory + updated_at for staleness comparison
     const col = agentColumnName(agentId);
@@ -98,6 +101,8 @@ export async function GET(
       size: workingMemory.length
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/agents/[id]/memory error');
     return NextResponse.json({ error: 'Failed to fetch working memory' }, { status: 500 });
   }
@@ -117,14 +122,15 @@ export async function PUT(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
     const body = await request.json();
     const { working_memory, append } = body;
 
-    const agent = getAgentByIdOrName(db, agentId, workspaceId);
+    const agent = getAgentByIdOrName(db, agentId, acceptedScope);
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
 
     let newContent = working_memory || '';
 
@@ -201,6 +207,8 @@ export async function PUT(
       size: newContent.length
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/agents/[id]/memory error');
     return NextResponse.json({ error: 'Failed to update working memory' }, { status: 500 });
   }
@@ -220,12 +228,13 @@ export async function DELETE(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
 
-    const agent = getAgentByIdOrName(db, agentId, workspaceId);
+    const agent = getAgentByIdOrName(db, agentId, acceptedScope);
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
 
     const now = Math.floor(Date.now() / 1000);
 
@@ -270,6 +279,8 @@ export async function DELETE(
       updated_at: now
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'DELETE /api/agents/[id]/memory error');
     return NextResponse.json({ error: 'Failed to clear working memory' }, { status: 500 });
   }

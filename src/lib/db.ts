@@ -453,6 +453,7 @@ export const db_helpers = {
         status,
         last_seen: now,
         last_activity: activity || null,
+        workspace_id: workspaceId,
       });
     }
 

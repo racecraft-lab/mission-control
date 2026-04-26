@@ -5,6 +5,7 @@ import { validateBody, createCommentSchema } from '@/lib/validation';
 import { mutationLimiter } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { resolveMentionRecipients } from '@/lib/mentions';
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces';
 
 /**
  * GET /api/tasks/[id]/comments - Get all comments for a task
@@ -20,7 +21,8 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const taskId = parseInt(resolvedParams.id);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
 
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
@@ -28,11 +30,12 @@ export async function GET(
     
     // Verify task exists
     const task = db
-      .prepare('SELECT id FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId);
+      .prepare(`SELECT id, workspace_id FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(taskId, ...workspaceFilter.params) as { id: number; workspace_id: number } | undefined;
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
+    const workspaceId = task.workspace_id;
     
     // Get comments ordered by creation time
     const stmt = db.prepare(`
@@ -79,6 +82,8 @@ export async function GET(
       total: comments.length
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/tasks/[id]/comments error');
     return NextResponse.json({ error: 'Failed to fetch comments' }, { status: 500 });
   }
@@ -101,7 +106,8 @@ export async function POST(
     const db = getDatabase();
     const resolvedParams = await params;
     const taskId = parseInt(resolvedParams.id);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
 
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
@@ -136,11 +142,12 @@ export async function POST(
 
     // Verify task exists
     const task = db
-      .prepare('SELECT * FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId) as any;
+      .prepare(`SELECT * FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(taskId, ...workspaceFilter.params) as any;
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
+    const workspaceId = task.workspace_id as number;
     
     // Verify parent comment exists if specified
     if (parent_id) {
@@ -279,6 +286,8 @@ export async function POST(
       ...(autoAssignedTo ? { auto_assigned_to: autoAssignedTo } : {}),
     }, { status: 201 });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'POST /api/tasks/[id]/comments error');
     return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });
   }

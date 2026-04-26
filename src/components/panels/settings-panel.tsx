@@ -12,6 +12,7 @@ import { Loader } from '@/components/ui/loader'
 import { clearOnboardingDismissedThisSession, clearOnboardingReplayFromStart } from '@/lib/onboarding-session'
 import { resolveCoordinatorDeliveryTarget, type CoordinatorAgentRecord } from '@/lib/coordinator-routing'
 import type { GatewaySession } from '@/lib/sessions'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface Setting {
   key: string
@@ -106,7 +107,7 @@ const subscriptionDropdowns: Record<string, { label: string; value: string }[]> 
 
 export function SettingsPanel() {
   const t = useTranslations('settings')
-  const { currentUser, setShowOnboarding } = useMissionControl()
+  const { currentUser, setShowOnboarding, activeProductLineScope } = useMissionControl()
   const navigateToPanel = useNavigateToPanel()
   const [settings, setSettings] = useState<Setting[]>([])
   const [grouped, setGrouped] = useState<Record<string, Setting[]>>({})
@@ -210,7 +211,7 @@ export function SettingsPanel() {
 
       // Load agent options for coordinator routing dropdown
       try {
-        const agentsRes = await fetch('/api/agents?limit=200')
+        const agentsRes = await fetch(appendScopeToPath('/api/agents?limit=200', activeProductLineScope))
         if (agentsRes.ok) {
           const agentsData = await agentsRes.json()
           setCoordinatorTargetAgents(parseCoordinatorTargetAgents(agentsData.agents || []))
@@ -251,7 +252,7 @@ export function SettingsPanel() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeProductLineScope])
 
   const fetchApiKeyInfo = useCallback(async () => {
     setApiKeyLoading(true)

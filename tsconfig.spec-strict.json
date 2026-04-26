@@ -14,6 +14,13 @@
   "include": [
     "src/lib/spec-strict-sentinel.ts",
     "src/lib/feature-flags.ts",
+    "src/types/product-line.ts",
+    "src/components/layout/workspace-switcher.tsx",
+    "src/components/ui/button.tsx",
+    "src/lib/models.ts",
+    "src/lib/utils.ts",
+    "src/store/index.ts",
+    "src/types/index.ts",
     "src/lib/routing-rule-evaluator.ts",
     "src/lib/output-schema-validator.ts",
     "src/lib/task-create.ts"

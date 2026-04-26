@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { createClientLogger } from '@/lib/client-logger'
 import Link from 'next/link'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 const log = createClientLogger('AgentDetailTabs')
 
@@ -81,6 +83,7 @@ export function OverviewTab({
   onPerformHeartbeat: () => Promise<void>
 }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [messageFrom, setMessageFrom] = useState('system')
   const [directMessage, setDirectMessage] = useState('')
   const [messageStatus, setMessageStatus] = useState<string | null>(null)
@@ -100,7 +103,7 @@ export function OverviewTab({
     if (!directMessage.trim()) return
     try {
       setMessageStatus(null)
-      const response = await fetch('/api/agents/message', {
+      const response = await fetch(appendScopeToPath('/api/agents/message', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -600,13 +603,14 @@ export function MemoryTab({
 // Tasks Tab Component
 export function TasksTab({ agent }: { agent: Agent }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const response = await fetch(`/api/tasks?assigned_to=${agent.name}`)
+        const response = await fetch(appendScopeToPath(`/api/tasks?assigned_to=${agent.name}`, activeProductLineScope))
         if (response.ok) {
           const data = await response.json()
           setTasks(data.tasks || [])
@@ -619,7 +623,7 @@ export function TasksTab({ agent }: { agent: Agent }) {
     }
 
     fetchTasks()
-  }, [agent.name])
+  }, [activeProductLineScope, agent.name])
 
   if (loading) {
     return (
@@ -697,13 +701,14 @@ export function TasksTab({ agent }: { agent: Agent }) {
 // Activity Tab Component
 export function ActivityTab({ agent }: { agent: Agent }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const response = await fetch(`/api/activities?actor=${agent.name}&limit=50`)
+        const response = await fetch(appendScopeToPath(`/api/activities?actor=${agent.name}&limit=50`, activeProductLineScope))
         if (response.ok) {
           const data = await response.json()
           setActivities(data.activities || [])
@@ -716,7 +721,7 @@ export function ActivityTab({ agent }: { agent: Agent }) {
     }
 
     fetchActivities()
-  }, [agent.name])
+  }, [activeProductLineScope, agent.name])
 
   if (loading) {
     return (
@@ -816,6 +821,7 @@ export function CreateAgentModal({
   onCreated: () => void
 }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [availableModels, setAvailableModels] = useState<string[]>([])
@@ -919,7 +925,7 @@ export function CreateAgentModal({
 
       // Run animation and fetch concurrently
       const [response] = await Promise.all([
-        fetch('/api/agents', {
+        fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1365,6 +1371,7 @@ export function ConfigTab({
   onSave: () => void
 }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [config, setConfig] = useState<any>(agent.config || {})
   const [editing, setEditing] = useState(false)
   const [showJson, setShowJson] = useState(false)
@@ -1396,7 +1403,7 @@ export function ConfigTab({
     const loadWorkspaceDocs = async () => {
       setLoadingWorkspaceDocs(true)
       try {
-        const response = await fetch(`/api/agents/${agent.id}/files`)
+        const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}/files`, activeProductLineScope))
         if (!response.ok) return
         const payload = await response.json()
         const entries = Object.entries(payload?.files || {}).map(([name, value]: [string, any]) => ({
@@ -1412,7 +1419,7 @@ export function ConfigTab({
       }
     }
     loadWorkspaceDocs()
-  }, [agent.id])
+  }, [activeProductLineScope, agent.id])
 
   useEffect(() => {
     const loadAvailableModels = async () => {
@@ -1522,7 +1529,7 @@ export function ConfigTab({
           throw new Error('Primary model is required')
         }
       }
-      const response = await fetch(`/api/agents/${agent.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2142,6 +2149,7 @@ interface FileEntry {
 
 export function FilesTab({ agent }: { agent: Agent }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const [files, setFiles] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -2154,7 +2162,7 @@ export function FilesTab({ agent }: { agent: Agent }) {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/agents/${agent.id}/files`)
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}/files`, activeProductLineScope))
       if (!response.ok) {
         const data = await response.json()
         throw new Error(data.error || 'Failed to load files')
@@ -2174,7 +2182,7 @@ export function FilesTab({ agent }: { agent: Agent }) {
     }
   }
 
-  useEffect(() => { loadFiles() }, [agent.id])
+  useEffect(() => { loadFiles() }, [agent.id, activeProductLineScope])
 
   const activeEntry = activeFile ? files.find(f => f.name === activeFile) : null
   const baseContent = activeEntry?.content || ''
@@ -2190,7 +2198,7 @@ export function FilesTab({ agent }: { agent: Agent }) {
     if (!activeFile) return
     setSaving(true)
     try {
-      const response = await fetch(`/api/agents/${agent.id}/files`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}/files`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file: activeFile, content: draft }),
@@ -2313,6 +2321,7 @@ export function FilesTab({ agent }: { agent: Agent }) {
 
 export function ToolsTab({ agent }: { agent: Agent }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const agentConfig = (agent as any).config || {}
   const tools = agentConfig.tools || {}
   const toolAllow = Array.isArray(tools.allow) ? tools.allow : []
@@ -2338,7 +2347,7 @@ export function ToolsTab({ agent }: { agent: Agent }) {
     setError(null)
     setSuccess(false)
     try {
-      const response = await fetch(`/api/agents/${agent.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2750,6 +2759,7 @@ export function CronTab({ agent }: { agent: Agent }) {
 
 export function ModelsTab({ agent }: { agent: Agent }) {
   const t = useTranslations('agentDetail')
+  const { activeProductLineScope } = useMissionControl()
   const agentConfig = (agent as any).config || {}
   const modelCfg = agentConfig.model || {}
   const modelPrimary = typeof modelCfg === 'string' ? modelCfg : (modelCfg.primary || '')
@@ -2779,7 +2789,7 @@ export function ModelsTab({ agent }: { agent: Agent }) {
     setError(null)
     setSuccess(false)
     try {
-      const response = await fetch(`/api/agents/${agent.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.id}`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

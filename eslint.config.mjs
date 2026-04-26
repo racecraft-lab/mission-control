@@ -5,6 +5,8 @@ import tseslint from 'typescript-eslint'
 const specStrictFiles = [
   'src/lib/spec-strict-sentinel.ts',
   'src/lib/feature-flags.ts',
+  'src/types/product-line.ts',
+  'src/components/layout/workspace-switcher.tsx',
   'src/lib/routing-rule-evaluator.ts',
   'src/lib/output-schema-validator.ts',
   'src/lib/task-create.ts',

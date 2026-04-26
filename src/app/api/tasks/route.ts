@@ -10,6 +10,7 @@ import { normalizeTaskCreateStatus } from '@/lib/task-status';
 import { pushTaskToGitHub, syncTaskOutbound } from '@/lib/github-sync-engine';
 import { pushTaskToGnap } from '@/lib/gnap-sync';
 import { config } from '@/lib/config';
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces';
 
 function formatTicketRef(prefix?: string | null, num?: number | null): string | undefined {
   if (!prefix || typeof num !== 'number' || !Number.isFinite(num) || num <= 0) return undefined
@@ -68,7 +69,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 't.workspace_id');
     const { searchParams } = new URL(request.url);
 
     // Parse query parameters
@@ -86,9 +88,9 @@ export async function GET(request: NextRequest) {
       FROM tasks t
       LEFT JOIN projects p
         ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-      WHERE t.workspace_id = ?
+      WHERE ${workspaceFilter.sql}
     `;
-    const params: any[] = [workspaceId];
+    const params: any[] = [...workspaceFilter.params];
     
     if (status) {
       query += ' AND t.status = ?';
@@ -120,8 +122,9 @@ export async function GET(request: NextRequest) {
     const tasksWithParsedData = tasks.map(mapTaskRow);
     
     // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM tasks WHERE workspace_id = ?';
-    const countParams: any[] = [workspaceId];
+    const countFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
+    let countQuery = `SELECT COUNT(*) as total FROM tasks WHERE ${countFilter.sql}`;
+    const countParams: any[] = [...countFilter.params];
     if (status) {
       countQuery += ' AND status = ?';
       countParams.push(status);
@@ -142,6 +145,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ tasks: tasksWithParsedData, total: countRow.total, page: Math.floor(offset / limit) + 1, limit });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/tasks error');
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
   }
@@ -159,7 +164,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for task creation' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const validated = await validateBody(request, createTaskSchema);
     if ('error' in validated) return validated.error;
     const body = validated.data;
@@ -328,6 +337,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ task: parsedTask }, { status: 201 });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'POST /api/tasks error');
     return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
   }
@@ -345,7 +356,11 @@ export async function PUT(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for task updates' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const validated = await validateBody(request, bulkUpdateTaskStatusSchema);
     if ('error' in validated) return validated.error;
     const { tasks } = validated.data;
@@ -403,6 +418,7 @@ export async function PUT(request: NextRequest) {
         id: task.id,
         status: task.status,
         updated_at: Math.floor(Date.now() / 1000),
+        workspace_id: workspaceId,
       });
 
       // Fire-and-forget outbound sync (GitHub + GNAP)
@@ -414,6 +430,8 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, updated: tasks.length });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/tasks error');
     const message = error instanceof Error ? error.message : 'Failed to update tasks'
     if (message.includes('Aegis approval required')) {
