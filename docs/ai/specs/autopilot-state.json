@@ -1,7 +1,7 @@
 {
   "workflow_file": "docs/ai/specs/SPEC-002-workflow.md",
-  "updated_at": "2026-04-26T23:46:55Z",
-  "active_step": "Post: PR Creation",
+  "updated_at": "2026-04-26T23:49:52Z",
+  "active_step": "Post: Review Remediation",
   "open_file_hygiene": "Applies to every remaining plan step: use bounded rg/targeted reads, avoid broad parallel scans unless required, do not leave subagents/dev servers/Playwright servers/MCP helper processes/long-running shell sessions open, close completed agents before advancing, and if Too many open files appears, pause, clean stale helpers, and restart from latest generated artifact state.",
   "notes": [
     "Prerequisite script reported missing Claude command files: speckit.specify, speckit.plan, speckit.tasks, speckit.implement.",
@@ -34,7 +34,8 @@
     "Post Integration Suite completed: pnpm typecheck, pnpm lint (0 errors / 11 warnings), pnpm test, pnpm build, pnpm test:e2e, git diff --check, feature-flag grep, and gateway/deferred-boundary greps passed.",
     "Post Code Review completed and valid findings were remediated: Product Line agent views now preserve Facility/global agent visibility, WorkspaceSwitcher no longer shows empty state during workspace-load failure, and route scope resolution now honors JSON body carriers plus query/body conflict checks through resolveWorkspaceScopeFromRequest.",
     "Post Cleanup completed: git diff --check passed, temp artifacts are ignored/untracked only, no merge markers or console/debugger/TODO drift were found, feature-flag and gateway/deferred-boundary greps passed, and no lingering Spec 002 dev server, Playwright worker, build, lint, typecheck, or test process remained.",
-    "Post PR Creation final verification completed before commit/PR: pnpm typecheck passed; pnpm lint passed with 0 errors / 11 warnings; pnpm test passed 106 files / 1037 tests; pnpm build passed; pnpm test:e2e passed 526 tests; git diff --check passed."
+    "Post PR Creation final verification completed before commit/PR: pnpm typecheck passed; pnpm lint passed with 0 errors / 11 warnings; pnpm test passed 106 files / 1037 tests; pnpm build passed; pnpm test:e2e passed 526 tests; git diff --check passed.",
+    "Draft PR created for review: https://github.com/racecraft-lab/mission-control/pull/16. Branch 002-product-line-switcher is pushed to origin and workflow file records the PR URL."
   ],
   "plan": [
     {"step": "Phase 0: Prerequisites", "status": "completed"},
@@ -68,8 +69,8 @@
     {"step": "Post: Integration Suite", "status": "completed", "cleanup": "Full integration suite passed and exited cleanly before advancing."},
     {"step": "Post: Code Review", "status": "completed", "cleanup": "Valid findings were remediated; focused and full verification processes exited cleanly before advancing."},
     {"step": "Post: Cleanup", "status": "completed", "cleanup": "Cleanup scans passed and no Spec 002 dev/test/build processes were left open before advancing."},
-    {"step": "Post: PR Creation", "status": "in_progress", "cleanup": "Commit, push, draft PR creation, workflow PR URL update, and post-PR cleanup still in progress."},
-    {"step": "Post: Review Remediation", "status": "pending", "cleanup": "Close subagents/processes and verify no duplicate direct Codex helper children before returning or advancing."},
+    {"step": "Post: PR Creation", "status": "completed", "cleanup": "Branch pushed to origin; draft PR created and workflow PR URL recorded."},
+    {"step": "Post: Review Remediation", "status": "in_progress", "cleanup": "Check initial PR review/comment state, remediate any actionable review findings, then close review processes before advancing."},
     {"step": "Post: Retrospective", "status": "pending", "cleanup": "Close subagents/processes and verify no duplicate direct Codex helper children before returning or advancing."}
   ]
 }

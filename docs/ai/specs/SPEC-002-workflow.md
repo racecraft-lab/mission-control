@@ -737,7 +737,8 @@ Populate this ledger before G7 is marked complete. Every row must cite the comma
 - [x] Prohibited-drift grep checks pass.
 - [x] `docs/ai/rc-factory-technical-roadmap.md` records SPEC-002 implementation-complete verification evidence and preserves the PR-merge status caveat.
 - [x] `docs/rc-factory-v1-prd.md` reflects SPEC-002 implementation completion after verification.
-- [ ] Branch is pushed for review.
+- [x] Branch is pushed for review.
+- Draft PR: https://github.com/racecraft-lab/mission-control/pull/16
 
 ### Final Verification Evidence
 
