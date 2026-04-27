@@ -26,6 +26,7 @@
 |---|---|---|---|---|---|
 | 0 | Foundation migrations (M53–M61) | Yes | None — pure schema | `upstream-divergent` | — |
 | 1 | Product-line switcher + `activeWorkspace` | Yes | `FEATURE_WORKSPACE_SWITCHER` | `upstream-safe` | Phase 8 |
+| 1A | Spec archive + evidence retention | Yes | None — process/tooling | `upstream-safe` | Phase 2+ |
 | 2 | Aegis refactor (facility singleton) | Yes (shim) | `FEATURE_GLOBAL_AEGIS` | `upstream-divergent` | Phase 3, 8 |
 | 3 | Task pipeline engine + routing | Yes | `FEATURE_TASK_PIPELINES` | `upstream-divergent` | Phase 4, 6, 8 |
 | 4 | `ready_for_owner` state + two-step terminal | Yes | `FEATURE_TWO_STEP_TERMINAL` | `upstream-divergent` | Phase 8 |
@@ -71,15 +72,16 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 | Spec ID | Phase | Spec Name | Short Name | Status | Priority | Depends On | Enables | Source Section |
 |---|---:|---|---|---|---|---|---|---|
 | SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Complete | P0 | — | SPEC-002 | Phase 0 |
-| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | In Progress | P1 | SPEC-001 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
-| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002 | SPEC-004, SPEC-009 | Phase 2 |
-| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
-| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-002, SPEC-004 | SPEC-009 | Phase 4 |
-| SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002 | SPEC-009 | Phase 5 |
-| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-002, SPEC-004 | SPEC-009 | Phase 6 |
-| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-002, SPEC-004 | SPEC-009 | Phase 7 |
-| SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
-| SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
+| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | In Progress | P1 | SPEC-001 | SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
+| SPEC-002A | 1A | Spec Archive and Evidence Retention | spec-archive-evidence | Pending | P1 | SPEC-002 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009, SPEC-010 | Phase 1A |
+| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A | SPEC-004, SPEC-009 | Phase 2 |
+| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
+| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 4 |
+| SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A | SPEC-009 | Phase 5 |
+| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 6 |
+| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 7 |
+| SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
+| SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-002A, SPEC-009 | — | Phase 9 |
 
 **Current branch note:** SPEC-002 implementation is complete and G7-verified on branch `002-product-line-switcher`, but the SpecKit-Pro index remains `In Progress` until the implementation PR is merged, per the status policy above.
 
@@ -120,7 +122,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Priority:** P1
 - **Branch short name:** `product-line-switcher`
 - **Dependencies:** SPEC-001
-- **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
+- **Enables:** SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 1 — Product-Line Switcher + `activeWorkspace` Scoping
 - **Acceptance criteria source:** Phase 1 Acceptance Criteria
 - **Scope summary:** Add the feature-flagged Product Line switcher, independent Facility/Product Line scope state, explicit REST/SSE scoping, mode-sensitive panel behavior, Facility aggregate awareness behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
@@ -130,12 +132,27 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Definition of done:** Phase 1 deliverables are implemented, P1-AC1 through P1-AC16 pass with flag OFF, Facility aggregate, and selected Product Line modes, and no unauthorized workspace data leaks through REST, URL state, cache reuse, BroadcastChannel, or SSE scoping.
 - **Implementation evidence:** G7 passed locally on 2026-04-26 in branch `002-product-line-switcher`: all 50 generated tasks are checked, `pnpm typecheck` passed, `pnpm lint` passed with 0 errors / 11 pre-existing warnings, `pnpm test` passed 106 files / 1035 tests, `pnpm build` passed, `pnpm test:e2e` passed 526 tests, and guardrail greps found no inline runtime `FEATURE_*` reads outside `src/lib/feature-flags.ts` or new runtime gateway/global-boundary drift.
 
+### SPEC-002A: Spec Archive and Evidence Retention
+
+- **Status:** Pending
+- **Priority:** P1
+- **Branch short name:** `spec-archive-evidence`
+- **Dependencies:** SPEC-002
+- **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009, SPEC-010
+- **Scope source:** Phase 1A — Spec Archive and Evidence Retention
+- **Acceptance criteria source:** Phase 1A Acceptance Criteria
+- **Scope summary:** Define and implement the repository policy for long-lived SpecKit artifacts, Playwright screenshots, PR evidence, and post-merge archival before later specs generate more evidence. Evaluate `stn1slv/spec-kit-archive` as the default archival mechanism and adopt it only if it can be pinned and validated locally and in CI.
+- **Tool count / tool names:** N/A — process/tooling spec
+- **Strict Scope:** `.specify` archive integration and hooks, SpecKit workflow docs/templates, screenshot/evidence manifest conventions, CI/local guards for `specs/**/screenshots`, and PR evidence guidance. No runtime product feature behavior ships in this spec.
+- **Autopilot notes:** Use `specs/002-product-line-switcher` as the dry-run source because it contains real Playwright screenshots. Do not delete or move existing spec folders automatically. If archive cleanup is needed, produce an explicit reviewed change rather than a silent post-merge mutation.
+- **Definition of done:** Phase 1A deliverables are implemented, the archive command dry-runs against SPEC-002, screenshot guard behavior is verified locally and in CI, constitution/workflow docs distinguish durable memory from ephemeral CI artifacts and curated permanent screenshots, and SPEC-003 setup can proceed without unresolved artifact-retention decisions.
+
 ### SPEC-003: Aegis Facility Singleton Refactor
 
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `global-aegis`
-- **Dependencies:** SPEC-001, SPEC-002
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A
 - **Enables:** SPEC-004, SPEC-009
 - **Scope source:** Phase 2 — Aegis Refactor (Facility Singleton)
 - **Acceptance criteria source:** Phase 2 Acceptance Criteria
@@ -150,7 +167,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `task-pipeline-engine`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-003
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-003
 - **Enables:** SPEC-005, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 3 — Task Pipeline Engine + Declarative Routing
 - **Acceptance criteria source:** Phase 3 Acceptance Criteria
@@ -165,7 +182,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `ready-for-owner`
-- **Dependencies:** SPEC-002, SPEC-004
+- **Dependencies:** SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 4 — `ready_for_owner` State + Two-Step Terminal Event
 - **Acceptance criteria source:** Phase 4 Acceptance Criteria
@@ -180,7 +197,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `area-label-github-sync`
-- **Dependencies:** SPEC-001, SPEC-002
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A
 - **Enables:** SPEC-009
 - **Scope source:** Phase 5 — Area-Label GitHub Sync
 - **Acceptance criteria source:** Phase 5 Acceptance Criteria
@@ -195,7 +212,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `disposition-artifacts`
-- **Dependencies:** SPEC-002, SPEC-004
+- **Dependencies:** SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 6 — Disposition Logging + Artifact Store + Admin Panels
 - **Acceptance criteria source:** Phase 6 Acceptance Criteria
@@ -210,7 +227,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `resource-governance`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-004
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 7 — Resource Governance + Cost Tracker Enforcement
 - **Acceptance criteria source:** Phase 7 Acceptance Criteria
@@ -225,7 +242,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P0
 - **Branch short name:** `product-line-a-pilot`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008
 - **Enables:** SPEC-010
 - **Scope source:** Phase 8 — Product Line A Pilot (End-to-End Smoke)
 - **Acceptance criteria source:** Phase 8 Acceptance Criteria
@@ -240,7 +257,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P3
 - **Branch short name:** `product-line-b-onboarding`
-- **Dependencies:** SPEC-009
+- **Dependencies:** SPEC-002A, SPEC-009
 - **Enables:** —
 - **Scope source:** Phase 9 — Product Line B Onboarding (Scale Validation)
 - **Acceptance criteria source:** Phase 9 Acceptance Criteria
@@ -416,6 +433,45 @@ Flip `FEATURE_WORKSPACE_SWITCHER` to OFF. Switcher hidden. Zustand field ignored
 ### Estimated Work
 
 5–7 engineering days.
+
+---
+
+## Phase 1A — Spec Archive and Evidence Retention
+
+### Scope
+
+Add a process/tooling layer that prevents SpecKit artifacts and Playwright screenshots from growing without policy. SPEC-002A evaluates `stn1slv/spec-kit-archive` as the default post-merge archive command, defines which artifacts are durable versus temporary, and adds local/CI guards for committed screenshot evidence before SPEC-003 starts.
+
+### Upstream Impact
+
+`upstream-safe`. This is documentation, workflow, and CI hygiene that can be useful to upstream users without requiring Mission Control runtime behavior.
+
+### Deliverables
+
+- **Archive extension decision**: validate `spec-kit-archive` against the current SpecKit tooling and document whether Mission Control installs, vendors, forks, or rejects it. Any adoption must pin a tag or commit and preserve MIT license metadata.
+- **Archive command path**: provide a local and CI-safe way to dry-run archival against `specs/002-product-line-switcher`, producing an archival report with source paths, PR URL, CI run URL, merge commit, screenshot evidence, and conflicts.
+- **Artifact classes**: define source-of-truth spec artifacts, durable memory summaries, ephemeral CI artifacts, and permanent curated evidence exceptions.
+- **Screenshot/evidence manifest**: define how UI journey screenshots, hashes, CI artifact names, and PR links are recorded for future audits.
+- **CI/local guard**: fail on unbounded committed screenshots under `specs/**/screenshots` unless they are manifest-backed and below the approved count/size policy.
+- **Constitution/workflow updates**: require future specs to follow the archive/evidence policy and keep the existing Real UI Journey Quality Gate intact.
+
+### Acceptance Criteria
+
+- [P1A-AC1] `specs/002a-spec-archive-evidence/spec.md`, research, requirements checklist, and workflow are present and contain no unresolved clarification placeholders.
+- [P1A-AC2] The implementation records an evidence-backed adoption decision for `spec-kit-archive`, including repository URL, license, pinned version/commit, and local modifications if any.
+- [P1A-AC3] An archive dry-run against `specs/002-product-line-switcher` completes without deleting or moving source spec files and reports durable memory changes plus screenshot evidence.
+- [P1A-AC4] CI and a local command fail on an intentionally oversized or unmanifested committed screenshot fixture and name the offending path.
+- [P1A-AC5] CI and a local command pass for approved SPEC-002 evidence or for an artifact-bundle-only path.
+- [P1A-AC6] The constitution and workflow docs state that committed screenshots are exceptions, ephemeral CI artifacts require PR-accessible links during review, and durable memory must retain enough provenance for later audit.
+- [P1A-AC7] Cleanup of spec folders or screenshots is never performed silently by post-merge CI; any cleanup is proposed as an explicit reviewed change.
+
+### Rollback
+
+Disable the archive guard and extension hook. Source spec folders and existing evidence remain in place because SPEC-002A must not delete or move them automatically.
+
+### Estimated Work
+
+1–2 engineering days.
 
 ---
 
@@ -869,17 +925,18 @@ Disable Product Line B workspace (set `disabled_at`). Product Line A unaffected.
 ```
 Phase 0 (migrations)
     └─→ Phase 1 (switcher + shared feature-flag resolver)
-          ├─→ Phase 2 (Aegis refactor)
-          │     └─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
-          │           ├─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
-          │           ├─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
-          │           └─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
-          ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
-          └─→ Phase 8 (Product Line A pilot) ── depends on ALL of Phase 1–7
-             └─→ Phase 9 (Product Line B onboarding)
+          └─→ Phase 1A (spec archive + evidence retention)
+                ├─→ Phase 2 (Aegis refactor)
+                │     └─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
+                │           ├─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
+                │           ├─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
+                │           └─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
+                ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
+                └─→ Phase 8 (Product Line A pilot) ── depends on Phase 1A and ALL of Phase 1–7
+                   └─→ Phase 9 (Product Line B onboarding)
 ```
 
-Phase 0 MUST land first. Phase 1 MUST land before any later feature-flagged spec because it owns `resolveFlag()`. After Phase 1, Phase 2 and Phase 5 may proceed independently; Phase 3 waits for Phase 2 and gates 4, 6, and 7. Phase 8 gates 9.
+Phase 0 MUST land first. Phase 1 MUST land before any later feature-flagged spec because it owns `resolveFlag()`. Phase 1A MUST land before Phase 2 or Phase 5 begins so later specs inherit the archive/evidence policy. After Phase 1A, Phase 2 and Phase 5 may proceed independently; Phase 3 waits for Phase 2 and gates 4, 6, and 7. Phase 8 gates 9.
 
 Phase 3 also gates the repository documentation refresh for `docs/orchestration.md`; Phase 3 is not shipped until that documentation describes declarative task chains and current lifecycle/status terminology.
 
@@ -889,16 +946,17 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 |---|---|---|
 | 0 | 1.5 | 1.5 |
 | 1 | 6 | 7.5 |
-| 2 | 4.5 | 12 |
-| 3 | 8.5 | 20.5 |
-| 4 | 3.5 | 24 |
-| 5 | 3.5 | 27.5 |
-| 6 | 3 | 30.5 |
-| 7 | 5 | 35.5 |
-| 8 | 4.5 | 40 |
-| 9 | 2.5 | 42.5 |
+| 1A | 1.5 | 9 |
+| 2 | 4.5 | 13.5 |
+| 3 | 8.5 | 22 |
+| 4 | 3.5 | 25.5 |
+| 5 | 3.5 | 29 |
+| 6 | 3 | 32 |
+| 7 | 5 | 37 |
+| 8 | 4.5 | 41.5 |
+| 9 | 2.5 | 44 |
 
-~8–9 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1 (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6–7 weeks.
+~8.5–9.5 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1A (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6.5–7.5 weeks.
 
 ## V2 Readiness Backlog
 

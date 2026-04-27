@@ -1,6 +1,6 @@
 # Mission Control Departmental Architecture PRD
 
-> For SpecKit-Pro ingestion. Execute in phases (schema → switcher → Aegis refactor → pipeline engine → state extension → labels → logging → governance → pilot), with **zero regression for existing single-workspace deployments** as the primary acceptance criterion and **explicit upstream-impact disclosure** for every phase.
+> For SpecKit-Pro ingestion. Execute in phases (schema → switcher → spec archive/evidence policy → Aegis refactor → pipeline engine → state extension → labels → logging → governance → pilot), with **zero regression for existing single-workspace deployments** as the primary acceptance criterion and **explicit upstream-impact disclosure** for every phase.
 
 ## SpecKit-Pro Usage
 
@@ -510,6 +510,7 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 |---|---|---|---|---|
 | 0 | Foundation migrations (M53–M61) | Complete | Yes — runtime-safe | `upstream-divergent` |
 | 1 | Workspace switcher + `activeWorkspace` scoping | Implementation complete; PR pending | Yes — flag-off default | `upstream-safe` |
+| 1A | Spec archive + evidence retention | Pending | Yes — process/tooling only | `upstream-safe` |
 | 2 | Aegis refactor (facility singleton) | Pending | Yes — shim preserves legacy | `upstream-divergent` |
 | 3 | Task-chain engine + declarative routing over `workflow_templates` | Pending | Yes — null-default fields | `upstream-divergent` |
 | 4 | `ready_for_owner` state + two-step terminal | Pending | Yes — per-template opt-in | `upstream-divergent` |
@@ -524,6 +525,8 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 **Phase 0 completion note:** SPEC-001 is complete on PR #15 after HAL UAT acceptance on 2026-04-26. Acceptance evidence: M53-M61 migration markers present, `PRAGMA quick_check` OK, `workspaces.slug='facility'` seeded, Aegis/HAL/Security Guardian backfilled to `scope='global'`, and operator UAT found no blocking regressions in the core app flows.
 
 **Phase 1 implementation note:** SPEC-002 is implementation-complete and G7-verified on branch `002-product-line-switcher` as of 2026-04-26. Evidence: all 50 generated tasks checked, `pnpm typecheck`, `pnpm lint`, `pnpm test` (106 files / 1035 tests), `pnpm build`, and `pnpm test:e2e` (526 tests) passed; roadmap status remains PR/merge-gated.
+
+**Phase 1A planning note:** SPEC-002A is inserted before SPEC-003 to define spec artifact archival, Playwright screenshot retention, PR evidence links, and CI/local guards. It evaluates `stn1slv/spec-kit-archive` as the default post-merge archive mechanism and blocks later feature specs until the retention policy is explicit.
 
 ### Autopilot Caveats (per spec)
 
