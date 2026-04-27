@@ -18,6 +18,10 @@
   - Tested independently
   - Deployed independently
   - Demonstrated to users independently
+  For user-facing UI features, each Independent Test must name the real
+  Playwright browser journey and screenshot states that prove the journey
+  works in the running app. Static HTML fixtures and component-only tests are
+  supporting evidence, not acceptance evidence for new UI behavior.
 -->
 
 ### User Story 1 - [Brief Title] (Priority: P1)

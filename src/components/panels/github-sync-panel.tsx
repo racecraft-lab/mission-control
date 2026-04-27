@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface GitHubLabel {
   name: string
@@ -48,6 +50,7 @@ interface LinkedTask {
 
 export function GitHubSyncPanel() {
   const t = useTranslations('githubSync')
+  const { activeProductLineScope } = useMissionControl()
   // Connection status
   const [tokenStatus, setTokenStatus] = useState<{ connected: boolean; user?: string } | null>(null)
 
@@ -126,7 +129,7 @@ export function GitHubSyncPanel() {
   // Fetch linked tasks
   const fetchLinkedTasks = useCallback(async () => {
     try {
-      const res = await fetch('/api/tasks?limit=200', { signal: AbortSignal.timeout(8000) })
+      const res = await fetch(appendScopeToPath('/api/tasks?limit=200', activeProductLineScope), { signal: AbortSignal.timeout(8000) })
       if (res.ok) {
         const data = await res.json()
         const linked = (data.tasks || []).filter(
@@ -135,29 +138,29 @@ export function GitHubSyncPanel() {
         setLinkedTasks(linked)
       }
     } catch { /* ignore */ }
-  }, [])
+  }, [activeProductLineScope])
 
   // Fetch projects for two-way sync
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/projects', { signal: AbortSignal.timeout(8000) })
+      const res = await fetch(appendScopeToPath('/api/projects', activeProductLineScope), { signal: AbortSignal.timeout(8000) })
       if (res.ok) {
         const data = await res.json()
         setProjects(data.projects || [])
       }
     } catch { /* ignore */ }
-  }, [])
+  }, [activeProductLineScope])
 
   // Fetch agents for assign dropdown
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch('/api/agents', { signal: AbortSignal.timeout(8000) })
+      const res = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), { signal: AbortSignal.timeout(8000) })
       if (res.ok) {
         const data = await res.json()
         setAgents((data.agents || []).map((a: any) => ({ name: a.name })))
       }
     } catch { /* ignore */ }
-  }, [])
+  }, [activeProductLineScope])
 
   useEffect(() => {
     Promise.allSettled([checkToken(), fetchSyncHistory(), fetchLinkedTasks(), fetchAgents(), fetchProjects()])
@@ -228,7 +231,7 @@ export function GitHubSyncPanel() {
   // Two-way sync handlers
   const handleToggleSync = async (project: typeof projects[number]) => {
     try {
-      const res = await fetch(`/api/projects/${project.id}`, {
+      const res = await fetch(appendScopeToPath(`/api/projects/${project.id}`, activeProductLineScope), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_sync_enabled: !project.github_sync_enabled }),

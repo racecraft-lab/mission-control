@@ -67,9 +67,9 @@ export function UpdateBanner() {
   const isbusy = state === 'updating' || state === 'restarting'
 
   return (
-    <div className="mx-4 mt-3 mb-0 flex items-center gap-3 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-sm">
+    <div className="mx-4 mt-3 mb-0 flex flex-col gap-3 px-4 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-sm sm:flex-row sm:items-center">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-      <p className="flex-1 text-xs text-emerald-300">
+      <p className="min-w-0 flex-1 text-xs text-emerald-300">
         {state === 'updating' && (
           <span className="font-medium text-amber-300">{t('updating')}</span>
         )}
@@ -89,7 +89,7 @@ export function UpdateBanner() {
         )}
       </p>
       {!isbusy && (
-        <>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           <button
             onClick={handleUpdate}
             disabled={isbusy}
@@ -116,7 +116,7 @@ export function UpdateBanner() {
               <path d="M4 4l8 8M12 4l-8 8" />
             </svg>
           </Button>
-        </>
+        </div>
       )}
       {isbusy && (
         <svg className="w-4 h-4 animate-spin text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none">

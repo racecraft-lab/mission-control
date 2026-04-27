@@ -3,6 +3,7 @@ import { getDatabase, Notification, db_helpers } from '@/lib/db';
 import { runOpenClaw } from '@/lib/command';
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces';
 
 /**
  * POST /api/notifications/deliver - Notification delivery daemon endpoint
@@ -17,7 +18,9 @@ export async function POST(request: NextRequest) {
   try {
     const db = getDatabase();
     const body = await request.json();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { body });
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'n.workspace_id');
+    const batchWorkspaceId = acceptedScope.workspaceId ?? acceptedScope.workspaceIds[0] ?? 1;
     const {
       agent_filter, // Optional: only deliver to specific agent
       limit = 50,   // Max notifications to process per call
@@ -29,10 +32,10 @@ export async function POST(request: NextRequest) {
       SELECT n.*, a.session_key 
       FROM notifications n
       LEFT JOIN agents a ON n.recipient = a.name AND a.workspace_id = n.workspace_id
-      WHERE n.delivered_at IS NULL AND n.workspace_id = ?
+      WHERE n.delivered_at IS NULL AND ${workspaceFilter.sql}
     `;
     
-    const params: any[] = [workspaceId];
+    const params: any[] = [...workspaceFilter.params];
     
     if (agent_filter) {
       query += ' AND n.recipient = ?';
@@ -105,7 +108,8 @@ export async function POST(request: NextRequest) {
             
             // Mark as delivered
             const now = Math.floor(Date.now() / 1000);
-            markDeliveredStmt.run(now, notification.id, workspaceId);
+            const notificationWorkspaceId = Number((notification as Notification & { workspace_id?: number }).workspace_id || batchWorkspaceId);
+            markDeliveredStmt.run(now, notification.id, notificationWorkspaceId);
             
             deliveredCount++;
             deliveryResults.push({
@@ -129,7 +133,7 @@ export async function POST(request: NextRequest) {
                 session_key: notification.session_key,
                 title: notification.title
               },
-              workspaceId
+              notificationWorkspaceId
             );
           } catch (cmdError: any) {
             throw new Error(`Command failed: ${cmdError.message}`);
@@ -171,7 +175,7 @@ export async function POST(request: NextRequest) {
         dry_run,
         agent_filter: agent_filter || null
       },
-      workspaceId
+      batchWorkspaceId
     );
     
     return NextResponse.json({
@@ -185,6 +189,8 @@ export async function POST(request: NextRequest) {
       error_details: errors
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'POST /api/notifications/deliver error');
     return NextResponse.json({ error: 'Failed to deliver notifications' }, { status: 500 });
   }
@@ -200,12 +206,14 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
+    const nWorkspaceFilter = workspaceScopePredicate(acceptedScope, 'n.workspace_id');
     const agent = searchParams.get('agent');
     
     // Get delivery statistics
-    let baseQuery = 'SELECT COUNT(*) as count FROM notifications WHERE workspace_id = ?';
-    let params: any[] = [workspaceId];
+    let baseQuery = `SELECT COUNT(*) as count FROM notifications WHERE ${workspaceFilter.sql}`;
+    let params: any[] = [...workspaceFilter.params];
     
     if (agent) {
       baseQuery += ' AND recipient = ?';
@@ -231,11 +239,11 @@ export async function GET(request: NextRequest) {
         delivered_at,
         created_at
       FROM notifications 
-      WHERE delivered_at IS NOT NULL AND workspace_id = ?
+      WHERE delivered_at IS NOT NULL AND ${workspaceFilter.sql}
       ${agent ? 'AND recipient = ?' : ''}
       ORDER BY delivered_at DESC 
       LIMIT 10
-    `).all(...(agent ? [workspaceId, agent] : [workspaceId]));
+    `).all(...(agent ? [...workspaceFilter.params, agent] : workspaceFilter.params));
     
     // Get agents with pending notifications
     const agentsPending = db.prepare(`
@@ -245,10 +253,10 @@ export async function GET(request: NextRequest) {
         COUNT(*) as pending_count
       FROM notifications n
       LEFT JOIN agents a ON n.recipient = a.name AND a.workspace_id = n.workspace_id
-      WHERE n.delivered_at IS NULL AND n.workspace_id = ?
+      WHERE n.delivered_at IS NULL AND ${nWorkspaceFilter.sql}
       GROUP BY n.recipient, a.session_key
       ORDER BY pending_count DESC
-    `).all(workspaceId) as any[];
+    `).all(...nWorkspaceFilter.params) as any[];
     
     return NextResponse.json({
       statistics: {
@@ -263,6 +271,8 @@ export async function GET(request: NextRequest) {
       agent_filter: agent
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/notifications/deliver error');
     return NextResponse.json({ error: 'Failed to get delivery status' }, { status: 500 });
   }

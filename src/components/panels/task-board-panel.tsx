@@ -9,6 +9,7 @@ import { useSmartPoll } from '@/lib/use-smart-poll'
 import { createClientLogger } from '@/lib/client-logger'
 
 import { useFocusTrap } from '@/lib/use-focus-trap'
+import { appendScopeToPath } from '@/types/product-line'
 
 import { AgentAvatar } from '@/components/ui/agent-avatar'
 import { MarkdownRenderer } from '@/components/markdown-renderer'
@@ -334,13 +335,14 @@ type DunkPhase = 'idle' | 'success' | 'error' | 'dismissing'
 
 function DunkItButton({ taskId, onDunked }: { taskId: number; onDunked: (id: number) => void }) {
   const t = useTranslations('taskBoard')
+  const { activeProductLineScope } = useMissionControl()
   const [phase, setPhase] = useState<DunkPhase>('idle')
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (phase !== 'idle') return
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
+      const res = await fetch(appendScopeToPath(`/api/tasks/${taskId}`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'done' }),
@@ -391,7 +393,7 @@ interface SpawnFormData {
 export function TaskBoardPanel() {
   const t = useTranslations('taskBoard')
   const statusColumns = STATUS_COLUMN_KEYS.map(col => ({ ...col, title: t(col.titleKey as any) }))
-  const { tasks: storeTasks, setTasks: storeSetTasks, selectedTask, setSelectedTask, activeProject, availableModels, spawnRequests, addSpawnRequest, updateSpawnRequest, dashboardMode } = useMissionControl()
+  const { tasks: storeTasks, setTasks: storeSetTasks, selectedTask, setSelectedTask, activeProject, availableModels, spawnRequests, addSpawnRequest, updateSpawnRequest, dashboardMode, activeProductLineScope } = useMissionControl()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -445,6 +447,10 @@ export function TaskBoardPanel() {
 
   // Fetch tasks, agents, and projects
   const fetchData = useCallback(async () => {
+    const requestScopeKey = activeProductLineScope?.scopeKey ?? 'legacy'
+    const isCurrentScope = () =>
+      (useMissionControl.getState().activeProductLineScope?.scopeKey ?? 'legacy') === requestScopeKey
+
     try {
       setError(null)
 
@@ -452,12 +458,15 @@ export function TaskBoardPanel() {
       if (projectFilter !== 'all') {
         tasksQuery.set('project_id', projectFilter)
       }
-      const tasksUrl = tasksQuery.toString() ? `/api/tasks?${tasksQuery.toString()}` : '/api/tasks'
+      const tasksUrl = appendScopeToPath(
+        tasksQuery.toString() ? `/api/tasks?${tasksQuery.toString()}` : '/api/tasks',
+        activeProductLineScope
+      )
 
       const [tasksResponse, agentsResponse, projectsResponse] = await Promise.all([
         fetch(tasksUrl),
-        fetch('/api/agents'),
-        fetch('/api/projects')
+        fetch(appendScopeToPath('/api/agents', activeProductLineScope)),
+        fetch(appendScopeToPath('/api/projects', activeProductLineScope))
       ])
 
       if (!tasksResponse.ok || !agentsResponse.ok || !projectsResponse.ok) {
@@ -471,15 +480,18 @@ export function TaskBoardPanel() {
       const tasksList = tasksData.tasks || []
       const taskIds = tasksList.map((task: Task) => task.id)
 
+      if (!isCurrentScope()) return
+
       // Render primary board data first; hydrate Aegis approvals in background.
       storeSetTasks(tasksList)
       setAgents(agentsData.agents || [])
       setProjects(projectsData.projects || [])
 
       if (taskIds.length > 0) {
-        fetch(`/api/quality-review?taskIds=${taskIds.join(',')}`)
+        fetch(appendScopeToPath(`/api/quality-review?taskIds=${taskIds.join(',')}`, activeProductLineScope))
           .then((reviewResponse) => reviewResponse.ok ? reviewResponse.json() : null)
           .then((reviewData) => {
+            if (!isCurrentScope()) return
             const latest = reviewData?.latest || {}
             const newAegisMap: Record<number, boolean> = Object.fromEntries(
               Object.entries(latest).map(([id, row]: [string, any]) => [
@@ -490,17 +502,22 @@ export function TaskBoardPanel() {
             setAegisMap(newAegisMap)
           })
           .catch(() => {
+            if (!isCurrentScope()) return
             setAegisMap({})
           })
       } else {
         setAegisMap({})
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      if (isCurrentScope()) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      }
     } finally {
-      setLoading(false)
+      if (isCurrentScope()) {
+        setLoading(false)
+      }
     }
-  }, [projectFilter, storeSetTasks])
+  }, [activeProductLineScope, projectFilter, storeSetTasks])
 
   useEffect(() => {
     fetchData()
@@ -604,7 +621,7 @@ export function TaskBoardPanel() {
 
     try {
       if (newStatus === 'done') {
-        const reviewResponse = await fetch(`/api/quality-review?taskId=${draggedTask.id}`)
+        const reviewResponse = await fetch(appendScopeToPath(`/api/quality-review?taskId=${draggedTask.id}`, activeProductLineScope))
         if (!reviewResponse.ok) {
           throw new Error('Unable to verify Aegis approval')
         }
@@ -622,7 +639,7 @@ export function TaskBoardPanel() {
       })
 
       // Update on server
-      const response = await fetch('/api/tasks', {
+      const response = await fetch(appendScopeToPath('/api/tasks', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -931,7 +948,7 @@ export function TaskBoardPanel() {
       )}
 
       {/* Kanban Board */}
-      <div className="flex-1 min-h-0 flex gap-4 p-4 overflow-x-auto" role="region" aria-label={t('taskBoard')}>
+      <div className="flex-1 min-h-0 flex gap-4 p-4 overflow-x-auto" role="region" aria-label={t('taskBoardAriaLabel')}>
         {statusColumns.map(column => (
           <div
             key={column.key}
@@ -1212,7 +1229,7 @@ function TaskDetailModal({
   onDelete: () => void
 }) {
   const t = useTranslations('taskBoard')
-  const { currentUser } = useMissionControl()
+  const { currentUser, activeProductLineScope } = useMissionControl()
   const commentAuthor = currentUser?.username || 'system'
   const resolvedProjectName =
     task.project_name ||
@@ -1233,19 +1250,19 @@ function TaskDetailModal({
 
   const fetchReviews = useCallback(async () => {
     try {
-      const response = await fetch(`/api/quality-review?taskId=${task.id}`)
+      const response = await fetch(appendScopeToPath(`/api/quality-review?taskId=${task.id}`, activeProductLineScope))
       if (!response.ok) throw new Error('Failed to fetch reviews')
       const data = await response.json()
       setReviews(data.reviews || [])
     } catch (error) {
       setReviewError('Failed to load quality reviews')
     }
-  }, [task.id])
+  }, [activeProductLineScope, task.id])
 
   const fetchComments = useCallback(async () => {
     try {
       setLoadingComments(true)
-      const response = await fetch(`/api/tasks/${task.id}/comments`)
+      const response = await fetch(appendScopeToPath(`/api/tasks/${task.id}/comments`, activeProductLineScope))
       if (!response.ok) throw new Error('Failed to fetch comments')
       const data = await response.json()
       setComments(data.comments || [])
@@ -1254,7 +1271,7 @@ function TaskDetailModal({
     } finally {
       setLoadingComments(false)
     }
-  }, [task.id])
+  }, [activeProductLineScope, task.id])
 
   useEffect(() => {
     fetchComments()
@@ -1271,7 +1288,7 @@ function TaskDetailModal({
 
     try {
       setCommentError(null)
-      const response = await fetch(`/api/tasks/${task.id}/comments`, {
+      const response = await fetch(appendScopeToPath(`/api/tasks/${task.id}/comments`, activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1294,7 +1311,7 @@ function TaskDetailModal({
 
     try {
       setBroadcastStatus(null)
-      const response = await fetch(`/api/tasks/${task.id}/broadcast`, {
+      const response = await fetch(appendScopeToPath(`/api/tasks/${task.id}/broadcast`, activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1315,7 +1332,7 @@ function TaskDetailModal({
     e.preventDefault()
     try {
       setReviewError(null)
-      const response = await fetch('/api/quality-review', {
+      const response = await fetch(appendScopeToPath('/api/quality-review', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1458,7 +1475,7 @@ function TaskDetailModal({
                 onClick={async () => {
                   if (!confirm(t('deleteTaskConfirm', { title: task.title }))) return
                   try {
-                    const res = await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' })
+                    const res = await fetch(appendScopeToPath(`/api/tasks/${task.id}`, activeProductLineScope), { method: 'DELETE' })
                     if (!res.ok) {
                       const errorData = await res.json().catch(() => ({ error: 'Failed to delete task' }))
                       throw new Error(errorData.error || 'Failed to delete task')
@@ -1498,7 +1515,7 @@ function TaskDetailModal({
             <button
               onClick={async () => {
                 try {
-                  const res = await fetch(`/api/tasks/${task.id}`, {
+                  const res = await fetch(appendScopeToPath(`/api/tasks/${task.id}`, activeProductLineScope), {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'assigned', dispatch_attempts: 0, error_message: null }),
@@ -1568,7 +1585,7 @@ function TaskDetailModal({
                   onChange={async (e) => {
                     const newAssignee = e.target.value || null
                     try {
-                      const res = await fetch(`/api/tasks/${task.id}`, {
+                      const res = await fetch(appendScopeToPath(`/api/tasks/${task.id}`, activeProductLineScope), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ assigned_to: newAssignee }),
@@ -2068,6 +2085,7 @@ function CreateTaskModal({
     target_session: '',
   })
   const t = useTranslations('taskBoard')
+  const { activeProductLineScope } = useMissionControl()
   const agentSessions = useAgentSessions(formData.assigned_to || undefined)
   const [isRecurring, setIsRecurring] = useState(false)
   const [scheduleInput, setScheduleInput] = useState('')
@@ -2115,7 +2133,7 @@ function CreateTaskModal({
     }
 
     try {
-      const response = await fetch('/api/tasks', {
+      const response = await fetch(appendScopeToPath('/api/tasks', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2325,6 +2343,7 @@ function EditTaskModal({
   onUpdated: () => void
 }) {
   const t = useTranslations('taskBoard')
+  const { activeProductLineScope } = useMissionControl()
   const [formData, setFormData] = useState({
     title: task.title,
     description: task.description || '',
@@ -2352,7 +2371,7 @@ function EditTaskModal({
         delete updatedMeta.target_session
       }
 
-      const response = await fetch(`/api/tasks/${task.id}`, {
+      const response = await fetch(appendScopeToPath(`/api/tasks/${task.id}`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

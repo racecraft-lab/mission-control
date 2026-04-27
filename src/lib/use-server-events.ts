@@ -38,10 +38,23 @@ export function useServerEvents() {
     addChatMessage,
     addNotification,
     addActivity,
+    activeProductLineScope,
+    workspaceSwitcherEnabled,
   } = useMissionControl()
 
   useEffect(() => {
+    if (workspaceSwitcherEnabled && !activeProductLineScope) return
     let mounted = true
+    const eventUrl = (() => {
+      if (!workspaceSwitcherEnabled || !activeProductLineScope) return '/api/events'
+      const params = new URLSearchParams()
+      if (activeProductLineScope.kind === 'productLine') {
+        params.set('workspace_id', String(activeProductLineScope.productLineId))
+      } else {
+        params.set('workspace_scope', 'facility')
+      }
+      return `/api/events?${params.toString()}`
+    })()
 
     function connect() {
       if (!mounted) return
@@ -49,7 +62,7 @@ export function useServerEvents() {
         eventSourceRef.current.close()
       }
 
-      const es = new EventSource('/api/events')
+      const es = new EventSource(eventUrl)
       eventSourceRef.current = es
 
       es.onopen = () => {
@@ -204,5 +217,7 @@ export function useServerEvents() {
     addChatMessage,
     addNotification,
     addActivity,
+    activeProductLineScope,
+    workspaceSwitcherEnabled,
   ])
 }

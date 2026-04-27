@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 type Outcome = 'success' | 'failed' | 'partial' | 'abandoned'
 
@@ -35,12 +36,13 @@ export async function GET(request: NextRequest) {
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   try {
-    const workspaceId = auth.user.workspace_id ?? 1
     const { searchParams } = new URL(request.url)
     const timeframe = (searchParams.get('timeframe') || 'all').trim().toLowerCase()
     const since = resolveSince(timeframe)
 
     const db = getDatabase()
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const rows = db.prepare(`
       SELECT
         id,
@@ -52,10 +54,10 @@ export async function GET(request: NextRequest) {
         created_at,
         completed_at
       FROM tasks
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND status = 'done'
         AND (? = 0 OR COALESCE(completed_at, updated_at) >= ?)
-    `).all(workspaceId, since, since) as Array<{
+    `).all(...workspaceFilter.params, since, since) as Array<{
       id: number
       assigned_to?: string | null
       priority?: string | null
@@ -157,6 +159,8 @@ export async function GET(request: NextRequest) {
       record_count: rows.length,
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/tasks/outcomes error')
     return NextResponse.json({ error: 'Failed to fetch task outcomes' }, { status: 500 })
   }

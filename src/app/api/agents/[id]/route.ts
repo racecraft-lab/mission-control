@@ -5,6 +5,7 @@ import { writeAgentToConfig, enrichAgentConfigFromWorkspace, removeAgentFromConf
 import { eventBus } from '@/lib/event-bus'
 import { logger } from '@/lib/logger'
 import { runOpenClaw } from '@/lib/command'
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 /**
  * GET /api/agents/[id] - Get a single agent by ID or name
@@ -19,13 +20,14 @@ export async function GET(
   try {
     const db = getDatabase()
     const { id } = await params
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const scopeFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
 
     let agent
     if (isNaN(Number(id))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(id, workspaceId)
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${scopeFilter.sql}`).get(id, ...scopeFilter.params)
     } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(id), workspaceId)
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${scopeFilter.sql}`).get(Number(id), ...scopeFilter.params)
     }
 
     if (!agent) {
@@ -39,6 +41,8 @@ export async function GET(
 
     return NextResponse.json({ agent: parsed })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/agents/[id] error')
     return NextResponse.json({ error: 'Failed to fetch agent' }, { status: 500 })
   }
@@ -63,20 +67,22 @@ export async function PUT(
   try {
     const db = getDatabase()
     const { id } = await params
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const scopeFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
     const body = await request.json()
     const { role, gateway_config, write_to_gateway } = body
 
     let agent
     if (isNaN(Number(id))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(id, workspaceId) as any
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${scopeFilter.sql}`).get(id, ...scopeFilter.params) as any
     } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(id), workspaceId) as any
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${scopeFilter.sql}`).get(Number(id), ...scopeFilter.params) as any
     }
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
+    const workspaceId = agent.workspace_id as number
 
     const now = Math.floor(Date.now() / 1000)
     const existingConfig = agent.config ? JSON.parse(agent.config) : {}
@@ -184,6 +190,7 @@ export async function PUT(
       name: agent.name,
       config: newConfig,
       updated_at: now,
+      workspace_id: workspaceId,
     })
 
     const enrichedConfig = enrichAgentConfigFromWorkspace(newConfig)
@@ -193,6 +200,8 @@ export async function PUT(
       agent: { ...agent, config: enrichedConfig, role: role || agent.role, updated_at: now },
     })
   } catch (error: any) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'PUT /api/agents/[id] error')
     return NextResponse.json({ error: error.message || 'Failed to update agent' }, { status: 500 })
   }
@@ -211,7 +220,8 @@ export async function DELETE(
   try {
     const db = getDatabase()
     const { id } = await params
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const scopeFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
     let removeWorkspace = false
     try {
       const body = await request.json()
@@ -222,14 +232,15 @@ export async function DELETE(
 
     let agent
     if (isNaN(Number(id))) {
-      agent = db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(id, workspaceId) as any
+      agent = db.prepare(`SELECT * FROM agents WHERE name = ? AND ${scopeFilter.sql}`).get(id, ...scopeFilter.params) as any
     } else {
-      agent = db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(id), workspaceId) as any
+      agent = db.prepare(`SELECT * FROM agents WHERE id = ? AND ${scopeFilter.sql}`).get(Number(id), ...scopeFilter.params) as any
     }
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
+    const workspaceId = agent.workspace_id as number
 
     if (removeWorkspace) {
       const agentConfig = agent.config ? JSON.parse(agent.config) : {}
@@ -275,7 +286,7 @@ export async function DELETE(
       workspaceId
     )
 
-    eventBus.broadcast('agent.deleted', { id: agent.id, name: agent.name })
+    eventBus.broadcast('agent.deleted', { id: agent.id, name: agent.name, workspace_id: workspaceId })
 
     return NextResponse.json({
       success: true,
@@ -284,6 +295,8 @@ export async function DELETE(
       ...(configCleanupWarning ? { warning: configCleanupWarning } : {}),
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'DELETE /api/agents/[id] error')
     return NextResponse.json({ error: 'Failed to delete agent' }, { status: 500 })
   }

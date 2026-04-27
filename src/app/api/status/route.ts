@@ -14,6 +14,12 @@ import { detectProviderSubscriptions, getPrimarySubscription } from '@/lib/provi
 import { APP_VERSION } from '@/lib/version'
 import { isHermesInstalled, scanHermesSessions } from '@/lib/hermes-sessions'
 import { registerMcAsDashboard } from '@/lib/gateway-runtime'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
+
+function statusScopePredicate(scope: number | number[], column = 'workspace_id') {
+  const workspaceIds = Array.isArray(scope) ? scope : [scope]
+  return workspaceScopePredicate({ workspaceIds }, column)
+}
 
 export async function GET(request: NextRequest) {
   // Docker/Kubernetes health probes must work without auth/cookies.
@@ -31,12 +37,18 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action') || 'overview'
 
     if (action === 'overview') {
-      const status = await getSystemStatus(auth.user.workspace_id ?? 1)
+      const db = getDatabase()
+      const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { requireExplicitWhenEnabled: false })
+      const workspaceScope = acceptedScope.workspaceIds
+      const status = await getSystemStatus(workspaceScope)
       return NextResponse.json(status)
     }
 
     if (action === 'dashboard') {
-      const data = await getDashboardData(auth.user.workspace_id ?? 1)
+      const db = getDatabase()
+      const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { requireExplicitWhenEnabled: false })
+      const workspaceScope = acceptedScope.workspaceIds
+      const data = await getDashboardData(workspaceScope)
       return NextResponse.json(data)
     }
 
@@ -62,6 +74,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'Status API error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -71,10 +85,10 @@ export async function GET(request: NextRequest) {
  * Aggregate all dashboard data in a single request.
  * Combines system health, DB stats, audit summary, and recent activity.
  */
-async function getDashboardData(workspaceId: number) {
+async function getDashboardData(workspaceScope: number | number[]) {
   const [system, dbStats] = await Promise.all([
-    getSystemStatus(workspaceId),
-    getDbStats(workspaceId),
+    getSystemStatus(workspaceScope),
+    getDbStats(workspaceScope),
   ])
 
   return { ...system, db: dbStats }
@@ -132,17 +146,18 @@ async function getMemorySnapshot() {
   }
 }
 
-function getDbStats(workspaceId: number) {
+function getDbStats(workspaceScope: number | number[]) {
   try {
     const db = getDatabase()
     const now = Math.floor(Date.now() / 1000)
     const day = now - 86400
     const week = now - 7 * 86400
+    const scopeFilter = statusScopePredicate(workspaceScope)
 
     // Task breakdown
     const taskStats = db.prepare(`
-      SELECT status, COUNT(*) as count FROM tasks WHERE workspace_id = ? GROUP BY status
-    `).all(workspaceId) as Array<{ status: string; count: number }>
+      SELECT status, COUNT(*) as count FROM tasks WHERE ${scopeFilter.sql} GROUP BY status
+    `).all(...scopeFilter.params) as Array<{ status: string; count: number }>
     const tasksByStatus: Record<string, number> = {}
     let totalTasks = 0
     for (const row of taskStats) {
@@ -152,8 +167,8 @@ function getDbStats(workspaceId: number) {
 
     // Agent breakdown
     const agentStats = db.prepare(`
-      SELECT status, COUNT(*) as count FROM agents WHERE workspace_id = ? GROUP BY status
-    `).all(workspaceId) as Array<{ status: string; count: number }>
+      SELECT status, COUNT(*) as count FROM agents WHERE ${scopeFilter.sql} GROUP BY status
+    `).all(...scopeFilter.params) as Array<{ status: string; count: number }>
     const agentsByStatus: Record<string, number> = {}
     let totalAgents = 0
     for (const row of agentStats) {
@@ -172,12 +187,12 @@ function getDbStats(workspaceId: number) {
 
     // Activities (24h)
     const activityDay = (
-      db.prepare('SELECT COUNT(*) as c FROM activities WHERE created_at > ? AND workspace_id = ?').get(day, workspaceId) as any
+      db.prepare(`SELECT COUNT(*) as c FROM activities WHERE created_at > ? AND ${scopeFilter.sql}`).get(day, ...scopeFilter.params) as any
     ).c
 
     // Notifications (unread)
     const unreadNotifs = (
-      db.prepare('SELECT COUNT(*) as c FROM notifications WHERE read_at IS NULL AND workspace_id = ?').get(workspaceId) as any
+      db.prepare(`SELECT COUNT(*) as c FROM notifications WHERE read_at IS NULL AND ${scopeFilter.sql}`).get(...scopeFilter.params) as any
     ).c
 
     // Pipeline runs (active + recent)
@@ -247,7 +262,7 @@ function getDbStats(workspaceId: number) {
   }
 }
 
-async function getSystemStatus(workspaceId: number) {
+async function getSystemStatus(workspaceScope: number | number[]) {
   const status: any = {
     timestamp: Date.now(),
     uptime: 0,
@@ -346,10 +361,11 @@ async function getSystemStatus(workspaceId: number) {
       const db = getDatabase()
       const liveStatuses = getAgentLiveStatuses()
       const now = Math.floor(Date.now() / 1000)
+      const scopeFilter = statusScopePredicate(workspaceScope)
       // Match by: exact name, lowercase, or normalized (spaces→hyphens)
       const updateStmt = db.prepare(
         `UPDATE agents SET status = ?, last_seen = ?, updated_at = ?
-         WHERE workspace_id = ?
+         WHERE ${scopeFilter.sql}
            AND (LOWER(name) = LOWER(?)
            OR LOWER(REPLACE(name, ' ', '-')) = LOWER(?))`
       )
@@ -358,7 +374,7 @@ async function getSystemStatus(workspaceId: number) {
           info.status,
           Math.floor(info.lastActivity / 1000),
           now,
-          workspaceId,
+          ...scopeFilter.params,
           agentName,
           agentName
         )

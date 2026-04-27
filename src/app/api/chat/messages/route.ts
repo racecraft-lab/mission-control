@@ -9,6 +9,7 @@ import { scanAndLogInjection } from '@/lib/injection-guard'
 import { logMcpCall } from '@/lib/mcp-audit'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
 import { resolveCoordinatorDeliveryTarget } from '@/lib/coordinator-routing'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 type ForwardInfo = {
   attempted: boolean
@@ -109,6 +110,7 @@ function createChatReply(
   eventBus.broadcast('chat.message', {
     ...row,
     metadata: safeParseMetadata(row.metadata),
+    workspace_id: workspaceId,
   })
 }
 
@@ -249,7 +251,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const { searchParams } = new URL(request.url)
 
     const conversation_id = searchParams.get('conversation_id')
@@ -259,8 +262,8 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
     const since = searchParams.get('since')
 
-    let query = 'SELECT * FROM messages WHERE workspace_id = ?'
-    const params: any[] = [workspaceId]
+    let query = `SELECT * FROM messages WHERE ${workspaceFilter.sql}`
+    const params: any[] = [...workspaceFilter.params]
 
     if (conversation_id) {
       query += ' AND conversation_id = ?'
@@ -293,8 +296,9 @@ export async function GET(request: NextRequest) {
     }))
 
     // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM messages WHERE workspace_id = ?'
-    const countParams: any[] = [workspaceId]
+    const countFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
+    let countQuery = `SELECT COUNT(*) as total FROM messages WHERE ${countFilter.sql}`
+    const countParams: any[] = [...countFilter.params]
     if (conversation_id) {
       countQuery += ' AND conversation_id = ?'
       countParams.push(conversation_id)
@@ -315,6 +319,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ messages: parsed, total: countRow.total, page: Math.floor(offset / limit) + 1, limit })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/chat/messages error')
     return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
   }
@@ -331,7 +337,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for chat messages' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
     const body = await request.json()
 
     const requestedFrom = typeof body.from === 'string' ? body.from.trim() : ''
@@ -357,7 +367,7 @@ export async function POST(request: NextRequest) {
       const injectionReport = scanAndLogInjection(
         content,
         { context: 'prompt' },
-        { agentName: to, source: 'api.chat.messages', workspaceId: auth.user.workspace_id ?? 1 }
+        { agentName: to, source: 'api.chat.messages', workspaceId }
       )
       if (!injectionReport.safe) {
         const criticals = injectionReport.matches.filter(m => m.severity === 'critical')
@@ -742,6 +752,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: parsedMessage, forward: forwardInfo }, { status: 201 })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/chat/messages error')
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }

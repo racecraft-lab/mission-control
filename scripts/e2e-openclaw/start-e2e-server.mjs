@@ -67,6 +67,26 @@ function findStandaloneServer(root) {
   return null
 }
 
+function syncStandaloneAssets(root) {
+  const standaloneRoot = path.join(root, '.next', 'standalone')
+  if (!fs.existsSync(standaloneRoot)) return
+
+  const staticSource = path.join(root, '.next', 'static')
+  const staticTarget = path.join(standaloneRoot, '.next', 'static')
+  if (fs.existsSync(staticSource)) {
+    fs.rmSync(staticTarget, { recursive: true, force: true })
+    fs.mkdirSync(path.dirname(staticTarget), { recursive: true })
+    fs.cpSync(staticSource, staticTarget, { recursive: true })
+  }
+
+  const publicSource = path.join(root, 'public')
+  const publicTarget = path.join(standaloneRoot, 'public')
+  if (fs.existsSync(publicSource)) {
+    fs.rmSync(publicTarget, { recursive: true, force: true })
+    fs.cpSync(publicSource, publicTarget, { recursive: true })
+  }
+}
+
 function runBlocking(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -246,6 +266,8 @@ const buildIdPath = path.join(repoRoot, '.next', 'BUILD_ID')
 if (!fs.existsSync(buildIdPath)) {
   await runBlocking('pnpm', ['build'])
 }
+
+syncStandaloneAssets(repoRoot)
 
 const standaloneServerPath = findStandaloneServer(repoRoot)
 

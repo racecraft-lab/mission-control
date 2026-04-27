@@ -2,11 +2,63 @@
 
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
+import { resolveFlag } from '@/lib/feature-flags'
 import { MODEL_CATALOG } from '@/lib/models'
+import {
+  ACTIVE_WORKSPACE_STORAGE_KEY,
+  appendScopeToPath,
+  createFacilityScope,
+  createProductLineScope,
+  isFacilityWorkspace,
+  parsePersistedProductLineScope,
+  selectableProductLines,
+  serializeProductLineScope,
+  type ActiveProductLineScope,
+  type ProductLine,
+  type ProductLineScopeMessage,
+} from '@/types/product-line'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue | undefined }
 type DashboardLayoutUpdater = string[] | null | ((current: string[] | null) => string[] | null)
+type WorkspaceListStatus = 'idle' | 'loading' | 'ready' | 'error'
+type WorkspaceScopeNotice = 'workspace-list-failure' | 'unauthorized-selection' | null
+type SplitPane = { id: string; sessionId: string; sessionKind: string; sessionName?: string | undefined }
+
+interface SetActiveProductLineOptions {
+  source?: 'user' | 'hydrate' | 'broadcast' | 'reset'
+  persist?: boolean
+  broadcast?: boolean
+  tenantId?: number
+  version?: number
+}
+
+const EMPTY_SCOPE_KEY = 'uninitialized'
+const WORKSPACE_SCOPE_CHANNEL = 'mc:active-workspace'
+let scopeChannelInitialized = false
+let scopeChannel: BroadcastChannel | null = null
+let originTabId: string | null = null
+
+function getOriginTabId(): string {
+  if (originTabId) return originTabId
+  originTabId = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return originTabId
+}
+
+function getStorageItem(key: string): string | null {
+  if (typeof window === 'undefined') return null
+  try { return window.localStorage.getItem(key) } catch { return null }
+}
+
+function setStorageItem(key: string, value: string): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.setItem(key, value) } catch {}
+}
+
+function removeStorageItem(key: string): void {
+  if (typeof window === 'undefined') return
+  try { window.localStorage.removeItem(key) } catch {}
+}
 
 // Enhanced types for Mission Control
 export interface Session {
@@ -527,8 +579,8 @@ interface MissionControlStore {
   markConversationRead: (conversationId: string) => void
 
   // Terminal split panes + attention
-  splitPanes: Array<{ id: string; sessionId: string; sessionKind: string; sessionName?: string }>
-  setSplitPanes: (panes: Array<{ id: string; sessionId: string; sessionKind: string; sessionName?: string }>) => void
+  splitPanes: SplitPane[]
+  setSplitPanes: (panes: SplitPane[]) => void
   addSplitPane: (sessionId: string, sessionKind: string, sessionName?: string) => void
   removeSplitPane: (paneId: string) => void
   clearSplitPanes: () => void
@@ -555,6 +607,17 @@ interface MissionControlStore {
   setProjects: (projects: Project[]) => void
   fetchProjects: () => Promise<void>
 
+  // Facility/Product Line context
+  workspaces: ProductLine[]
+  workspaceListStatus: WorkspaceListStatus
+  workspaceScopeNotice: WorkspaceScopeNotice
+  workspaceSwitcherEnabled: boolean
+  activeProductLineScope: ActiveProductLineScope | null
+  activeProductLine: ProductLine | null
+  scopeKey: string
+  setActiveProductLine: (productLine: ProductLine | null, options?: SetActiveProductLineOptions) => void
+  fetchWorkspaces: () => Promise<void>
+
   // Project Manager Modal (global)
   showProjectManagerModal: boolean
   setShowProjectManagerModal: (show: boolean) => void
@@ -580,7 +643,7 @@ interface MissionControlStore {
   setMemoryGraphAgents: (agents: { name: string; dbSize: number; totalChunks: number; totalFiles: number; files: { path: string; chunks: number; textSize: number }[] }[]) => void
 
   // Security Posture
-  securityPosture?: { score: number; level: string }
+  securityPosture: { score: number; level: string } | undefined
   setSecurityPosture: (posture: { score: number; level: string } | undefined) => void
 
   // Dashboard Layout
@@ -603,6 +666,83 @@ interface MissionControlStore {
   toggleGroup: (groupId: string) => void
   toggleLiveFeed: () => void
   setHeaderDensity: (mode: 'focus' | 'compact') => void
+}
+
+function deriveTenantId(state: MissionControlStore, explicitTenantId?: number): number {
+  return explicitTenantId ??
+    state.currentUser?.tenant_id ??
+    state.activeTenant?.id ??
+    state.activeProductLineScope?.tenantId ??
+    1
+}
+
+function nextScopeVersion(state: MissionControlStore, explicitVersion?: number): number {
+  if (typeof explicitVersion === 'number' && Number.isFinite(explicitVersion)) return explicitVersion
+  return Math.max(Date.now(), (state.activeProductLineScope?.version ?? 0) + 1)
+}
+
+function persistScope(scope: ActiveProductLineScope): void {
+  setStorageItem(ACTIVE_WORKSPACE_STORAGE_KEY, serializeProductLineScope(scope))
+}
+
+function broadcastScope(state: MissionControlStore, scope: ActiveProductLineScope): void {
+  if (typeof window === 'undefined' || !scopeChannel) return
+  const message: ProductLineScopeMessage = {
+    payloadVersion: 1,
+    tenantId: scope.tenantId,
+    productLineId: scope.kind === 'productLine' ? scope.productLineId : null,
+    scopeVersion: scope.version,
+    originTabId: getOriginTabId(),
+    ...(state.currentUser?.id ? { userId: state.currentUser.id } : {}),
+  }
+  try { scopeChannel.postMessage(message) } catch {}
+}
+
+function initializeScopeChannel(
+  set: (partial: Partial<MissionControlStore>) => void,
+  get: () => MissionControlStore
+): void {
+  if (scopeChannelInitialized || typeof window === 'undefined' || !('BroadcastChannel' in window)) return
+  scopeChannelInitialized = true
+  try {
+    scopeChannel = new BroadcastChannel(WORKSPACE_SCOPE_CHANNEL)
+  } catch {
+    scopeChannel = null
+    return
+  }
+  scopeChannel.onmessage = (event: MessageEvent<ProductLineScopeMessage>) => {
+    const message = event.data
+    const state = get()
+    if (!message || message.originTabId === getOriginTabId()) return
+    if (message.tenantId !== deriveTenantId(state)) return
+    if (message.userId && state.currentUser?.id && message.userId !== state.currentUser.id) return
+    if (message.scopeVersion <= (state.activeProductLineScope?.version ?? 0)) return
+
+    if (message.productLineId === null) {
+      state.setActiveProductLine(null, {
+        source: 'broadcast',
+        version: message.scopeVersion,
+        tenantId: message.tenantId,
+        broadcast: false,
+      })
+      return
+    }
+
+    const productLine = state.workspaces.find((workspace) =>
+      workspace.id === message.productLineId &&
+      workspace.tenant_id === message.tenantId &&
+      !isFacilityWorkspace(workspace)
+    )
+    if (!productLine) {
+      set({ workspaceScopeNotice: 'unauthorized-selection' })
+      return
+    }
+    state.setActiveProductLine(productLine, {
+      source: 'broadcast',
+      version: message.scopeVersion,
+      broadcast: false,
+    })
+  }
 }
 
 export const useMissionControl = create<MissionControlStore>()(
@@ -876,12 +1016,138 @@ export const useMissionControl = create<MissionControlStore>()(
     setProjects: (projects) => set({ projects }),
     fetchProjects: async () => {
       try {
-        const res = await fetch('/api/projects', { cache: 'no-store' })
+        const { activeProductLineScope } = get()
+        const res = await fetch(appendScopeToPath('/api/projects', activeProductLineScope), { cache: 'no-store' })
         if (!res.ok) return
         const data = await res.json()
         const projectList = Array.isArray(data?.projects) ? data.projects : []
         set({ projects: projectList })
       } catch {}
+    },
+
+    // Facility/Product Line context
+    workspaces: [],
+    workspaceListStatus: 'idle',
+    workspaceScopeNotice: null,
+    workspaceSwitcherEnabled: false,
+    activeProductLineScope: null,
+    activeProductLine: null,
+    scopeKey: EMPTY_SCOPE_KEY,
+    setActiveProductLine: (productLine, options = {}) => {
+      const state = get()
+      if (productLine && isFacilityWorkspace(productLine)) {
+        set({ workspaceScopeNotice: 'unauthorized-selection' })
+        return
+      }
+
+      const tenantId = deriveTenantId(state, options.tenantId ?? productLine?.tenant_id)
+      const version = nextScopeVersion(state, options.version)
+      const nextScope = productLine
+        ? createProductLineScope(productLine, version)
+        : createFacilityScope(tenantId, version)
+
+      const shouldPersist = options.persist !== false
+      const shouldBroadcast = options.broadcast !== false
+
+      if (shouldPersist) {
+        if (state.workspaceSwitcherEnabled || options.source === 'broadcast' || options.source === 'hydrate') {
+          persistScope(nextScope)
+        } else {
+          removeStorageItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+        }
+      }
+
+      set({
+        activeProductLineScope: nextScope,
+        activeProductLine: productLine,
+        scopeKey: nextScope.scopeKey,
+        workspaceScopeNotice: null,
+        activeProject: null,
+        selectedTask: null,
+        selectedAgent: null,
+        activeConversation: null,
+        chatInput: '',
+        showProjectManagerModal: false,
+        taskComments: {},
+      })
+
+      if (shouldBroadcast) {
+        broadcastScope(get(), nextScope)
+      }
+    },
+    fetchWorkspaces: async () => {
+      initializeScopeChannel(set, get)
+      set({ workspaceListStatus: 'loading', workspaceScopeNotice: null })
+      try {
+        const res = await fetch('/api/workspaces', { cache: 'no-store' })
+        if (!res.ok) {
+          set({ workspaceListStatus: 'error', workspaceScopeNotice: 'workspace-list-failure' })
+          return
+        }
+        const data = await res.json()
+        const workspaceList = Array.isArray(data?.workspaces)
+          ? data.workspaces as ProductLine[]
+          : []
+        const tenantId = typeof data?.tenant_id === 'number'
+          ? data.tenant_id
+          : deriveTenantId(get())
+        const flagWorkspace = workspaceList.find((workspace) => workspace.id === data?.active_workspace_id)
+        const switcherEnabled = resolveFlag('FEATURE_WORKSPACE_SWITCHER', {
+          workspaceFlags: flagWorkspace?.feature_flags ?? null,
+        })
+
+        set({
+          workspaces: workspaceList,
+          workspaceSwitcherEnabled: switcherEnabled,
+          workspaceListStatus: 'ready',
+        })
+
+        if (!switcherEnabled) {
+          removeStorageItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+          set({
+            activeProductLineScope: null,
+            activeProductLine: null,
+            scopeKey: EMPTY_SCOPE_KEY,
+            workspaceScopeNotice: null,
+          })
+          return
+        }
+
+        const persisted = parsePersistedProductLineScope(getStorageItem(ACTIVE_WORKSPACE_STORAGE_KEY))
+        if (!persisted || persisted.tenantId !== tenantId || persisted.productLineId === null) {
+          get().setActiveProductLine(null, {
+            source: 'hydrate',
+            tenantId,
+            persist: true,
+            broadcast: false,
+          })
+          return
+        }
+
+        const productLine = selectableProductLines(workspaceList).find((workspace) =>
+          workspace.id === persisted.productLineId && workspace.tenant_id === tenantId
+        )
+        if (!productLine) {
+          removeStorageItem(ACTIVE_WORKSPACE_STORAGE_KEY)
+          get().setActiveProductLine(null, {
+            source: 'reset',
+            tenantId,
+            persist: true,
+            broadcast: false,
+          })
+          set({ workspaceScopeNotice: 'unauthorized-selection' })
+          return
+        }
+
+        get().setActiveProductLine(productLine, {
+          source: 'hydrate',
+          version: persisted.scopeVersion,
+          persist: true,
+          broadcast: false,
+        })
+      } catch {
+        set({ workspaceListStatus: 'error', workspaceScopeNotice: 'workspace-list-failure' })
+      }
     },
 
     // Project Manager Modal (global)

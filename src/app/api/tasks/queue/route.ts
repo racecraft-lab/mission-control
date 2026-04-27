@@ -3,6 +3,7 @@ import { getDatabase } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { agentTaskLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 type QueueReason = 'continue_current' | 'assigned' | 'at_capacity' | 'no_tasks_available'
 
@@ -51,7 +52,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (!acceptedScope.workspaceId) {
+      return NextResponse.json({ error: 'workspace_id is required for task queue polling' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
     const { searchParams } = new URL(request.url)
 
     const agent =
@@ -136,6 +141,8 @@ export async function GET(request: NextRequest) {
       timestamp: now,
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/tasks/queue error')
     return NextResponse.json({ error: 'Failed to poll task queue' }, { status: 500 })
   }

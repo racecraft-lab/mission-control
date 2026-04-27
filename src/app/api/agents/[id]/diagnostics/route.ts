@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces';
 
 const ALLOWED_SECTIONS = ['summary', 'tasks', 'errors', 'activity', 'trends', 'tokens'] as const;
 type DiagnosticsSection = (typeof ALLOWED_SECTIONS)[number];
@@ -70,19 +71,21 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const agentId = resolvedParams.id;
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id');
 
     // Resolve agent by ID or name
     let agent: any;
     if (/^\d+$/.test(agentId)) {
-      agent = db.prepare('SELECT id, name, role, status, last_seen, created_at FROM agents WHERE id = ? AND workspace_id = ?').get(Number(agentId), workspaceId);
+      agent = db.prepare(`SELECT id, name, role, status, last_seen, created_at, workspace_id FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(agentId), ...workspaceFilter.params);
     } else {
-      agent = db.prepare('SELECT id, name, role, status, last_seen, created_at FROM agents WHERE name = ? AND workspace_id = ?').get(agentId, workspaceId);
+      agent = db.prepare(`SELECT id, name, role, status, last_seen, created_at, workspace_id FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params);
     }
 
     if (!agent) {
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
     }
+    const workspaceId = agent.workspace_id as number;
 
     const { searchParams } = new URL(request.url);
     const requesterAgentName = auth.user.agent_name?.trim() || '';
@@ -144,6 +147,8 @@ export async function GET(
 
     return NextResponse.json(result);
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/agents/[id]/diagnostics error');
     return NextResponse.json({ error: 'Failed to fetch diagnostics' }, { status: 500 });
   }

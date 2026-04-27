@@ -5,6 +5,7 @@ import { requireRole } from '@/lib/auth'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
 import { createRef, getRef, fetchPullRequests, createPullRequest } from '@/lib/github'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 function slugify(title: string, maxLen: number): string {
   return title
@@ -29,7 +30,8 @@ export async function GET(
     const db = getDatabase()
     const resolvedParams = await params
     const taskId = parseInt(resolvedParams.id)
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 't.workspace_id')
 
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 })
@@ -39,12 +41,13 @@ export async function GET(
       SELECT t.*, p.github_repo, p.github_default_branch, p.ticket_prefix
       FROM tasks t
       LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-      WHERE t.id = ? AND t.workspace_id = ?
-    `).get(taskId, workspaceId) as any
+      WHERE t.id = ? AND ${workspaceFilter.sql}
+    `).get(taskId, ...workspaceFilter.params) as any
 
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
+    const workspaceId = task.workspace_id as number
 
     const result: Record<string, unknown> = {
       branch: task.github_branch || null,
@@ -74,6 +77,8 @@ export async function GET(
 
     return NextResponse.json(result)
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/tasks/[id]/branch error')
     return NextResponse.json({ error: 'Failed to fetch branch info' }, { status: 500 })
   }
@@ -99,7 +104,8 @@ export async function POST(
     const db = getDatabase()
     const resolvedParams = await params
     const taskId = parseInt(resolvedParams.id)
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 't.workspace_id')
 
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 })
@@ -109,12 +115,13 @@ export async function POST(
       SELECT t.*, p.github_repo, p.github_default_branch, p.ticket_prefix
       FROM tasks t
       LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-      WHERE t.id = ? AND t.workspace_id = ?
-    `).get(taskId, workspaceId) as any
+      WHERE t.id = ? AND ${workspaceFilter.sql}
+    `).get(taskId, ...workspaceFilter.params) as any
 
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
+    const workspaceId = task.workspace_id as number
 
     if (!task.github_repo) {
       return NextResponse.json(
@@ -173,6 +180,7 @@ export async function POST(
         id: taskId,
         github_pr_number: pr.number,
         github_pr_state: 'open',
+        workspace_id: workspaceId,
       })
 
       return NextResponse.json({
@@ -227,6 +235,7 @@ export async function POST(
     eventBus.broadcast('task.updated', {
       id: taskId,
       github_branch: branchName,
+      workspace_id: workspaceId,
     })
 
     return NextResponse.json({
@@ -234,6 +243,8 @@ export async function POST(
       url: `https://github.com/${repo}/tree/${branchName}`,
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/tasks/[id]/branch error')
     const message = error instanceof Error ? error.message : 'Failed to create branch'
     return NextResponse.json({ error: message }, { status: 500 })

@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { createClientLogger } from '@/lib/client-logger'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 const log = createClientLogger('AgentSquadPanel')
 
@@ -45,6 +47,7 @@ const statusIcons: Record<string, string> = {
 
 export function AgentSquadPanel() {
   const t = useTranslations('agentSquad')
+  const { activeProductLineScope } = useMissionControl()
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +61,7 @@ export function AgentSquadPanel() {
       setError(null)
       if (agents.length === 0) setLoading(true)
 
-      const response = await fetch('/api/agents')
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope))
       if (!response.ok) throw new Error(t('failedToFetch'))
 
       const data = await response.json()
@@ -68,7 +71,7 @@ export function AgentSquadPanel() {
     } finally {
       setLoading(false)
     }
-  }, [agents.length])
+  }, [activeProductLineScope, agents.length])
 
   // Initial load
   useEffect(() => {
@@ -86,7 +89,7 @@ export function AgentSquadPanel() {
   // Update agent status
   const updateAgentStatus = async (agentName: string, status: Agent['status'], activity?: string) => {
     try {
-      const response = await fetch('/api/agents', {
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -346,6 +349,7 @@ function AgentDetailModal({
   onStatusUpdate: (name: string, status: Agent['status'], activity?: string) => Promise<void>
 }) {
   const t = useTranslations('agentSquad')
+  const { activeProductLineScope } = useMissionControl()
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState({
     role: agent.role,
@@ -355,7 +359,7 @@ function AgentDetailModal({
 
   const handleSave = async () => {
     try {
-      const response = await fetch('/api/agents', {
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -531,6 +535,7 @@ function CreateAgentModal({
   onCreated: () => void
 }) {
   const t = useTranslations('agentSquad')
+  const { activeProductLineScope } = useMissionControl()
   const [formData, setFormData] = useState({
     name: '',
     role: '',
@@ -543,7 +548,7 @@ function CreateAgentModal({
     e.preventDefault()
     
     try {
-      const response = await fetch('/api/agents', {
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

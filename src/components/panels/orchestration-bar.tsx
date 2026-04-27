@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { PipelineTab } from './pipeline-tab'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface Agent {
   id: number
@@ -43,6 +45,7 @@ const emptyForm: TemplateFormData = {
 
 export function OrchestrationBar() {
   const t = useTranslations('orchestration')
+  const { activeProductLineScope } = useMissionControl()
   const [agents, setAgents] = useState<Agent[]>([])
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([])
   const [activeTab, setActiveTab] = useState<'command' | 'templates' | 'pipelines' | 'fleet'>('command')
@@ -64,12 +67,12 @@ export function OrchestrationBar() {
 
   const fetchData = useCallback(async () => {
     const [agentRes, templateRes] = await Promise.all([
-      fetch('/api/agents').then(r => r.json()).catch(() => ({ agents: [] })),
+      fetch(appendScopeToPath('/api/agents', activeProductLineScope)).then(r => r.json()).catch(() => ({ agents: [] })),
       fetch('/api/workflows').then(r => r.json()).catch(() => ({ templates: [] })),
     ])
     setAgents(agentRes.agents || [])
     setTemplates(templateRes.templates || [])
-  }, [])
+  }, [activeProductLineScope])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -88,7 +91,7 @@ export function OrchestrationBar() {
     setCommandResult(null)
 
     try {
-      const res = await fetch('/api/agents/message', {
+      const res = await fetch(appendScopeToPath('/api/agents/message', activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: selectedAgent, content: message, from: 'operator' })

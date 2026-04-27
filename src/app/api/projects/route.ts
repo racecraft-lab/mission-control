@@ -3,7 +3,7 @@ import { getDatabase } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { mutationLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
-import { ensureTenantWorkspaceAccess, ForbiddenError } from '@/lib/workspaces'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 export const SLUG_NON_ALNUM_SEQUENCE_RE = /[^a-z0-9]+/g
 export const SLUG_LEADING_DASH_RE = /^-+/
@@ -37,16 +37,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
-    const tenantId = auth.user.tenant_id ?? 1
-    const forwardedFor = (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || null
-    ensureTenantWorkspaceAccess(db, tenantId, workspaceId, {
-      actor: auth.user.username,
-      actorId: auth.user.id,
-      route: '/api/projects',
-      ipAddress: forwardedFor,
-      userAgent: request.headers.get('user-agent'),
-    })
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'p.workspace_id')
     const includeArchived = new URL(request.url).searchParams.get('includeArchived') === '1'
 
     const rows = db.prepare(`
@@ -55,10 +47,10 @@ export async function GET(request: NextRequest) {
              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) as task_count,
              (SELECT GROUP_CONCAT(paa.agent_name) FROM project_agent_assignments paa WHERE paa.project_id = p.id) as assigned_agents_csv
       FROM projects p
-      WHERE p.workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         ${includeArchived ? '' : "AND p.status = 'active'"}
       ORDER BY p.name COLLATE NOCASE ASC
-    `).all(workspaceId) as Array<Record<string, unknown>>
+    `).all(...workspaceFilter.params) as Array<Record<string, unknown>>
 
     const projects = rows.map(row => ({
       ...row,
@@ -68,9 +60,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ projects })
   } catch (error) {
-    if (error instanceof ForbiddenError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
-    }
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/projects error')
     return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
   }
@@ -85,16 +76,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
-    const tenantId = auth.user.tenant_id ?? 1
-    const forwardedFor = (request.headers.get('x-forwarded-for') || '').split(',')[0]?.trim() || null
-    ensureTenantWorkspaceAccess(db, tenantId, workspaceId, {
-      actor: auth.user.username,
-      actorId: auth.user.id,
-      route: '/api/projects',
-      ipAddress: forwardedFor,
-      userAgent: request.headers.get('user-agent'),
-    })
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for project creation' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
     const body = await request.json()
 
     const name = String(body?.name || '').trim()
@@ -135,9 +121,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ project }, { status: 201 })
   } catch (error) {
-    if (error instanceof ForbiddenError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
-    }
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/projects error')
     return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
   }

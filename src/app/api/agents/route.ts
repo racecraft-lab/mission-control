@@ -11,6 +11,7 @@ import { validateBody, createAgentSchema } from '@/lib/validation';
 import { runOpenClaw } from '@/lib/command';
 import { config as appConfig } from '@/lib/config';
 import { resolveWithin } from '@/lib/paths';
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces';
 import path from 'node:path';
 
 /**
@@ -24,7 +25,8 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id');
     
     // Parse query parameters
     const status = searchParams.get('status');
@@ -34,8 +36,8 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // Build dynamic query
-    let query = 'SELECT * FROM agents WHERE workspace_id = ?';
-    const params: any[] = [workspaceId];
+    let query = `SELECT * FROM agents WHERE ${workspaceFilter.sql}`;
+    const params: any[] = [...workspaceFilter.params];
 
     if (!showHidden) {
       query += ' AND hidden = 0';
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
     params.push(limit, offset);
     
     const stmt = db.prepare(query);
-    const agents = stmt.all(...params) as Agent[];
+    const agents = stmt.all(...params) as Array<Agent & { workspace_id: number }>;
     
     // Parse JSON config field
     const agentsWithParsedData = agents.map(agent => ({
@@ -69,8 +71,10 @@ export async function GET(request: NextRequest) {
 
     if (agentNames.length > 0) {
       const placeholders = agentNames.map(() => '?').join(', ')
+      const taskWorkspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
       const groupedTaskStats = db.prepare(`
         SELECT
+          workspace_id,
           assigned_to,
           COUNT(*) as total,
           SUM(CASE WHEN status = 'assigned' THEN 1 ELSE 0 END) as assigned,
@@ -78,9 +82,10 @@ export async function GET(request: NextRequest) {
           SUM(CASE WHEN status = 'quality_review' THEN 1 ELSE 0 END) as quality_review,
           SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
         FROM tasks
-        WHERE workspace_id = ? AND assigned_to IN (${placeholders})
-        GROUP BY assigned_to
-      `).all(workspaceId, ...agentNames) as Array<{
+        WHERE ${taskWorkspaceFilter.sql} AND assigned_to IN (${placeholders})
+        GROUP BY workspace_id, assigned_to
+      `).all(...taskWorkspaceFilter.params, ...agentNames) as Array<{
+        workspace_id: number
         assigned_to: string
         total: number | null
         assigned: number | null
@@ -90,7 +95,7 @@ export async function GET(request: NextRequest) {
       }>
 
       for (const row of groupedTaskStats) {
-        taskStatsByAgent.set(row.assigned_to, {
+        taskStatsByAgent.set(`${row.workspace_id}:${row.assigned_to}`, {
           total: row.total || 0,
           assigned: row.assigned || 0,
           in_progress: row.in_progress || 0,
@@ -101,7 +106,7 @@ export async function GET(request: NextRequest) {
     }
 
     const agentsWithStats = agentsWithParsedData.map(agent => {
-      const taskStats = taskStatsByAgent.get(agent.name) || {
+      const taskStats = taskStatsByAgent.get(`${agent.workspace_id}:${agent.name}`) || {
         total: 0,
         assigned: 0,
         in_progress: 0,
@@ -119,8 +124,9 @@ export async function GET(request: NextRequest) {
     });
     
     // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM agents WHERE workspace_id = ?';
-    const countParams: any[] = [workspaceId];
+    const countFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
+    let countQuery = `SELECT COUNT(*) as total FROM agents WHERE ${countFilter.sql}`;
+    const countParams: any[] = [...countFilter.params];
     if (!showHidden) {
       countQuery += ' AND hidden = 0';
     }
@@ -141,6 +147,8 @@ export async function GET(request: NextRequest) {
       limit
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/agents error');
     return NextResponse.json({ error: 'Failed to fetch agents' }, { status: 500 });
   }
@@ -158,7 +166,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for agent creation' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const validated = await validateBody(request, createAgentSchema);
     if ('error' in validated) return validated.error;
     const body = validated.data;
@@ -350,6 +362,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ agent: parsedAgent }, { status: 201 });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'POST /api/agents error');
     return NextResponse.json({ error: 'Failed to create agent' }, { status: 500 });
   }
@@ -367,20 +381,30 @@ export async function PUT(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for agent updates' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const body = await request.json();
+    const hasAgentId = body.id !== undefined && body.id !== null && body.id !== '';
 
     // Handle single agent update or bulk updates
-    if (body.name) {
+    if (hasAgentId || body.name) {
       // Single agent update
-      const { name, status, last_activity, config, session_key, soul_content, role } = body;
+      const { id, name, status, last_activity, config, session_key, soul_content, role } = body;
+      const agentId = Number(id);
+      if (hasAgentId && (!Number.isSafeInteger(agentId) || agentId <= 0)) {
+        return NextResponse.json({ error: 'Invalid agent id' }, { status: 400 });
+      }
       
       const agent = db
-        .prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?')
-        .get(name, workspaceId) as Agent;
+        .prepare(hasAgentId ? 'SELECT * FROM agents WHERE id = ? AND workspace_id = ?' : 'SELECT * FROM agents WHERE name = ? AND workspace_id = ?')
+        .get(hasAgentId ? agentId : name, workspaceId) as Agent | undefined;
       if (!agent) {
         return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
       }
+      const agentName = agent.name;
       
       const now = Math.floor(Date.now() / 1000);
       
@@ -423,7 +447,7 @@ export async function PUT(request: NextRequest) {
       
       fieldsToUpdate.push('updated_at = ?');
       params.push(now);
-      params.push(name, workspaceId);
+      params.push(hasAgentId ? agentId : name, workspaceId);
       
       if (fieldsToUpdate.length === 1) { // Only updated_at
         return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -432,7 +456,7 @@ export async function PUT(request: NextRequest) {
       const stmt = db.prepare(`
         UPDATE agents 
         SET ${fieldsToUpdate.join(', ')}
-        WHERE name = ? AND workspace_id = ?
+        WHERE ${hasAgentId ? 'id' : 'name'} = ? AND workspace_id = ?
       `);
       
       stmt.run(...params);
@@ -443,7 +467,7 @@ export async function PUT(request: NextRequest) {
           'agent_status_change',
           'agent',
           agent.id,
-          name,
+          agentName,
           `Agent status changed from ${agent.status} to ${status}`,
           {
             oldStatus: agent.status,
@@ -457,18 +481,21 @@ export async function PUT(request: NextRequest) {
       // Broadcast update to SSE clients
       eventBus.broadcast('agent.updated', {
         id: agent.id,
-        name,
+        name: agentName,
         ...(status !== undefined && { status }),
         ...(last_activity !== undefined && { last_activity }),
         ...(role !== undefined && { role }),
         updated_at: now,
+        workspace_id: workspaceId,
       });
 
       return NextResponse.json({ success: true });
     } else {
-      return NextResponse.json({ error: 'Agent name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Agent id or name is required' }, { status: 400 });
     }
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/agents error');
     return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 });
   }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { readLimiter } from '@/lib/rate-limit'
 import { logger } from '@/lib/logger'
+import { getDatabase } from '@/lib/db'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 import {
   analyzeTokenEfficiency,
   analyzeToolPatterns,
@@ -20,7 +22,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const agent = searchParams.get('agent')
     const hours = parseInt(searchParams.get('hours') || '24', 10)
-    const workspaceId = auth.user.workspace_id ?? 1
+    const db = getDatabase()
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (!acceptedScope.workspaceId) {
+      return NextResponse.json({ error: 'workspace_id is required for agent optimization' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
 
     if (!agent) {
       return NextResponse.json({ error: 'Missing required parameter: agent' }, { status: 400 })
@@ -91,6 +98,8 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/agents/optimize error')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

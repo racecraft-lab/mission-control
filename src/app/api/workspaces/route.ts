@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole } from '@/lib/auth'
 import { getDatabase, logAuditEvent } from '@/lib/db'
-import { listWorkspacesForTenant } from '@/lib/workspaces'
+import { listWorkspacesForTenant, resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 import { logger } from '@/lib/logger'
 
 export async function GET(request: NextRequest) {
@@ -11,13 +11,23 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase()
     const tenantId = auth.user.tenant_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, {
+      requireExplicitWhenEnabled: false,
+    })
     const workspaces = listWorkspacesForTenant(db, tenantId)
     return NextResponse.json({
       workspaces,
       active_workspace_id: auth.user.workspace_id,
+      active_scope: acceptedScope.kind === 'productLine'
+        ? { kind: acceptedScope.kind, workspace_id: acceptedScope.workspaceId }
+        : { kind: acceptedScope.kind },
       tenant_id: tenantId,
     })
-  } catch {
+  } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) {
+      return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+    }
     return NextResponse.json({ error: 'Failed to fetch workspaces' }, { status: 500 })
   }
 }

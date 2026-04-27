@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase, Activity } from '@/lib/db';
 import { requireRole } from '@/lib/auth';
 import { logger } from '@/lib/logger';
+import {
+  resolveWorkspaceScopeFromRequest,
+  workspaceScopeError,
+  workspaceScopePredicate,
+  type AcceptedWorkspaceScope,
+} from '@/lib/workspaces';
 
 /**
  * GET /api/activities - Get activity stream or stats
@@ -12,17 +18,20 @@ export async function GET(request: NextRequest) {
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   try {
+    const db = getDatabase();
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
     const { searchParams, pathname } = new URL(request.url);
-    const workspaceId = auth.user.workspace_id ?? 1;
     
     // Route to stats endpoint if requested
     if (pathname.endsWith('/stats') || searchParams.has('stats')) {
-      return handleStatsRequest(request, workspaceId);
+      return handleStatsRequest(request, acceptedScope);
     }
     
     // Default activities endpoint
-    return handleActivitiesRequest(request, workspaceId);
+    return handleActivitiesRequest(request, acceptedScope);
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/activities error');
     return NextResponse.json({ error: 'Failed to process request' }, { status: 500 });
   }
@@ -31,7 +40,7 @@ export async function GET(request: NextRequest) {
 /**
  * Handle regular activities request
  */
-async function handleActivitiesRequest(request: NextRequest, workspaceId: number) {
+async function handleActivitiesRequest(request: NextRequest, acceptedScope: AcceptedWorkspaceScope) {
   try {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
@@ -45,8 +54,9 @@ async function handleActivitiesRequest(request: NextRequest, workspaceId: number
     const since = searchParams.get('since'); // Unix timestamp for real-time updates
     
     // Build dynamic query
-    let query = 'SELECT * FROM activities WHERE workspace_id = ?';
-    const params: any[] = [workspaceId];
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
+    let query = `SELECT * FROM activities WHERE ${workspaceFilter.sql}`;
+    const params: any[] = [...workspaceFilter.params];
     
     if (type) {
       const types = type.split(',').map(t => t.trim()).filter(Boolean);
@@ -93,25 +103,26 @@ async function handleActivitiesRequest(request: NextRequest, workspaceId: number
     // Parse JSON data field and enhance with related entity data
     const enhancedActivities = activities.map(activity => {
       let entityDetails = null;
+      const activityWorkspaceId = Number((activity as Activity & { workspace_id?: number }).workspace_id || acceptedScope.workspaceId || 1);
 
       try {
         switch (activity.entity_type) {
           case 'task': {
-            const task = taskDetailStmt.get(activity.entity_id, workspaceId) as any;
+            const task = taskDetailStmt.get(activity.entity_id, activityWorkspaceId) as any;
             if (task) {
               entityDetails = { type: 'task', ...task };
             }
             break;
           }
           case 'agent': {
-            const agent = agentDetailStmt.get(activity.entity_id, workspaceId) as any;
+            const agent = agentDetailStmt.get(activity.entity_id, activityWorkspaceId) as any;
             if (agent) {
               entityDetails = { type: 'agent', ...agent };
             }
             break;
           }
           case 'comment': {
-            const comment = commentDetailStmt.get(activity.entity_id, workspaceId, workspaceId) as any;
+            const comment = commentDetailStmt.get(activity.entity_id, activityWorkspaceId, activityWorkspaceId) as any;
             if (comment) {
               entityDetails = {
                 type: 'comment',
@@ -134,8 +145,9 @@ async function handleActivitiesRequest(request: NextRequest, workspaceId: number
     });
     
     // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM activities WHERE workspace_id = ?';
-    const countParams: any[] = [workspaceId];
+    const countFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
+    let countQuery = `SELECT COUNT(*) as total FROM activities WHERE ${countFilter.sql}`;
+    const countParams: any[] = [...countFilter.params];
     
     if (type) {
       const types = type.split(',').map(t => t.trim()).filter(Boolean);
@@ -179,7 +191,7 @@ async function handleActivitiesRequest(request: NextRequest, workspaceId: number
 /**
  * Handle stats request
  */
-async function handleStatsRequest(request: NextRequest, workspaceId: number) {
+async function handleStatsRequest(request: NextRequest, acceptedScope: AcceptedWorkspaceScope) {
   try {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
@@ -187,6 +199,7 @@ async function handleStatsRequest(request: NextRequest, workspaceId: number) {
     // Parse timeframe parameter (defaults to 24 hours)
     const hours = parseInt(searchParams.get('hours') || '24');
     const since = Math.floor(Date.now() / 1000) - (hours * 3600);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
     
     // Get activity counts by type
     const activityStats = db.prepare(`
@@ -194,10 +207,10 @@ async function handleStatsRequest(request: NextRequest, workspaceId: number) {
         type,
         COUNT(*) as count
       FROM activities 
-      WHERE created_at > ? AND workspace_id = ?
+      WHERE created_at > ? AND ${workspaceFilter.sql}
       GROUP BY type
       ORDER BY count DESC
-    `).all(since, workspaceId) as { type: string; count: number }[];
+    `).all(since, ...workspaceFilter.params) as { type: string; count: number }[];
     
     // Get most active actors
     const activeActors = db.prepare(`
@@ -205,11 +218,11 @@ async function handleStatsRequest(request: NextRequest, workspaceId: number) {
         actor,
         COUNT(*) as activity_count
       FROM activities 
-      WHERE created_at > ? AND workspace_id = ?
+      WHERE created_at > ? AND ${workspaceFilter.sql}
       GROUP BY actor
       ORDER BY activity_count DESC
       LIMIT 10
-    `).all(since, workspaceId) as { actor: string; activity_count: number }[];
+    `).all(since, ...workspaceFilter.params) as { actor: string; activity_count: number }[];
     
     // Get activity timeline (hourly buckets)
     const timeline = db.prepare(`
@@ -217,10 +230,10 @@ async function handleStatsRequest(request: NextRequest, workspaceId: number) {
         (created_at / 3600) * 3600 as hour_bucket,
         COUNT(*) as count
       FROM activities 
-      WHERE created_at > ? AND workspace_id = ?
+      WHERE created_at > ? AND ${workspaceFilter.sql}
       GROUP BY hour_bucket
       ORDER BY hour_bucket ASC
-    `).all(since, workspaceId) as { hour_bucket: number; count: number }[];
+    `).all(since, ...workspaceFilter.params) as { hour_bucket: number; count: number }[];
     
     return NextResponse.json({
       timeframe: `${hours} hours`,

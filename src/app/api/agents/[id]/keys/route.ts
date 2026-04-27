@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hashApiKey, requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError, type AcceptedWorkspaceScope } from '@/lib/workspaces'
 
 const ALLOWED_SCOPES = new Set([
   'viewer',
@@ -34,16 +35,17 @@ interface AgentKeyRow {
   updated_at: number
 }
 
-function resolveAgent(db: ReturnType<typeof getDatabase>, idParam: string, workspaceId: number): AgentRow | null {
+function resolveAgent(db: ReturnType<typeof getDatabase>, idParam: string, scope: AcceptedWorkspaceScope): AgentRow | null {
+  const workspaceFilter = agentWorkspaceScopePredicate(db, scope, 'workspace_id')
   if (/^\d+$/.test(idParam)) {
     return (db
-      .prepare(`SELECT id, name, workspace_id FROM agents WHERE id = ? AND workspace_id = ?`)
-      .get(Number(idParam), workspaceId) as AgentRow | undefined) || null
+      .prepare(`SELECT id, name, workspace_id FROM agents WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(Number(idParam), ...workspaceFilter.params) as AgentRow | undefined) || null
   }
 
   return (db
-    .prepare(`SELECT id, name, workspace_id FROM agents WHERE name = ? AND workspace_id = ?`)
-    .get(idParam, workspaceId) as AgentRow | undefined) || null
+    .prepare(`SELECT id, name, workspace_id FROM agents WHERE name = ? AND ${workspaceFilter.sql}`)
+    .get(idParam, ...workspaceFilter.params) as AgentRow | undefined) || null
 }
 
 function parseScopes(rawScopes: unknown): string[] {
@@ -86,8 +88,8 @@ export async function GET(
   try {
     const db = getDatabase()
     const resolved = await params
-    const workspaceId = auth.user.workspace_id ?? 1
-    const agent = resolveAgent(db, resolved.id, workspaceId)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const agent = resolveAgent(db, resolved.id, acceptedScope)
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     const rows = db
@@ -97,7 +99,7 @@ export async function GET(
         WHERE agent_id = ? AND workspace_id = ?
         ORDER BY created_at DESC, id DESC
       `)
-      .all(agent.id, workspaceId) as AgentKeyRow[]
+      .all(agent.id, agent.workspace_id) as AgentKeyRow[]
 
     return NextResponse.json({
       agent: { id: agent.id, name: agent.name },
@@ -114,6 +116,8 @@ export async function GET(
       })),
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/agents/[id]/keys error')
     return NextResponse.json({ error: 'Failed to list agent API keys' }, { status: 500 })
   }
@@ -129,8 +133,8 @@ export async function POST(
   try {
     const db = getDatabase()
     const resolved = await params
-    const workspaceId = auth.user.workspace_id ?? 1
-    const agent = resolveAgent(db, resolved.id, workspaceId)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const agent = resolveAgent(db, resolved.id, acceptedScope)
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     const body = await request.json().catch(() => ({}))
@@ -158,7 +162,7 @@ export async function POST(
       `)
       .run(
         agent.id,
-        workspaceId,
+        agent.workspace_id,
         name,
         keyHash,
         keyPrefix,
@@ -184,6 +188,8 @@ export async function POST(
       { status: 201 },
     )
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/agents/[id]/keys error')
     return NextResponse.json({ error: 'Failed to create agent API key' }, { status: 500 })
   }
@@ -199,8 +205,8 @@ export async function DELETE(
   try {
     const db = getDatabase()
     const resolved = await params
-    const workspaceId = auth.user.workspace_id ?? 1
-    const agent = resolveAgent(db, resolved.id, workspaceId)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const agent = resolveAgent(db, resolved.id, acceptedScope)
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     const body = await request.json().catch(() => ({}))
@@ -216,7 +222,7 @@ export async function DELETE(
         SET revoked_at = ?, updated_at = ?
         WHERE id = ? AND agent_id = ? AND workspace_id = ? AND revoked_at IS NULL
       `)
-      .run(now, now, keyId, agent.id, workspaceId)
+      .run(now, now, keyId, agent.id, agent.workspace_id)
 
     if (result.changes < 1) {
       return NextResponse.json({ error: 'Active key not found for this agent' }, { status: 404 })
@@ -224,6 +230,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, key_id: keyId, revoked_at: now })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'DELETE /api/agents/[id]/keys error')
     return NextResponse.json({ error: 'Failed to revoke agent API key' }, { status: 500 })
   }

@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/auth'
 import { readLimiter } from '@/lib/rate-limit'
 import { getDatabase } from '@/lib/db'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 interface RegressionTaskRow {
   id: number
@@ -115,7 +116,6 @@ export async function GET(request: NextRequest) {
   if (rateCheck) return rateCheck
 
   try {
-    const workspaceId = auth.user.workspace_id ?? 1
     const now = Math.floor(Date.now() / 1000)
     const { searchParams } = new URL(request.url)
 
@@ -140,6 +140,8 @@ export async function GET(request: NextRequest) {
     const baselineStart = Math.max(0, baselineEnd - baselineDuration)
 
     const db = getDatabase()
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const rows = db.prepare(`
       SELECT
         id,
@@ -149,12 +151,12 @@ export async function GET(request: NextRequest) {
         outcome,
         error_message
       FROM tasks
-      WHERE workspace_id = ?
+      WHERE ${workspaceFilter.sql}
         AND status = 'done'
         AND completed_at IS NOT NULL
         AND completed_at >= ?
         AND completed_at < ?
-    `).all(workspaceId, baselineStart, postEnd) as RegressionTaskRow[]
+    `).all(...workspaceFilter.params, baselineStart, postEnd) as RegressionTaskRow[]
 
     const baseline = buildWindowStats('baseline', baselineStart, baselineEnd, rows)
     const post = buildWindowStats('post', postStart, postEnd, rows)
@@ -183,6 +185,8 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/tasks/regression error')
     return NextResponse.json({ error: 'Failed to compute regression metrics' }, { status: 500 })
   }

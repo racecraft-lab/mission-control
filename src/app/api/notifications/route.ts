@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth';
 import { mutationLimiter } from '@/lib/rate-limit';
 import { validateBody, notificationActionSchema } from '@/lib/validation';
 import { logger } from '@/lib/logger';
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces';
 
 /**
  * GET /api/notifications - Get notifications for a specific recipient
@@ -16,7 +17,8 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDatabase();
     const { searchParams } = new URL(request.url);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
     
     // Parse query parameters
     const recipient = searchParams.get('recipient');
@@ -30,8 +32,8 @@ export async function GET(request: NextRequest) {
     }
     
     // Build dynamic query
-    let query = 'SELECT * FROM notifications WHERE recipient = ? AND workspace_id = ?';
-    const params: any[] = [recipient, workspaceId];
+    let query = `SELECT * FROM notifications WHERE recipient = ? AND ${workspaceFilter.sql}`;
+    const params: any[] = [recipient, ...workspaceFilter.params];
     
     if (unread_only) {
       query += ' AND read_at IS NULL';
@@ -61,19 +63,20 @@ export async function GET(request: NextRequest) {
     // Enhance notifications with related entity data
     const enhancedNotifications = notifications.map(notification => {
       let sourceDetails = null;
+      const notificationWorkspaceId = Number((notification as Notification & { workspace_id?: number }).workspace_id || acceptedScope.workspaceId || 1);
 
       try {
         if (notification.source_type && notification.source_id) {
           switch (notification.source_type) {
             case 'task': {
-              const task = taskDetailStmt.get(notification.source_id, workspaceId) as any;
+              const task = taskDetailStmt.get(notification.source_id, notificationWorkspaceId) as any;
               if (task) {
                 sourceDetails = { type: 'task', ...task };
               }
               break;
             }
             case 'comment': {
-              const comment = commentDetailStmt.get(notification.source_id, workspaceId, workspaceId) as any;
+              const comment = commentDetailStmt.get(notification.source_id, notificationWorkspaceId, notificationWorkspaceId) as any;
               if (comment) {
                 sourceDetails = {
                   type: 'comment',
@@ -84,7 +87,7 @@ export async function GET(request: NextRequest) {
               break;
             }
             case 'agent': {
-              const agent = agentDetailStmt.get(notification.source_id, workspaceId) as any;
+              const agent = agentDetailStmt.get(notification.source_id, notificationWorkspaceId) as any;
               if (agent) {
                 sourceDetails = { type: 'agent', ...agent };
               }
@@ -106,12 +109,12 @@ export async function GET(request: NextRequest) {
     const unreadCount = db.prepare(`
       SELECT COUNT(*) as count 
       FROM notifications 
-      WHERE recipient = ? AND read_at IS NULL AND workspace_id = ?
-    `).get(recipient, workspaceId) as { count: number };
+      WHERE recipient = ? AND read_at IS NULL AND ${workspaceFilter.sql}
+    `).get(recipient, ...workspaceFilter.params) as { count: number };
     
     // Get total count for pagination
-    let countQuery = 'SELECT COUNT(*) as total FROM notifications WHERE recipient = ? AND workspace_id = ?';
-    const countParams: any[] = [recipient, workspaceId];
+    let countQuery = `SELECT COUNT(*) as total FROM notifications WHERE recipient = ? AND ${workspaceFilter.sql}`;
+    const countParams: any[] = [recipient, ...workspaceFilter.params];
     if (unread_only) {
       countQuery += ' AND read_at IS NULL';
     }
@@ -129,6 +132,8 @@ export async function GET(request: NextRequest) {
       unreadCount: unreadCount.count
     });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/notifications error');
     return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
   }
@@ -147,7 +152,11 @@ export async function PUT(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for notification updates' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const body = await request.json();
     const { ids, recipient, markAllRead } = body;
     
@@ -188,6 +197,8 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 });
     }
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/notifications error');
     return NextResponse.json({ error: 'Failed to update notifications' }, { status: 500 });
   }
@@ -206,7 +217,11 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for notification deletion' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
     const body = await request.json();
     const { ids, recipient, olderThan } = body;
     
@@ -243,6 +258,8 @@ export async function DELETE(request: NextRequest) {
       }, { status: 400 });
     }
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'DELETE /api/notifications error');
     return NextResponse.json({ error: 'Failed to delete notifications' }, { status: 500 });
   }
@@ -261,7 +278,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase();
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    if (acceptedScope.kind === 'facility' || acceptedScope.workspaceId === null) {
+      return NextResponse.json({ error: 'workspace_id is required for notification delivery' }, { status: 400 });
+    }
+    const workspaceId = acceptedScope.workspaceId;
 
     const result = await validateBody(request, notificationActionSchema);
     if ('error' in result) return result.error;
@@ -296,6 +317,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'POST /api/notifications error');
     return NextResponse.json({ error: 'Failed to process notification action' }, { status: 500 });
   }

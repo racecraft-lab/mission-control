@@ -5,6 +5,7 @@ import { selfRegisterLimiter } from '@/lib/rate-limit'
 import { logAuditEvent } from '@/lib/db'
 import { eventBus } from '@/lib/event-bus'
 import { logger } from '@/lib/logger'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$/
 const VALID_ROLES = ['coder', 'reviewer', 'tester', 'devops', 'researcher', 'assistant', 'agent']
@@ -53,7 +54,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    if (!acceptedScope.workspaceId) {
+      return NextResponse.json({ error: 'workspace_id is required for agent registration' }, { status: 400 })
+    }
+    const workspaceId = acceptedScope.workspaceId
     const now = Math.floor(Date.now() / 1000)
 
     // Check if agent already exists — idempotent: update last_seen and status
@@ -111,7 +116,7 @@ export async function POST(request: NextRequest) {
       ip_address: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
     })
 
-    eventBus.broadcast('agent.created', { id: agentId, name, role, status: 'idle' })
+    eventBus.broadcast('agent.created', { id: agentId, name, role, status: 'idle', workspace_id: workspaceId })
 
     return NextResponse.json({
       agent: {
@@ -125,6 +130,8 @@ export async function POST(request: NextRequest) {
       message: 'Agent registered successfully',
     }, { status: 201 })
   } catch (error: any) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     if (error.message?.includes('UNIQUE constraint')) {
       // Race condition — another request registered the same name
       return NextResponse.json({ error: 'Agent name already exists' }, { status: 409 })

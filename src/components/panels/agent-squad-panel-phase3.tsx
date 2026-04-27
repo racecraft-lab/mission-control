@@ -23,6 +23,7 @@ import {
 } from './agent-detail-tabs'
 import { formatModelName, buildTaskStatParts } from '@/lib/agent-card-helpers'
 import { useMissionControl, type Agent } from '@/store'
+import { appendScopeToPath } from '@/types/product-line'
 
 const log = createClientLogger('AgentSquadPhase3')
 
@@ -88,7 +89,7 @@ const statusCardStyles: Record<string, { edge: string; glow: string; dot: string
 
 export function AgentSquadPanelPhase3() {
   const t = useTranslations('agentSquadPhase3')
-  const { agents, setAgents } = useMissionControl()
+  const { agents, setAgents, activeProductLineScope } = useMissionControl()
   const [loading, setLoading] = useState(agents.length === 0)
   const [error, setError] = useState<string | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
@@ -104,7 +105,7 @@ export function AgentSquadPanelPhase3() {
     setSyncing(true)
     setSyncToast(null)
     try {
-      const url = source === 'local' ? '/api/agents/sync?source=local' : '/api/agents/sync'
+      const url = appendScopeToPath(source === 'local' ? '/api/agents/sync?source=local' : '/api/agents/sync', activeProductLineScope)
       const response = await fetch(url, { method: 'POST' })
       if (response.status === 401) {
         window.location.assign('/login?next=%2Fagents')
@@ -136,7 +137,7 @@ export function AgentSquadPanelPhase3() {
       setError(null)
       if (agents.length === 0) setLoading(true)
 
-      const url = showHidden ? '/api/agents?show_hidden=true' : '/api/agents'
+      const url = appendScopeToPath(showHidden ? '/api/agents?show_hidden=true' : '/api/agents', activeProductLineScope)
       const response = await fetch(url)
       if (response.status === 401) {
         window.location.assign('/login?next=%2Fagents')
@@ -157,18 +158,19 @@ export function AgentSquadPanelPhase3() {
     } finally {
       setLoading(false)
     }
-  }, [agents.length, setAgents, showHidden])
+  }, [activeProductLineScope, agents.length, setAgents, showHidden])
 
   // Smart polling with visibility pause
   useSmartPoll(fetchAgents, 30000, { enabled: autoRefresh, pauseWhenSseConnected: true })
 
   // Update agent status
-  const updateAgentStatus = async (agentName: string, status: Agent['status'], activity?: string) => {
+  const updateAgentStatus = async (agentId: number, agentName: string, status: Agent['status'], activity?: string) => {
     try {
-      const response = await fetch('/api/agents', {
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: agentId,
           name: agentName,
           status,
           last_activity: activity || `Status changed to ${status}`
@@ -179,7 +181,7 @@ export function AgentSquadPanelPhase3() {
       
       // Update store state
       setAgents(agents.map(agent =>
-        agent.name === agentName
+        agent.id === agentId
           ? {
               ...agent,
               status,
@@ -196,9 +198,9 @@ export function AgentSquadPanelPhase3() {
   }
 
   // Wake agent via session_send
-  const wakeAgent = async (agentName: string) => {
+  const wakeAgent = async (agentId: number, agentName: string) => {
     try {
-      const response = await fetch(`/api/agents/${agentName}/wake`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agentId}/wake`, activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -211,7 +213,7 @@ export function AgentSquadPanelPhase3() {
         throw new Error(data.error || 'Failed to wake agent')
       }
 
-      await updateAgentStatus(agentName, 'idle', 'Manually woken via session')
+      await updateAgentStatus(agentId, agentName, 'idle', 'Manually woken via session')
     } catch (error) {
       log.error('Failed to wake agent:', error)
       setError('Failed to wake agent')
@@ -226,7 +228,7 @@ export function AgentSquadPanelPhase3() {
 
   const toggleAgentHidden = async (agentId: number, hide: boolean) => {
     try {
-      const response = await fetch(`/api/agents/${agentId}/hide`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agentId}/hide`, activeProductLineScope), {
         method: hide ? 'POST' : 'DELETE',
       })
       if (!response.ok) throw new Error('Failed to update visibility')
@@ -241,7 +243,7 @@ export function AgentSquadPanelPhase3() {
     const previousAgents = agents
     setAgents(agents.filter((agent) => agent.id !== agentId))
 
-    const response = await fetch(`/api/agents/${agentId}`, {
+    const response = await fetch(appendScopeToPath(`/api/agents/${agentId}`, activeProductLineScope), {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ remove_workspace: removeWorkspace }),
@@ -481,7 +483,7 @@ export function AgentSquadPanelPhase3() {
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            wakeAgent(agent.name)
+                            wakeAgent(agent.id, agent.name)
                           }}
                           size="xs"
                           variant="ghost"
@@ -494,7 +496,7 @@ export function AgentSquadPanelPhase3() {
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            updateAgentStatus(agent.name, 'idle', 'Manually activated')
+                            updateAgentStatus(agent.id, agent.name, 'idle', 'Manually activated')
                           }}
                           disabled={agent.status === 'idle'}
                           size="xs"
@@ -583,8 +585,8 @@ function AgentDetailModalPhase3({
   agent: Agent
   onClose: () => void
   onUpdate: () => void
-  onStatusUpdate: (name: string, status: Agent['status'], activity?: string) => Promise<void>
-  onWakeAgent: (name: string, sessionKey: string) => Promise<void>
+  onStatusUpdate: (agentId: number, name: string, status: Agent['status'], activity?: string) => Promise<void>
+  onWakeAgent: (agentId: number, name: string) => Promise<void>
   onDelete: (agentId: number, removeWorkspace: boolean) => Promise<void>
 }) {
   const [agentState, setAgentState] = useState<Agent & { config?: any; working_memory?: string }>(agent as Agent & { config?: any; working_memory?: string })
@@ -609,6 +611,7 @@ function AgentDetailModalPhase3({
   const [showDeleteMenu, setShowDeleteMenu] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const deleteMenuRef = useRef<HTMLDivElement>(null)
+  const { activeProductLineScope } = useMissionControl()
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -638,10 +641,10 @@ function AgentDetailModalPhase3({
     const loadCanonicalAgentData = async () => {
       try {
         const [agentRes, soulRes, memoryRes, filesRes] = await Promise.all([
-          fetch(`/api/agents/${agent.id}`),
-          fetch(`/api/agents/${agent.id}/soul`),
-          fetch(`/api/agents/${agent.id}/memory`),
-          fetch(`/api/agents/${agent.id}/files`),
+          fetch(appendScopeToPath(`/api/agents/${agent.id}`, activeProductLineScope)),
+          fetch(appendScopeToPath(`/api/agents/${agent.id}/soul`, activeProductLineScope)),
+          fetch(appendScopeToPath(`/api/agents/${agent.id}/memory`, activeProductLineScope)),
+          fetch(appendScopeToPath(`/api/agents/${agent.id}/files`, activeProductLineScope)),
         ])
 
         if (agentRes.ok) {
@@ -681,7 +684,7 @@ function AgentDetailModalPhase3({
     }
 
     loadCanonicalAgentData()
-  }, [agent.id])
+  }, [activeProductLineScope, agent.id])
 
   const formatLastSeen = (timestamp?: number) => {
     if (!timestamp) return 'Never'
@@ -698,7 +701,7 @@ function AgentDetailModalPhase3({
   useEffect(() => {
     const loadTemplates = async () => {
       try {
-        const response = await fetch(`/api/agents/${agent.name}/soul`, {
+        const response = await fetch(appendScopeToPath(`/api/agents/${agent.name}/soul`, activeProductLineScope), {
           method: 'PATCH'
         })
         if (response.ok) {
@@ -713,13 +716,13 @@ function AgentDetailModalPhase3({
     if (activeTab === 'soul') {
       loadTemplates()
     }
-  }, [activeTab, agent.name])
+  }, [activeProductLineScope, activeTab, agent.name])
 
   // Perform heartbeat check
   const performHeartbeat = async () => {
     setLoadingHeartbeat(true)
     try {
-      const response = await fetch(`/api/agents/${agent.name}/heartbeat`)
+      const response = await fetch(appendScopeToPath(`/api/agents/${agent.name}/heartbeat`, activeProductLineScope))
       if (response.ok) {
         const data = await response.json()
         setHeartbeatData(data)
@@ -734,7 +737,7 @@ function AgentDetailModalPhase3({
   const handleSave = async () => {
     setSaveBusy(true)
     try {
-      const response = await fetch('/api/agents', {
+      const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -756,7 +759,7 @@ function AgentDetailModalPhase3({
 
   const handleSoulSave = async (content: string, templateName?: string) => {
     try {
-      const response = await fetch(`/api/agents/${agentState.id}/soul`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agentState.id}/soul`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -777,7 +780,7 @@ function AgentDetailModalPhase3({
 
   const handleMemorySave = async (content: string, append: boolean = false) => {
     try {
-      const response = await fetch(`/api/agents/${agentState.id}/memory`, {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agentState.id}/memory`, activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -798,7 +801,7 @@ function AgentDetailModalPhase3({
   }
 
   const handleWorkspaceFileSave = async (file: 'identity.md' | 'agent.md', content: string) => {
-    const response = await fetch(`/api/agents/${agentState.id}/files`, {
+    const response = await fetch(appendScopeToPath(`/api/agents/${agentState.id}/files`, activeProductLineScope), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ file, content }),

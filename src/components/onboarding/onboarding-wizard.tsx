@@ -12,6 +12,7 @@ import { clampWizardStep, getWizardSteps, stepIdAt } from '@/lib/onboarding-flow
 import { SecurityScanCard } from '@/components/onboarding/security-scan-card'
 // StepAgentRuntimes removed — runtime management moved to Settings page
 import { clearOnboardingReplayFromStart, markOnboardingDismissedThisSession, readOnboardingReplayFromStart } from '@/lib/onboarding-session'
+import { appendScopeToPath } from '@/types/product-line'
 
 interface StepInfo {
   id: string
@@ -64,7 +65,7 @@ function modeColors(isGateway: boolean) {
 }
 
 export function OnboardingWizard() {
-  const { showOnboarding, setShowOnboarding, dashboardMode, gatewayAvailable } = useMissionControl()
+  const { showOnboarding, setShowOnboarding, dashboardMode, gatewayAvailable, activeProductLineScope } = useMissionControl()
   const navigateToPanel = useNavigateToPanel()
   const t = useTranslations('onboarding')
   const [step, setStep] = useState(0)
@@ -114,7 +115,7 @@ export function OnboardingWizard() {
     // Fetch system capabilities and runtime status in parallel
     Promise.allSettled([
       fetch('/api/status?action=capabilities').then(r => r.ok ? r.json() : null),
-      fetch('/api/agents?limit=1').then(r => r.ok ? r.json() : null),
+      fetch(appendScopeToPath('/api/agents?limit=1', activeProductLineScope)).then(r => r.ok ? r.json() : null),
       fetch('/api/agent-runtimes').then(r => r.ok ? r.json() : null),
     ]).then(([statusResult, agentsResult, runtimesResult]) => {
       const statusData = statusResult.status === 'fulfilled' ? statusResult.value : null
@@ -136,7 +137,7 @@ export function OnboardingWizard() {
     return () => {
       document.body.style.overflow = previousOverflow
     }
-  }, [showOnboarding])
+  }, [activeProductLineScope, showOnboarding])
 
   const STEPS = getWizardSteps(capabilities.gatewayConnected)
   const credentialsStepIndex = STEPS.findIndex((s) => s.id === 'credentials')

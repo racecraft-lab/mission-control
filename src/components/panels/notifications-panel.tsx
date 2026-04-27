@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Loader } from '@/components/ui/loader'
 import { useSmartPoll } from '@/lib/use-smart-poll'
+import { useMissionControl } from '@/store'
+import { appendScopeToPath, createFacilityScope } from '@/types/product-line'
 
 interface Notification {
   id: number
@@ -21,6 +23,10 @@ interface Notification {
 
 export function NotificationsPanel() {
   const t = useTranslations('notifications')
+  const { activeProductLineScope } = useMissionControl()
+  const notificationScope = useMemo(() => activeProductLineScope
+    ? createFacilityScope(activeProductLineScope.tenantId, activeProductLineScope.version)
+    : null, [activeProductLineScope])
   const [recipient, setRecipient] = useState<string>(() => {
     if (typeof window === 'undefined') return ''
     return window.localStorage.getItem('mc.notifications.recipient') || ''
@@ -34,7 +40,7 @@ export function NotificationsPanel() {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`/api/notifications?recipient=${encodeURIComponent(recipient)}`)
+      const response = await fetch(appendScopeToPath(`/api/notifications?recipient=${encodeURIComponent(recipient)}`, notificationScope))
       if (!response.ok) throw new Error('Failed to fetch notifications')
       const data = await response.json()
       setNotifications(data.notifications || [])
@@ -43,7 +49,7 @@ export function NotificationsPanel() {
     } finally {
       setLoading(false)
     }
-  }, [recipient])
+  }, [notificationScope, recipient])
 
   useEffect(() => {
     if (recipient) {
@@ -57,7 +63,7 @@ export function NotificationsPanel() {
   const markAllRead = async () => {
     if (!recipient) return
     try {
-      const res = await fetch('/api/notifications', {
+      const res = await fetch(appendScopeToPath('/api/notifications', notificationScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient, markAllRead: true })
@@ -71,7 +77,7 @@ export function NotificationsPanel() {
 
   const markRead = async (id: number) => {
     try {
-      const res = await fetch('/api/notifications', {
+      const res = await fetch(appendScopeToPath('/api/notifications', notificationScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [id] })

@@ -10,6 +10,7 @@ import { normalizeTaskUpdateStatus } from '@/lib/task-status';
 import { syncTaskOutbound } from '@/lib/github-sync-engine';
 import { removeTaskFromGnap } from '@/lib/gnap-sync';
 import { config } from '@/lib/config';
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces';
 
 function formatTicketRef(prefix?: string | null, num?: number | null): string | undefined {
   if (!prefix || typeof num !== 'number' || !Number.isFinite(num) || num <= 0) return undefined
@@ -53,7 +54,8 @@ export async function GET(
     const db = getDatabase();
     const resolvedParams = await params;
     const taskId = parseInt(resolvedParams.id);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 't.workspace_id');
 
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
@@ -63,9 +65,9 @@ export async function GET(
       SELECT t.*, p.name as project_name, p.ticket_prefix as project_prefix
       FROM tasks t
       LEFT JOIN projects p ON p.id = t.project_id AND p.workspace_id = t.workspace_id
-      WHERE t.id = ? AND t.workspace_id = ?
+      WHERE t.id = ? AND ${workspaceFilter.sql}
     `);
-    const task = stmt.get(taskId, workspaceId) as Task;
+    const task = stmt.get(taskId, ...workspaceFilter.params) as Task;
     
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
@@ -76,6 +78,8 @@ export async function GET(
     
     return NextResponse.json({ task: taskWithParsedData });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'GET /api/tasks/[id] error');
     return NextResponse.json({ error: 'Failed to fetch task' }, { status: 500 });
   }
@@ -98,7 +102,8 @@ export async function PUT(
     const db = getDatabase();
     const resolvedParams = await params;
     const taskId = parseInt(resolvedParams.id);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
     const validated = await validateBody(request, updateTaskSchema);
     if ('error' in validated) return validated.error;
     const body = validated.data;
@@ -109,12 +114,13 @@ export async function PUT(
     
     // Get current task for comparison
     const currentTask = db
-      .prepare('SELECT * FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId) as Task;
+      .prepare(`SELECT * FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(taskId, ...workspaceFilter.params) as Task;
     
     if (!currentTask) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
+    const workspaceId = (currentTask as Task & { workspace_id: number }).workspace_id;
     
     const {
       title,
@@ -401,6 +407,8 @@ export async function PUT(
 
     return NextResponse.json({ task: parsedTask });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'PUT /api/tasks/[id] error');
     return NextResponse.json({ error: 'Failed to update task' }, { status: 500 });
   }
@@ -423,7 +431,8 @@ export async function DELETE(
     const db = getDatabase();
     const resolvedParams = await params;
     const taskId = parseInt(resolvedParams.id);
-    const workspaceId = auth.user.workspace_id ?? 1;
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id');
     
     if (isNaN(taskId)) {
       return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
@@ -431,12 +440,13 @@ export async function DELETE(
     
     // Get task before deletion for logging
     const task = db
-      .prepare('SELECT * FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId) as Task;
+      .prepare(`SELECT * FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(taskId, ...workspaceFilter.params) as Task;
     
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
+    const workspaceId = (task as Task & { workspace_id: number }).workspace_id;
     
     // Delete task (cascades will handle comments)
     const stmt = db.prepare('DELETE FROM tasks WHERE id = ? AND workspace_id = ?');
@@ -464,10 +474,12 @@ export async function DELETE(
     }
 
     // Broadcast to SSE clients
-    eventBus.broadcast('task.deleted', { id: taskId, title: task.title });
+    eventBus.broadcast('task.deleted', { id: taskId, title: task.title, workspace_id: workspaceId });
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    const scopeError = workspaceScopeError(error);
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status });
     logger.error({ err: error }, 'DELETE /api/tasks/[id] error');
     return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 });
   }

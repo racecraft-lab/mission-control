@@ -48,6 +48,7 @@ export function ThemeSelector() {
         variant="ghost"
         size="icon-sm"
         title="Change theme"
+        aria-label="Change theme"
       >
         <PaletteIcon />
       </Button>

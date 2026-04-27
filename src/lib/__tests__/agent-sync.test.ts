@@ -258,7 +258,8 @@ describe('syncAgentsFromConfig', () => {
         status TEXT,
         created_at INTEGER,
         updated_at INTEGER,
-        config TEXT
+        config TEXT,
+        workspace_id INTEGER DEFAULT 1
       );
     `)
     db.prepare(`

@@ -1,6 +1,9 @@
-import { NextRequest , NextResponse } from 'next/server'
-import { eventBus, ServerEvent } from '@/lib/event-bus'
+import { NextRequest, NextResponse } from 'next/server'
+import { eventBus, type ServerEvent } from '@/lib/event-bus'
 import { requireRole } from '@/lib/auth'
+import { getDatabase } from '@/lib/db'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
+import { shouldForwardEventForScope } from './scope-filter'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -12,6 +15,15 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   const auth = requireRole(request, 'viewer')
   if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  const db = getDatabase()
+  let acceptedScope
+  try {
+    acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+  } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
+    throw error
+  }
 
   const encoder = new TextEncoder()
 
@@ -26,10 +38,8 @@ export async function GET(request: NextRequest) {
       )
 
       // Forward workspace-scoped server events to this SSE client
-      const userWorkspaceId = auth.user.workspace_id ?? 1
       const handler = (event: ServerEvent) => {
-        // Skip events from other workspaces (if event carries workspace_id)
-        if (event.data?.workspace_id && event.data.workspace_id !== userWorkspaceId) return
+        if (!shouldForwardEventForScope(event, acceptedScope)) return
         try {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(event)}\n\n`)

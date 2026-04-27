@@ -6,6 +6,7 @@ import { dirname } from 'node:path'
 import { resolveWithin } from '@/lib/paths'
 import { getAgentWorkspaceCandidates, readAgentWorkspaceFile } from '@/lib/agent-workspace'
 import { logger } from '@/lib/logger'
+import { agentWorkspaceScopePredicate, resolveWorkspaceScopeFromRequest, workspaceScopeError, type AcceptedWorkspaceScope } from '@/lib/workspaces'
 
 const ALLOWED_FILES = new Set([
   'agent.md',
@@ -30,11 +31,12 @@ const FILE_ALIASES: Record<string, string[]> = {
   'USER.md': ['USER.md', 'user.md'],
 }
 
-function getAgentByIdOrName(db: ReturnType<typeof getDatabase>, id: string, workspaceId: number): any | undefined {
+function getAgentByIdOrName(db: ReturnType<typeof getDatabase>, id: string, scope: AcceptedWorkspaceScope): any | undefined {
+  const workspaceFilter = agentWorkspaceScopePredicate(db, scope, 'workspace_id')
   if (isNaN(Number(id))) {
-    return db.prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?').get(id, workspaceId)
+    return db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(id, ...workspaceFilter.params)
   }
-  return db.prepare('SELECT * FROM agents WHERE id = ? AND workspace_id = ?').get(Number(id), workspaceId)
+  return db.prepare(`SELECT * FROM agents WHERE id = ? AND ${workspaceFilter.sql}`).get(Number(id), ...workspaceFilter.params)
 }
 
 export async function GET(
@@ -47,8 +49,8 @@ export async function GET(
   try {
     const { id } = await params
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
-    const agent = getAgentByIdOrName(db, id, workspaceId)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const agent = getAgentByIdOrName(db, id, acceptedScope)
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     const agentConfig = agent.config ? JSON.parse(agent.config) : {}
@@ -78,6 +80,8 @@ export async function GET(
       files: payload,
     })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'GET /api/agents/[id]/files error')
     return NextResponse.json({ error: 'Failed to load workspace files' }, { status: 500 })
   }
@@ -104,9 +108,10 @@ export async function PUT(
     }
 
     const db = getDatabase()
-    const workspaceId = auth.user.workspace_id ?? 1
-    const agent = getAgentByIdOrName(db, id, workspaceId)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const agent = getAgentByIdOrName(db, id, acceptedScope)
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    const workspaceId = agent.workspace_id as number
 
     const agentConfig = agent.config ? JSON.parse(agent.config) : {}
     const candidates = getAgentWorkspaceCandidates(agentConfig, agent.name)
@@ -140,6 +145,8 @@ export async function PUT(
 
     return NextResponse.json({ success: true, file, size: content.length })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'PUT /api/agents/[id]/files error')
     return NextResponse.json({ error: 'Failed to save workspace file' }, { status: 500 })
   }

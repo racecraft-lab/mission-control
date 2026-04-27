@@ -26,6 +26,7 @@
 |---|---|---|---|---|---|
 | 0 | Foundation migrations (M53–M61) | Yes | None — pure schema | `upstream-divergent` | — |
 | 1 | Product-line switcher + `activeWorkspace` | Yes | `FEATURE_WORKSPACE_SWITCHER` | `upstream-safe` | Phase 8 |
+| 1A | Spec archive + evidence retention | Yes | None — process/tooling | `upstream-safe` | Phase 2+ |
 | 2 | Aegis refactor (facility singleton) | Yes (shim) | `FEATURE_GLOBAL_AEGIS` | `upstream-divergent` | Phase 3, 8 |
 | 3 | Task pipeline engine + routing | Yes | `FEATURE_TASK_PIPELINES` | `upstream-divergent` | Phase 4, 6, 8 |
 | 4 | `ready_for_owner` state + two-step terminal | Yes | `FEATURE_TWO_STEP_TERMINAL` | `upstream-divergent` | Phase 8 |
@@ -71,15 +72,18 @@ These notes resolve known ambiguities so `/speckit-pro:setup` and `/speckit-pro:
 | Spec ID | Phase | Spec Name | Short Name | Status | Priority | Depends On | Enables | Source Section |
 |---|---:|---|---|---|---|---|---|---|
 | SPEC-001 | 0 | Foundation Migrations | foundation-migrations | Complete | P0 | — | SPEC-002 | Phase 0 |
-| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | Pending | P1 | SPEC-001 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
-| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002 | SPEC-004, SPEC-009 | Phase 2 |
-| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
-| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-002, SPEC-004 | SPEC-009 | Phase 4 |
-| SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002 | SPEC-009 | Phase 5 |
-| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-002, SPEC-004 | SPEC-009 | Phase 6 |
-| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-002, SPEC-004 | SPEC-009 | Phase 7 |
-| SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
-| SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-009 | — | Phase 9 |
+| SPEC-002 | 1 | Product-Line Switcher and activeWorkspace Scoping | product-line-switcher | In Progress | P1 | SPEC-001 | SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009 | Phase 1 |
+| SPEC-002A | 1A | Spec Archive and Evidence Retention | spec-archive-evidence | Pending | P1 | SPEC-002 | SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009, SPEC-010 | Phase 1A |
+| SPEC-003 | 2 | Aegis Facility Singleton Refactor | global-aegis | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A | SPEC-004, SPEC-009 | Phase 2 |
+| SPEC-004 | 3 | Task Pipeline Engine and Declarative Routing | task-pipeline-engine | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A, SPEC-003 | SPEC-005, SPEC-007, SPEC-008, SPEC-009 | Phase 3 |
+| SPEC-005 | 4 | ready_for_owner State and Two-Step Terminal Event | ready-for-owner | Pending | P1 | SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 4 |
+| SPEC-006 | 5 | Area-Label GitHub Sync | area-label-github-sync | Pending | P1 | SPEC-001, SPEC-002, SPEC-002A | SPEC-009 | Phase 5 |
+| SPEC-007 | 6 | Disposition Logging and Task Artifact Store | disposition-artifacts | Pending | P2 | SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 6 |
+| SPEC-008 | 7 | Resource Governance and Cost Tracker Enforcement | resource-governance | Pending | P2 | SPEC-001, SPEC-002, SPEC-002A, SPEC-004 | SPEC-009 | Phase 7 |
+| SPEC-009 | 8 | Product Line A Pilot End-to-End Smoke | product-line-a-pilot | Pending | P0 | SPEC-001, SPEC-002, SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008 | SPEC-010 | Phase 8 |
+| SPEC-010 | 9 | Product Line B Product-Line Onboarding | product-line-b-onboarding | Pending | P3 | SPEC-002A, SPEC-009 | — | Phase 9 |
+
+**Current branch note:** SPEC-002 implementation is complete and G7-verified on branch `002-product-line-switcher`, but the SpecKit-Pro index remains `In Progress` until the implementation PR is merged, per the status policy above.
 
 ## Feature Flag Resolution Policy
 
@@ -114,25 +118,41 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 
 ### SPEC-002: Product-Line Switcher and activeWorkspace Scoping
 
-- **Status:** Pending
+- **Status:** In Progress
 - **Priority:** P1
 - **Branch short name:** `product-line-switcher`
 - **Dependencies:** SPEC-001
-- **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
+- **Enables:** SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 1 — Product-Line Switcher + `activeWorkspace` Scoping
 - **Acceptance criteria source:** Phase 1 Acceptance Criteria
-- **Scope summary:** Add the feature-flagged Product Line switcher, independent `activeWorkspace` state, REST/SSE workspace scoping, filtered-panel behavior, aggregate-panel behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
+- **Scope summary:** Add the feature-flagged Product Line switcher, independent Facility/Product Line scope state, explicit REST/SSE scoping, mode-sensitive panel behavior, Facility aggregate awareness behavior, and header terminology fix so tenant/facility context is no longer labeled as Workspace.
 - **Tool count / tool names:** N/A — not a tool-surface spec
-- **Strict Scope:** `src/components/layout/workspace-switcher.tsx`, `src/types/product-line.ts`, `src/lib/feature-flags.ts`
-- **Autopilot notes:** Keep `activeTenant` independent from `activeWorkspace`. The switcher’s Facility entry means aggregate/null view, not direct selection of the real `workspaces.slug='facility'` row. Global agents must appear across product-line views.
-- **Definition of done:** Phase 1 deliverables are implemented, P1 acceptance criteria pass with flag OFF, null aggregate, and selected product-line modes, and no unauthorized workspace data leaks through REST or SSE scoping.
+- **Strict Scope:** New production modules are limited to `src/components/layout/workspace-switcher.tsx`, `src/types/product-line.ts`, and `src/lib/feature-flags.ts`. Existing store, header, panel, API, and SSE files may be touched only where Phase 1 route/panel matrices require Product Line scope, Facility aggregate behavior, or header terminology fixes.
+- **Autopilot notes:** Keep `activeTenant` independent from Product Line scope. The switcher's synthetic Facility entry means authenticated Facility aggregate view, not direct selection of the real `workspaces.slug='facility'` row. Global agents must appear across product-line views. Skills, local/gateway sessions, transcripts, and multi-facility tenant modeling remain deferred boundaries.
+- **Definition of done:** Phase 1 deliverables are implemented, P1-AC1 through P1-AC16 pass with flag OFF, Facility aggregate, and selected Product Line modes, and no unauthorized workspace data leaks through REST, URL state, cache reuse, BroadcastChannel, or SSE scoping.
+- **Implementation evidence:** G7 passed locally on 2026-04-26 in branch `002-product-line-switcher`: all 50 generated tasks are checked, `pnpm typecheck` passed, `pnpm lint` passed with 0 errors / 11 pre-existing warnings, `pnpm test` passed 106 files / 1035 tests, `pnpm build` passed, `pnpm test:e2e` passed 526 tests, and guardrail greps found no inline runtime `FEATURE_*` reads outside `src/lib/feature-flags.ts` or new runtime gateway/global-boundary drift.
+
+### SPEC-002A: Spec Archive and Evidence Retention
+
+- **Status:** Pending
+- **Priority:** P1
+- **Branch short name:** `spec-archive-evidence`
+- **Dependencies:** SPEC-002
+- **Enables:** SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-009, SPEC-010
+- **Scope source:** Phase 1A — Spec Archive and Evidence Retention
+- **Acceptance criteria source:** Phase 1A Acceptance Criteria
+- **Scope summary:** Define and implement the repository policy for long-lived SpecKit artifacts, Playwright screenshots, PR evidence, and post-merge archival before later specs generate more evidence. Evaluate `stn1slv/spec-kit-archive` as the default archival mechanism and adopt it only if it can be pinned and validated locally and in CI.
+- **Tool count / tool names:** N/A — process/tooling spec
+- **Strict Scope:** `.specify` archive integration and hooks, SpecKit workflow docs/templates, screenshot/evidence manifest conventions, CI/local guards for `specs/**/screenshots`, and PR evidence guidance. No runtime product feature behavior ships in this spec.
+- **Autopilot notes:** Use `specs/002-product-line-switcher` as the dry-run source because it contains real Playwright screenshots. Do not delete or move existing spec folders automatically. If archive cleanup is needed, produce an explicit reviewed change rather than a silent post-merge mutation.
+- **Definition of done:** Phase 1A deliverables are implemented, the archive command dry-runs against SPEC-002, screenshot guard behavior is verified locally and in CI, constitution/workflow docs distinguish durable memory from ephemeral CI artifacts and curated permanent screenshots, and SPEC-003 setup can proceed without unresolved artifact-retention decisions.
 
 ### SPEC-003: Aegis Facility Singleton Refactor
 
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `global-aegis`
-- **Dependencies:** SPEC-001, SPEC-002
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A
 - **Enables:** SPEC-004, SPEC-009
 - **Scope source:** Phase 2 — Aegis Refactor (Facility Singleton)
 - **Acceptance criteria source:** Phase 2 Acceptance Criteria
@@ -147,7 +167,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `task-pipeline-engine`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-003
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-003
 - **Enables:** SPEC-005, SPEC-007, SPEC-008, SPEC-009
 - **Scope source:** Phase 3 — Task Pipeline Engine + Declarative Routing
 - **Acceptance criteria source:** Phase 3 Acceptance Criteria
@@ -162,7 +182,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `ready-for-owner`
-- **Dependencies:** SPEC-002, SPEC-004
+- **Dependencies:** SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 4 — `ready_for_owner` State + Two-Step Terminal Event
 - **Acceptance criteria source:** Phase 4 Acceptance Criteria
@@ -177,7 +197,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P1
 - **Branch short name:** `area-label-github-sync`
-- **Dependencies:** SPEC-001, SPEC-002
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A
 - **Enables:** SPEC-009
 - **Scope source:** Phase 5 — Area-Label GitHub Sync
 - **Acceptance criteria source:** Phase 5 Acceptance Criteria
@@ -192,7 +212,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `disposition-artifacts`
-- **Dependencies:** SPEC-002, SPEC-004
+- **Dependencies:** SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 6 — Disposition Logging + Artifact Store + Admin Panels
 - **Acceptance criteria source:** Phase 6 Acceptance Criteria
@@ -207,7 +227,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P2
 - **Branch short name:** `resource-governance`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-004
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-004
 - **Enables:** SPEC-009
 - **Scope source:** Phase 7 — Resource Governance + Cost Tracker Enforcement
 - **Acceptance criteria source:** Phase 7 Acceptance Criteria
@@ -222,7 +242,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P0
 - **Branch short name:** `product-line-a-pilot`
-- **Dependencies:** SPEC-001, SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008
+- **Dependencies:** SPEC-001, SPEC-002, SPEC-002A, SPEC-003, SPEC-004, SPEC-005, SPEC-006, SPEC-007, SPEC-008
 - **Enables:** SPEC-010
 - **Scope source:** Phase 8 — Product Line A Pilot (End-to-End Smoke)
 - **Acceptance criteria source:** Phase 8 Acceptance Criteria
@@ -237,7 +257,7 @@ Phase deliverables that name a flag (e.g., `FEATURE_WORKSPACE_SWITCHER`, `FEATUR
 - **Status:** Pending
 - **Priority:** P3
 - **Branch short name:** `product-line-b-onboarding`
-- **Dependencies:** SPEC-009
+- **Dependencies:** SPEC-002A, SPEC-009
 - **Enables:** —
 - **Scope source:** Phase 9 — Product Line B Onboarding (Scale Validation)
 - **Acceptance criteria source:** Phase 9 Acceptance Criteria
@@ -325,35 +345,54 @@ The live migration runner (`src/lib/migrations.ts:5-9`) is forward-only — `typ
 
 ### Scope
 
-Introduce the product-line switcher in the header, wire Zustand `activeWorkspace`, and apply hybrid filter/aggregate behavior per D4b. `activeTenant` remains the super-admin / tenant context and must not be reused as the Product Line switcher. The header must stop labeling tenant context as "Workspace." Gate everything behind `FEATURE_WORKSPACE_SWITCHER`.
+Introduce the Product Line switcher in the header, wire independent Facility/Product Line scope state, and apply explicit mode-sensitive/Facility-aggregate behavior per D4b. `activeTenant` remains the tenant/facility context and must not be reused as the Product Line switcher. The header must stop labeling tenant context as "Workspace." Gate everything behind `FEATURE_WORKSPACE_SWITCHER`.
 
 ### Upstream Impact
 
 `upstream-safe`. This is additive UI/domain work and a plausible upstream candidate if kept generic.
+
+### UI Mode Transition Contract
+
+SPEC-002 uses these canonical terms: **Facility** is the user-facing aggregate mode, **tenant** is the current authenticated compatibility/data boundary for that Facility, and **Product Line** is the selected workspace operating scope. v1 treats authenticated `tenant_id` as the Facility aggregate boundary and does not introduce multi-facility tenant modeling.
+
+Runtime scope is discriminated even if the existing store keeps `activeWorkspace: Workspace | null` for compatibility:
+
+- `scope.kind = "facility"`: authenticated Facility aggregate mode.
+- `scope.kind = "productLine"`: one authorized workspace id.
+- `activeWorkspace = null` may only be interpreted as Facility after auth/workspace initialization and must never widen access from client input alone.
+
+Requests and cache keys use `scopeKey = tenantId + ":" + ("facility" | productLineId)`.
 
 ### Deliverables
 
 - **Header terminology fix**: `header-bar.tsx` must not render `activeTenant` under a "Workspace" label. Tenant/facility context and Product Line context are separate UI chips/controls.
 - **New component**: `src/components/layout/workspace-switcher.tsx`.
   - Dropdown in `header-bar.tsx`.
-  - Options: all workspaces user can access (`GET /api/workspaces`) plus "Facility" (null) entry.
-  - Persists selection via Zustand `persist` middleware (see new persistence note below).
-- **Zustand store**: `activeWorkspace: Workspace | null` with cross-tab sync.
+  - Options: exactly one synthetic "Facility" aggregate entry plus authorized non-Facility Product Line workspaces from `GET /api/workspaces`.
+  - The real `workspaces.slug='facility'` row is never selectable as the aggregate option and must not create a duplicate Facility option.
+  - Desktop placement: left header context cluster near tenant/facility context.
+  - Mobile placement: compact trigger remains visible at 320, 375, and 390 px in the fixed `h-14` header; long names truncate without pushing out search, notifications, theme, or account controls.
+  - Accessibility: stable accessible name, `aria-controls`, `aria-haspopup`, `aria-expanded`, listbox/options, `aria-selected`, roving focus or `aria-activedescendant`, Escape/outside-click close, Arrow/Home/End navigation, Enter/Space selection, selected state, loading/empty/error rows, and trigger focus return.
+- **Zustand store and transition API**: `activeWorkspace: Workspace | null` plus `setActiveProductLine(productLine | null, options)`.
   - **Live state on 2026-04-24:** `src/store/index.ts:4` imports only `subscribeWithSelector`; there is **no existing `persist` middleware** and **no `BroadcastChannel` cross-tab listener** in this codebase. SPEC-002 must therefore implement cross-tab sync from scratch, not piggyback on a non-existent pattern.
-  - **Implementation contract:** wrap the `activeWorkspace` slice with `zustand/middleware`'s `persist` (storage = `localStorage`, key = `mc:active-workspace:v1`). Add a `BroadcastChannel('mc:active-workspace')` listener so tab A's `setActiveWorkspace` triggers a refresh in tab B. Fall back gracefully when `BroadcastChannel` is unavailable (no-op; only the persisted value is shared at next reload).
-  - **Scope discipline:** only the `activeWorkspace` slice is wrapped; the rest of the store is unaffected. Other slices keep current persistence semantics.
+  - **Implementation contract:** persist only the Product Line scope slice with `zustand/middleware` (storage = `localStorage`, key = `mc:active-workspace:v1`). Validate persisted scope after `/api/workspaces` before rendering mode-sensitive cached data.
+  - **Cross-tab contract:** use `BroadcastChannel('mc:active-workspace')` messages shaped as `{ tenantId, userId/sessionId, productLineId|null, version, originTabId }`; ignore mismatched tenant/session, self echoes, and stale versions. Fall back gracefully when `BroadcastChannel` is unavailable.
+  - **Invalidation contract:** scope transitions clear incompatible `activeProject`, selected task/agent/project/conversation state, scoped modals, scoped filters, and scoped drafts unless stored per `scopeKey`. In-flight requests and mutation completions carry the initiating `scopeKey` and are ignored if stale.
 - **TypeScript domain type**: `type ProductLine = Workspace` alias exported from `@/types/product-line`.
-- **REST scoping contract**: filtered endpoints accept an optional requested `workspace_id`/product-line scope, authorize it with tenant/workspace access checks, then query the requested workspace. Omitted scope preserves existing authenticated-workspace behavior unless the endpoint is explicitly facility aggregate.
-- **SSE scoping contract**: `/api/events` supports authorized product-line filtering for non-null `activeWorkspace` and authorized facility/tenant aggregation for null `activeWorkspace`, without leaking events outside the caller's tenant/access set.
-- **Filtered panels** (pass requested workspace scope when `activeWorkspace` set):
-  - `task-board-panel.tsx` — already has `projectFilter`; extend with `workspaceFilter`.
-  - `agent-squad-panel-phase3.tsx` — group by Facility → ProductLine → Department → Agent.
-  - `project-manager-modal.tsx` — list projects for `activeWorkspace` only.
-  - `chat-panel.tsx`, `chat-page-panel.tsx` — list chats from `activeWorkspace`.
-  - `skills-panel.tsx` — list skills from `activeWorkspace` + facility (default facility-wide).
-- **Aggregate panels** (no change — ignore `activeWorkspace`):
-  - `live-feed.tsx`, `notifications-panel.tsx`, `dashboard.tsx`, `system-monitor-panel.tsx`, `audit-trail-panel.tsx`.
-- **API endpoints**: accept optional `workspace_id` query param where relevant. Null defaults to aggregate.
+- **REST scoping contract**: Product Line requests send `workspace_id=<id>`; Facility requests send `workspace_scope=facility`; requests sending both return `400`; unauthorized workspace ids return `403`; omitted scope is allowed only for feature-flag-off legacy behavior.
+- **URL scoping contract**: mode-sensitive detail URLs carry `workspace_scope=facility` or `workspace_id=<id>`. URL scope is applied only after auth/workspace validation; invalid scope strips scoped entity params and resets to Facility; unscoped entity params are cleared if ownership cannot be proven.
+- **SSE scoping contract**: `/api/events` supports authorized Product Line filtering and authorized Facility aggregation. Workspace-scoped events must include `workspace_id`; selected Product Line clients drop missing/mismatched workspace events; Facility clients receive authorized tenant/facility events; global connection/system events are explicitly whitelisted; EventSource reconnects when scope changes.
+- **Mode-sensitive panels**:
+  - `task-board-panel.tsx` — uses `scopeKey`; clears stale selected task and incompatible project filters on switch.
+  - `agent-squad-panel-phase3.tsx` — group by Facility -> Product Line -> Department -> Agent and include global agents in selected Product Line views.
+  - `project-manager-modal.tsx` — lists projects for selected Product Line or Facility aggregate; incompatible `activeProject` is cleared unless revalidated.
+  - quality-review surfaces — scoped to the initiating task/workspace and protected against stale mutation completions.
+  - DB-backed chat message/conversation surfaces — scoped by Product Line or Facility aggregate.
+- **Facility/global surfaces**:
+  - `live-feed.tsx`, `notifications-panel.tsx`, `dashboard.tsx`, `system-monitor-panel.tsx`, and `audit-trail-panel.tsx` render Facility aggregate data, not stale authenticated-workspace-only data.
+  - `skills-panel.tsx` remains Facility/global. SPEC-002 adds no product-line skill ownership, assignment, permissioning, CRUD, or visibility filters.
+  - Local/gateway sessions and transcripts remain Facility/global. SPEC-002 adds no session-to-workspace transcript mapping.
+- **API route matrix**: tasks root/detail/comment/broadcast/branch routes, project root/detail/agent routes, agent root/detail/subroutes, quality-review routes, DB chat messages/conversations, Facility aggregate awareness routes, and `/api/events` must either accept explicit scope or authorize by resource id joined back to tenant/workspace.
 
 ### Files Touched (estimated)
 
@@ -362,24 +401,30 @@ Introduce the product-line switcher in the header, wire Zustand `activeWorkspace
 - `src/store/index.ts` (add `activeWorkspace` slice + `persist` middleware + `BroadcastChannel` listener; the live store path is `src/store/index.ts`, not `src/store/mission-control-store.ts`)
 - `src/components/panels/task-board-panel.tsx` (~20 lines modified)
 - `src/components/panels/agent-squad-panel-phase3.tsx` (~80 lines — hierarchical grouping logic)
-- `src/components/panels/project-manager-modal.tsx`, `chat-panel.tsx`, `chat-page-panel.tsx`, `skills-panel.tsx` (minor)
-- `src/app/api/tasks/route.ts`, `src/app/api/agents/route.ts`, `src/app/api/projects/route.ts` (accept `workspace_id` query param)
+- `src/components/panels/project-manager-modal.tsx`, chat message/conversation surfaces, and quality-review surfaces (mode-sensitive wiring)
+- `src/components/panels/skills-panel.tsx` (Facility/global boundary only; no product-line skill filtering)
+- `src/app/api/tasks/**`, `src/app/api/agents/**`, `src/app/api/projects/**`, `src/app/api/quality-review/**`, DB chat routes, Facility aggregate awareness routes, and `src/app/api/events/route.ts` (explicit scope or resource-id authorization)
 - `src/types/product-line.ts` (new)
 - `src/lib/feature-flags.ts` (new — see Feature Flag Resolution Policy section)
 
 ### Acceptance Criteria
 
 - [P1-AC1] With flag OFF, the existing Vitest + Playwright test suite (`pnpm test:all`) passes unchanged from the pre-Phase-1 baseline commit. "Zero regression" is defined as: 0 new test failures, 0 changed test counts, and 0 visible diffs in the existing Playwright snapshot suite (`tests/e2e/snapshots/*`).
-- [P1-AC2] With flag ON and `activeWorkspace = null`, the same `pnpm test:all` suite passes unchanged (facility-aggregate view is byte-equivalent to flag-OFF for existing tests).
-- [P1-AC3] The "Facility" dropdown entry corresponds to `activeWorkspace = null` (Facility aggregate view per P1-AC2), **not** the real `workspaces.slug='facility'` row. The real facility workspace is never selected directly through the switcher; it hosts `scope='global'` agents (Aegis, Security Guardian, OpenClaw) that surface across every product-line view. Agent squad and other filtered panels MUST render these globals alongside workspace-scoped agents regardless of `activeWorkspace`.
-- [P1-AC4] With flag ON and `activeWorkspace = product-line-a` (pre-seeded), filtered panels show only Product Line A data; aggregate panels show everything.
-- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) → Product Line A → {QA, Dev, ...} → {agents}.
-- [P1-AC6] Cross-tab state sync: a Playwright test that opens two browser contexts, sets `activeWorkspace` in context A, and observes the change reflected in context B within 1s passes. When `BroadcastChannel` is unavailable (older browser stub), the persisted value still propagates after a context-B reload.
-- [P1-AC7] `activeTenant` remains independent from `activeWorkspace`; switching product lines does not mutate tenant context.
-- [P1-AC8] Header no longer labels tenant context as "Workspace." Specifically, ripgrep over `src/components/layout/header-bar.tsx` finds zero string matches for `'workspace'` used as a tenant-context label; tenant context is labeled "Tenant" or shown without a label.
-- [P1-AC9] `/api/tasks`, `/api/agents`, `/api/projects`, and `/api/quality-review` return the authorized requested workspace when `activeWorkspace` is set. Vitest covers the request shape: `GET /api/tasks?workspace_id=2` returns only workspace 2's tasks for an authorized user; returns 403 for an unauthorized user.
-- [P1-AC10] `/api/events` returns authorized product-line-filtered events for a selected product line and authorized aggregate events in facility view. Vitest covers both branches with stubbed event sources.
-- [P1-AC11] `src/store/index.ts` exports the `activeWorkspace` slice wrapped with `persist` middleware (key `mc:active-workspace:v1`, storage `localStorage`); the slice subscribes to a `BroadcastChannel('mc:active-workspace')` and updates state on `message` events. Vitest unit-tests both serialization and broadcast handling with a JSDOM stub.
+- [P1-AC2] With flag ON and Facility scope selected, the same `pnpm test:all` suite passes unchanged for existing tests while new tests may assert explicit Facility aggregate semantics.
+- [P1-AC3] The switcher renders exactly one synthetic "Facility" option. Selecting it stores Facility scope (`activeWorkspace = null` compatibility state) and never selects the real `workspaces.slug='facility'` row.
+- [P1-AC4] With flag ON and a selected Product Line workspace, mode-sensitive panels show only that Product Line's authorized data plus allowed global agents; Facility/global surfaces remain Facility aggregate.
+- [P1-AC5] Agent squad panel renders hierarchical tree: Facility (globals) -> Product Line A -> {QA, Dev, ...} -> {agents}; duplicate global/local names do not merge stats and mutations use ids where ambiguity exists.
+- [P1-AC6] Cross-tab state sync: a Playwright test that opens two browser contexts, sets Product Line scope in context A, and observes the change reflected in context B within 1s passes. Messages include tenant/session guards and stale-version protection. When `BroadcastChannel` is unavailable, the persisted value still propagates after a context-B reload.
+- [P1-AC7] `activeTenant` remains independent from Product Line scope; switching Product Lines does not mutate tenant/facility context.
+- [P1-AC8] Header no longer labels tenant context as "Workspace." Specifically, ripgrep over `src/components/layout/header-bar.tsx` finds zero string matches for `'workspace'` used as a tenant-context label; tenant context is labeled "Tenant", "Facility", or shown without a label.
+- [P1-AC9] Mode-sensitive REST routes implement the explicit request contract: Product Line uses `workspace_id=<id>`, Facility uses `workspace_scope=facility`, both params return `400`, unauthorized workspace ids return `403`, and omitted scope is legacy-only with the feature flag OFF.
+- [P1-AC10] `/api/events` returns authorized Product Line-filtered events and authorized Facility aggregate events. Workspace-scoped events include `workspace_id`; selected clients drop missing/mismatched workspace events; global events without workspace scope are explicitly whitelisted.
+- [P1-AC11] `src/store/index.ts` exports Product Line scope persistence (key `mc:active-workspace:v1`, storage `localStorage`) and BroadcastChannel sync only for the new scope slice. Vitest unit-tests serialization, hydration validation, guarded broadcast handling, and fallback behavior.
+- [P1-AC12] Product terminology is consistent across PRD, roadmap, workflow, generated spec, and UI: Facility is the user-facing aggregate, tenant is the auth/data compatibility boundary, Product Line is workspace scope, and SPEC-002 does not introduce multi-facility tenant modeling.
+- [P1-AC13] Header switcher is responsive and accessible: visible at 320/375/390 px without displacing existing controls, truncates long names, provides loading/empty/error states, uses listbox semantics, and returns focus to the trigger after Escape, outside click, and selection.
+- [P1-AC14] All mode-sensitive fetch/cache keys include `scopeKey = tenantId + ":" + ("facility" | productLineId)`; scope transitions ignore stale in-flight responses and scoped mutation completions.
+- [P1-AC15] URL state is scope-owned: valid scoped URLs resolve after auth/workspace validation; invalid scopes strip scoped entity params and reset to Facility; entity params without provable scope ownership are cleared.
+- [P1-AC16] Deferred boundaries are enforced: SPEC-002 does not implement product-line skill ownership, skill filtering, session-to-workspace transcript mapping, or multi-facility tenant modeling; workflow/checklist/analyze gates fail if artifacts claim otherwise.
 
 ### Rollback
 
@@ -388,6 +433,45 @@ Flip `FEATURE_WORKSPACE_SWITCHER` to OFF. Switcher hidden. Zustand field ignored
 ### Estimated Work
 
 5–7 engineering days.
+
+---
+
+## Phase 1A — Spec Archive and Evidence Retention
+
+### Scope
+
+Add a process/tooling layer that prevents SpecKit artifacts and Playwright screenshots from growing without policy. SPEC-002A evaluates `stn1slv/spec-kit-archive` as the default post-merge archive command, defines which artifacts are durable versus temporary, and adds local/CI guards for committed screenshot evidence before SPEC-003 starts.
+
+### Upstream Impact
+
+`upstream-safe`. This is documentation, workflow, and CI hygiene that can be useful to upstream users without requiring Mission Control runtime behavior.
+
+### Deliverables
+
+- **Archive extension decision**: validate `spec-kit-archive` against the current SpecKit tooling and document whether Mission Control installs, vendors, forks, or rejects it. Any adoption must pin a tag or commit and preserve MIT license metadata.
+- **Archive command path**: provide a local and CI-safe way to dry-run archival against `specs/002-product-line-switcher`, producing an archival report with source paths, PR URL, CI run URL, merge commit, screenshot evidence, and conflicts.
+- **Artifact classes**: define source-of-truth spec artifacts, durable memory summaries, ephemeral CI artifacts, and permanent curated evidence exceptions.
+- **Screenshot/evidence manifest**: define how UI journey screenshots, hashes, CI artifact names, and PR links are recorded for future audits.
+- **CI/local guard**: fail on unbounded committed screenshots under `specs/**/screenshots` unless they are manifest-backed and below the approved count/size policy.
+- **Constitution/workflow updates**: require future specs to follow the archive/evidence policy and keep the existing Real UI Journey Quality Gate intact.
+
+### Acceptance Criteria
+
+- [P1A-AC1] `specs/002a-spec-archive-evidence/spec.md`, research, requirements checklist, and workflow are present and contain no unresolved clarification placeholders.
+- [P1A-AC2] The implementation records an evidence-backed adoption decision for `spec-kit-archive`, including repository URL, license, pinned version/commit, and local modifications if any.
+- [P1A-AC3] An archive dry-run against `specs/002-product-line-switcher` completes without deleting or moving source spec files and reports durable memory changes plus screenshot evidence.
+- [P1A-AC4] CI and a local command fail on an intentionally oversized or unmanifested committed screenshot fixture and name the offending path.
+- [P1A-AC5] CI and a local command pass for approved SPEC-002 evidence or for an artifact-bundle-only path.
+- [P1A-AC6] The constitution and workflow docs state that committed screenshots are exceptions, ephemeral CI artifacts require PR-accessible links during review, and durable memory must retain enough provenance for later audit.
+- [P1A-AC7] Cleanup of spec folders or screenshots is never performed silently by post-merge CI; any cleanup is proposed as an explicit reviewed change.
+
+### Rollback
+
+Disable the archive guard and extension hook. Source spec folders and existing evidence remain in place because SPEC-002A must not delete or move them automatically.
+
+### Estimated Work
+
+1–2 engineering days.
 
 ---
 
@@ -841,17 +925,18 @@ Disable Product Line B workspace (set `disabled_at`). Product Line A unaffected.
 ```
 Phase 0 (migrations)
     └─→ Phase 1 (switcher + shared feature-flag resolver)
-          ├─→ Phase 2 (Aegis refactor)
-          │     └─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
-          │           ├─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
-          │           ├─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
-          │           └─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
-          ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
-          └─→ Phase 8 (Product Line A pilot) ── depends on ALL of Phase 1–7
-             └─→ Phase 9 (Product Line B onboarding)
+          └─→ Phase 1A (spec archive + evidence retention)
+                ├─→ Phase 2 (Aegis refactor)
+                │     └─→ Phase 3 (pipeline engine) ── depends on Phase 2 for global Aegis scheduler hooks
+                │           ├─→ Phase 4 (ready_for_owner + two-step) ── depends on Phase 3 for produces_pr template field
+                │           ├─→ Phase 6 (disposition logging + artifact store) ── depends on Phase 3 for advanceTaskChain hook
+                │           └─→ Phase 7 (resource governance) ── depends on Phase 3 for scheduler chain hook
+                ├─→ Phase 5 (area labels) ── depends on Phase 1 for workspace scoping
+                └─→ Phase 8 (Product Line A pilot) ── depends on Phase 1A and ALL of Phase 1–7
+                   └─→ Phase 9 (Product Line B onboarding)
 ```
 
-Phase 0 MUST land first. Phase 1 MUST land before any later feature-flagged spec because it owns `resolveFlag()`. After Phase 1, Phase 2 and Phase 5 may proceed independently; Phase 3 waits for Phase 2 and gates 4, 6, and 7. Phase 8 gates 9.
+Phase 0 MUST land first. Phase 1 MUST land before any later feature-flagged spec because it owns `resolveFlag()`. Phase 1A MUST land before Phase 2 or Phase 5 begins so later specs inherit the archive/evidence policy. After Phase 1A, Phase 2 and Phase 5 may proceed independently; Phase 3 waits for Phase 2 and gates 4, 6, and 7. Phase 8 gates 9.
 
 Phase 3 also gates the repository documentation refresh for `docs/orchestration.md`; Phase 3 is not shipped until that documentation describes declarative task chains and current lifecycle/status terminology.
 
@@ -861,18 +946,33 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 |---|---|---|
 | 0 | 1.5 | 1.5 |
 | 1 | 6 | 7.5 |
-| 2 | 4.5 | 12 |
-| 3 | 8.5 | 20.5 |
-| 4 | 3.5 | 24 |
-| 5 | 3.5 | 27.5 |
-| 6 | 3 | 30.5 |
-| 7 | 5 | 35.5 |
-| 8 | 4.5 | 40 |
-| 9 | 2.5 | 42.5 |
+| 1A | 1.5 | 9 |
+| 2 | 4.5 | 13.5 |
+| 3 | 8.5 | 22 |
+| 4 | 3.5 | 25.5 |
+| 5 | 3.5 | 29 |
+| 6 | 3 | 32 |
+| 7 | 5 | 37 |
+| 8 | 4.5 | 41.5 |
+| 9 | 2.5 | 44 |
 
-~8–9 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1 (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6–7 weeks.
+~8.5–9.5 engineering weeks end-to-end for a single engineer working full-time. Multi-engineer parallelism after Phase 1A (Phase 2 + Phase 5, with Phase 3+ queued behind Phase 2) compresses to ~6.5–7.5 weeks.
 
-## Risk Register (linked to PRD §8)
+## V2 Readiness Backlog
+
+### V2-001: Tenant-Aware Gateway Isolation
+
+- **Status:** Pending (V2 backlog; excluded from the SpecKit-Pro Spec Index until promoted to a future SPEC)
+- **Priority:** P2 after Product Line B onboarding
+- **Depends On:** SPEC-002, SPEC-008, SPEC-010
+- **Terminology guardrail:** Tenant gateway isolation is keyed to tenant context (`tenant_id` / facility-account boundary). It is not keyed to the seeded `workspaces.slug='facility'` row and not keyed to the null "Facility" aggregate switcher view (`activeWorkspace = null`).
+- **Scope:** Clean current global gateway coupling so a future multi-facility deployment can run multiple tenant gateways from one Mission Control instance. Tenant provisioning already carries `openclaw_home` and `gateway_port`; `owner_gateway` is persisted owner/provisioning metadata today, not a runtime gateway endpoint binding. Runtime behavior is mixed: some startup/backend paths still rely on global `gateways.is_primary` fallback or process-level `OPENCLAW_GATEWAY_*` / `config.gatewayHost` / `config.gatewayPort` defaults, while selected-gateway connect and some health paths can use gateway rows. V2 should add tenant-aware gateway associations, runtime resolution, health probes, config paths, and compatibility fallbacks.
+- **Acceptance criteria source:** PRD FR-A5, SC-15, and R12.
+- **Acceptance checks:** A future V2 spec is not complete until gateway registry/resolution has an explicit tenant context, two tenants can resolve different gateway ports/hosts without data leakage, backend RPC/WS/health paths use the tenant-aware resolver or a documented compatibility fallback, and tests cover selected-gateway connect plus process-global fallback behavior.
+- **Definition of done:** Existing global primary/process-env behavior remains available as a compatibility path for single-tenant installs, but new or touched gateway-facing code does not directly add `OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, or `gateways.is_primary` assumptions outside the approved resolver/adapter surface.
+- **Non-goal for v1:** SPEC-002 must not implement tenant-routed gateway selection. It preserves the boundary by keeping `activeTenant` separate from `activeWorkspace` and avoiding new product-line behavior that depends on tenant-scoped gateway state.
+
+## Risk Register (linked to PRD §9)
 
 | # | Phase Impacted | Mitigation Owner |
 |---|---|---|
@@ -885,6 +985,9 @@ Phase 3 also gates the repository documentation refresh for `docs/orchestration.
 | R7 Disposition/artifact store growth | Phase 6 | Quotas, retention, artifact admin maintenance, and revisit partitioning/storage tiering at scale |
 | R8 Feature-flag sprawl | All | Flags default OFF; document in settings-panel |
 | R9 Budget/capacity policy misconfiguration | Phase 7 | Conservative defaults, dry-run mode, audit events, and explicit operator override path |
+| R10 Additive schema changes mistaken for upstream-safe changes | All schema phases | D13 compatibility labeling; roadmap marks schema/state divergence before implementation |
+| R11 OpenClaw health electricity integration leaks OpenClaw-node assumptions upstream | Phase 7 | Fork-only optional adapter, absent-safe runtime checks, and no v1 schema migration for health costs |
+| R12 Global gateway coupling blocks clean multi-facility v2 | V2-001 | Preserve `openclaw_home`/`gateway_port` provisioning data and `owner_gateway` metadata in v1; avoid new process-global gateway assumptions; V2-001 owns tenant-aware gateway registry/resolution before multi-facility operation |
 
 ## Rollback Strategy Summary
 
@@ -906,6 +1009,7 @@ No destructive rollback required at any phase.
 - [ ] Does this PR modify any upstream-owned file (`src/app/layout.tsx`, `src/lib/auth.ts`, etc.) in a way that would create merge conflicts? If yes, isolate the change to a new file or extend via hooks.
 - [ ] Does this PR add new migrations? If yes, they MUST be additive.
 - [ ] Does this PR change public API shapes (existing endpoints)? If yes, version the endpoint or preserve the old shape.
+- [ ] Does this PR add or touch gateway-facing code (`OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, `gateways.is_primary`, or gateway health/connect/control routes)? If yes, STOP unless the diff either preserves existing behavior without adding new global gateway assumptions or routes new resolution through a named compatibility helper/adapter with a V2-001 reference.
 - [ ] Feature flag present?
 
 Every phase PR passes through this checklist before merge.

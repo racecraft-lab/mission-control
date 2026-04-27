@@ -3,6 +3,7 @@ import { getDatabase, db_helpers } from '@/lib/db'
 import { requireRole } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { callOpenClawGateway } from '@/lib/openclaw-gateway'
+import { resolveWorkspaceScopeFromRequest, workspaceScopeError, workspaceScopePredicate } from '@/lib/workspaces'
 
 export async function POST(
   request: NextRequest,
@@ -15,7 +16,6 @@ export async function POST(
     const resolvedParams = await params
     const taskId = parseInt(resolvedParams.id)
     const body = await request.json()
-    const workspaceId = auth.user.workspace_id ?? 1;
     const author = auth.user.display_name || auth.user.username || 'system'
     const message = (body.message || '').trim()
 
@@ -27,12 +27,15 @@ export async function POST(
     }
 
     const db = getDatabase()
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { body })
+    const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const task = db
-      .prepare('SELECT * FROM tasks WHERE id = ? AND workspace_id = ?')
-      .get(taskId, workspaceId) as any
+      .prepare(`SELECT * FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)
+      .get(taskId, ...workspaceFilter.params) as any
     if (!task) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
+    const workspaceId = task.workspace_id as number
 
     const subscribers = new Set(db_helpers.getTaskSubscribers(taskId, workspaceId))
     subscribers.delete(author)
@@ -88,6 +91,8 @@ export async function POST(
 
     return NextResponse.json({ sent, skipped })
   } catch (error) {
+    const scopeError = workspaceScopeError(error)
+    if (scopeError) return NextResponse.json({ error: scopeError.error }, { status: scopeError.status })
     logger.error({ err: error }, 'POST /api/tasks/[id]/broadcast error')
     return NextResponse.json({ error: 'Failed to broadcast message' }, { status: 500 })
   }

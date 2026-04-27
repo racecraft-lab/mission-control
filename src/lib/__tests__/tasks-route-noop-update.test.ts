@@ -35,9 +35,19 @@ const currentTask = {
   created_at: 1000,
   updated_at: 1000,
 }
+const workspace = {
+  id: 1,
+  slug: 'default',
+  name: 'Default',
+  tenant_id: 1,
+  feature_flags: null,
+  created_at: 1,
+  updated_at: 1,
+}
 
 const getMock = vi.fn((...args: any[]) => {
   if (args[0] === 7 && args[1] === 1) return currentTask
+  if (args[0] === 1 && args[1] === 1) return workspace
   return undefined
 })
 
@@ -58,6 +68,9 @@ describe('PUT /api/tasks/[id] no-op updates', () => {
     vi.clearAllMocks()
 
     prepareMock.mockImplementation((sql: string) => {
+      if (sql.includes('FROM workspaces')) {
+        return { get: getMock }
+      }
       if (sql.includes('SELECT * FROM tasks WHERE id = ? AND workspace_id = ?')) {
         return { get: getMock }
       }

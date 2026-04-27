@@ -1,6 +1,6 @@
 # Mission Control Departmental Architecture PRD
 
-> For SpecKit-Pro ingestion. Execute in phases (schema → switcher → Aegis refactor → pipeline engine → state extension → labels → logging → governance → pilot), with **zero regression for existing single-workspace deployments** as the primary acceptance criterion and **explicit upstream-impact disclosure** for every phase.
+> For SpecKit-Pro ingestion. Execute in phases (schema → switcher → spec archive/evidence policy → Aegis refactor → pipeline engine → state extension → labels → logging → governance → pilot), with **zero regression for existing single-workspace deployments** as the primary acceptance criterion and **explicit upstream-impact disclosure** for every phase.
 
 ## SpecKit-Pro Usage
 
@@ -83,7 +83,7 @@ Result: the fork supports running one product (Product Line A), one department, 
 
 - **[SC-1] Zero-regression** — every existing single-workspace deployment runs unchanged after applying all migrations. `workspace_id=1` fallback preserved. All new behavior feature-flag-guarded or null-default.
 - **[SC-2] Pilot end-to-end** — one Product Line A GitHub issue (target: issue #110 per the existing smoke plan) flows **triage → plan → dev → review → Aegis → ready_for_owner → linked PR merged (done)** without operator intervention beyond the final PR merge click.
-- **[SC-3] Switcher fidelity** — product-line switcher filters `task-board-panel`, `agent-squad-panel`, `chat-panel`, `skills-panel`, `project-manager-modal` to `activeWorkspace`; awareness panels (live feed, notifications, dashboard, system monitor, audit trail) remain aggregate.
+- **[SC-3] Switcher fidelity** — product-line switcher exposes exactly two operating modes: **Facility** aggregate mode and selected **Product Line** mode. Mode-sensitive panels filter to the selected Product Line, while Facility mode renders authorized aggregate data across the authenticated tenant/facility boundary.
 - **[SC-4] Global Aegis** — Aegis resolves via `scope='global'` lookup; `aegisAgentByWorkspace` map is either removed or retained only as a backward-compat shim for legacy workspace-scoped Aegis records.
 - **[SC-5] Disposition telemetry** — morning-briefing metric "Last 7d: N triaged, X ACTIONABLE, Y OBE, Z DUPLICATE, W NEEDS_SPECIALIST" queryable from `task_dispositions`.
 - **[SC-6] Second product line onboarding** — Product Line B platform onboarded in < 1 operator-hour given seed templates (Phase 9 validation).
@@ -94,7 +94,9 @@ Result: the fork supports running one product (Product Line A), one department, 
 - **[SC-11] Upstream impact transparency** — every roadmap phase and every major feature is labeled `upstream-safe`, `upstream-divergent`, or `fork-only optional`.
 - **[SC-12] OpenClaw health absence safety** — installs without OpenClaw health cron artifacts continue to function with no config errors, API breakage, or UI regressions.
 - **[SC-13] Successor sync parity** — every successor task created by `advanceTaskChain` triggers the same outbound side effects as standard task creation, including GitHub issue creation/update and GNAP push where configured.
-- **[SC-14] Product-line request scoping** — filtered REST endpoints and `/api/events` support an authorized requested workspace/product-line scope; facility view supports authorized aggregate events across the tenant's workspaces.
+- **[SC-14] Product-line request scoping** — mode-sensitive REST endpoints and `/api/events` support explicit authorized scope. Product Line requests send `workspace_id=<id>`; Facility aggregate requests send `workspace_scope=facility`; requests sending both return `400`; unauthorized workspace ids return `403`; omitted scope is reserved for feature-flag-off legacy behavior only.
+- **[SC-15] V2 gateway readiness** — v1 PRs that touch gateway-facing code do not add new direct assumptions that one process-global OpenClaw gateway or one global `gateways.is_primary` row serves all tenants. Any unavoidable compatibility path is isolated behind a named helper or existing gateway adapter and references V2-001 in the roadmap.
+- **[SC-16] Facility/Product Line transition lifecycle** — switching between Facility and Product Line validates persisted scope, keeps `activeTenant` unchanged, uses scope-keyed caches/requests/events, clears stale scoped selections and URL params, ignores stale in-flight responses, synchronizes other tabs safely, and never shows stale cross-product UI after the transition.
 
 ### Non-goals (v1)
 
@@ -106,6 +108,9 @@ Result: the fork supports running one product (Product Line A), one department, 
 - Replacing the web UI with a CLI (out of scope; covered by the separate 2026-03-20 PRD).
 - Staged workflows for non-GitHub workflow families (Release Readiness, etc.) — deferred to phase 2+.
 - Silently normalizing OpenClaw-only assumptions into upstream Mission Control core behavior.
+- Multi-facility tenant modeling. v1 treats the authenticated tenant as the Facility aggregate boundary; it does not introduce a tenant containing multiple independent facilities.
+- Product-line skill ownership, assignment, permissioning, CRUD, or visibility filters. Skills remain Facility/global in SPEC-002.
+- Session-to-workspace transcript mapping. Local/gateway sessions and transcripts remain Facility/global unless a later spec adds explicit ownership.
 
 ## 3) Compatibility Snapshot
 
@@ -156,6 +161,7 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1. The live schema
 - **FR-A2:** `ProductLine` TypeScript type defined as alias/extension of existing `Workspace` type. Exported from `@/types/product-line` and re-exported where convenient.
 - **FR-A3:** A dedicated `facility` workspace (slug = `'facility'`) exists for hosting `scope='global'` agents. Seeded on migration using the live `workspaces.name` column; idempotent.
 - **FR-A4:** `projects.github_repo` is nullable and not uniqueness-constrained across workspace (already true post-migration 028). Non-code departments (Marketing, Customer Service, Finance) may set `github_repo = NULL` and skip GitHub sync participation.
+- **FR-A5:** V2 tenant gateway readiness is preserved. For this requirement, `tenant` is the facility/account boundary; it is NOT the seeded `workspaces.slug='facility'` row and NOT the "Facility" switcher entry (`activeWorkspace = null`). A tenant may eventually own an independent OpenClaw home and gateway port; today's `owner_gateway` is persisted owner/provisioning metadata, not a runtime endpoint binding. v1 does not need to operate multiple live tenant gateways concurrently, but v1 changes MUST NOT deepen the current global-gateway coupling. Gateway-facing code should preserve a future path where gateway registry rows, runtime gateway resolution, health probes, and OpenClaw config paths can be resolved from tenant context instead of one process-global primary gateway.
 
 ### B. Agent scope (D3, D4a)
 
@@ -167,24 +173,28 @@ Agent filesystem "Sandbox" terminology is UI/config-level in v1. The live schema
 
 ### C. UI — product-line switcher (D1, D4b)
 
-- **FR-C1:** New component `<WorkspaceSwitcher>` in `header-bar.tsx`. Renders a dropdown listing all workspaces the current user has access to, plus a "Facility" (null) entry. This is separate from `activeTenant`.
-- **FR-C2:** Zustand store gains `activeWorkspace: Workspace | null` with persistence across sessions.
-- **FR-C2a:** REST request model: filtered endpoints accept an optional requested `workspace_id`/product-line scope, authorize it with tenant/workspace access checks, and then query that workspace. Omitted scope means existing authenticated-workspace behavior unless the endpoint is explicitly documented as facility aggregate.
-- **FR-C2b:** SSE request model: `/api/events` supports authorized product-line filtering for `activeWorkspace` and authorized tenant/facility aggregation for null `activeWorkspace`, consistent with D4b. Events must never leak workspaces outside the authenticated user's tenant/access set.
-- **FR-C3:** **Filtered panels** (pass the authorized requested workspace scope when `activeWorkspace` is set):
+- **FR-C0:** SPEC-002 terminology is fixed: **Facility** is the canonical user-facing aggregate mode; **tenant** is the current authenticated compatibility/data boundary for that Facility; **Product Line** is the selected workspace operating scope. `activeTenant` remains tenant/facility context and MUST NOT be reused as the Product Line switcher. `activeWorkspace = null` is only an internal compatibility representation of Facility after authenticated scope initialization; product logic should treat scope as discriminated (`facility` vs `productLine`).
+- **FR-C1:** New component `<WorkspaceSwitcher>` in `header-bar.tsx`. It renders exactly one synthetic "Facility" aggregate option plus authorized non-Facility Product Line workspaces from `GET /api/workspaces`. The synthetic Facility option is not the real `workspaces.slug='facility'` row; if a real workspace is named or slugged `facility`, it MUST NOT create a duplicate aggregate option. The switcher is separate from `activeTenant`.
+- **FR-C1a:** Header behavior uses the existing design system. Desktop places the switcher in the left header context cluster near tenant/facility context. Mobile keeps a compact switcher visible at 320, 375, and 390 px inside the fixed `h-14` header; long Product Line names truncate and MUST NOT push out search, notifications, theme, or account controls. No icon library, card-like wrapper, or explanatory header copy is introduced. Terse accessible loading/empty/error rows are allowed inside the popover.
+- **FR-C1b:** The switcher popover uses listbox semantics: stable accessible name, `aria-controls`, `aria-haspopup`, `aria-expanded`, option roles, `aria-selected`, roving focus or `aria-activedescendant`, Escape/outside-click close, Arrow/Home/End navigation, Enter/Space selection, selected state, and focus return to the trigger after close/selection.
+- **FR-C2:** Zustand store gains a transition API for Product Line scope. The public transition is `setActiveProductLine(productLine | null, options)`, backed by `activeWorkspace: Workspace | null` persistence for compatibility. It validates persisted scope after `/api/workspaces`, keeps `activeTenant` independent, and uses a `scopeKey = tenantId + ":" + ("facility" | productLineId)` for all mode-sensitive caches and requests.
+- **FR-C2a:** Scope transitions clear incompatible `activeProject`, selected task/agent/project/conversation state, scoped modals, scoped filters, and scoped drafts unless those drafts/filters are explicitly stored per `scopeKey`. In-flight requests and optimistic mutation completions carry the initiating `scopeKey` and are ignored if stale. Mode-sensitive cached data MUST NOT render until the persisted scope has been validated or cleared.
+- **FR-C2b:** Cross-tab sync broadcasts `{ tenantId, userId/sessionId, productLineId|null, version, originTabId }`. Receivers ignore mismatched tenant/session, self echoes, and stale versions; accepted remote changes run the same transition path and do not rebroadcast.
+- **FR-C2c:** URL state is scope-owned. Mode-sensitive detail URLs carry `workspace_scope=facility` or `workspace_id=<id>`. URL scope wins only after auth/workspace validation. Invalid scope strips scoped entity params and resets to Facility. Entity params without provable scope ownership are cleared instead of being resolved against stale persisted scope.
+- **FR-C3:** REST request model: Product Line requests send `workspace_id=<id>`; Facility aggregate requests send `workspace_scope=facility`; requests sending both return `400`; unauthorized workspace ids return `403`; omitted scope is allowed only for feature-flag-off legacy behavior. Mode-sensitive route implementations must either accept the selected scope or authorize by resource id joined back to tenant/workspace before use.
+- **FR-C3a:** SPEC-002 route matrix includes every route called by mode-sensitive panels: task root/detail/comment/broadcast/branch routes, project root/detail/agent routes, agent root/detail/subroutes, quality-review routes, DB-backed chat messages/conversations, activities, notifications, dashboard/status/audit/live-feed routes, and `/api/events`.
+- **FR-C3b:** SSE request model: `/api/events` supports authorized Product Line filtering and authorized Facility aggregation. Workspace-scoped events MUST include `workspace_id`; Product Line clients drop missing or mismatched workspace events; Facility clients receive authorized tenant/facility events; only explicitly whitelisted connection/system events may omit workspace scope. EventSource reconnects when Product Line scope changes.
+- **FR-C4:** **Mode-sensitive panels** honor the active Facility/Product Line scope and use `scopeKey` in request/cache behavior:
   - `task-board-panel.tsx`
   - `agent-squad-panel-phase3.tsx`
   - `project-manager-modal.tsx`
-  - `chat-panel.tsx`, `chat-page-panel.tsx`
-  - `skills-panel.tsx`
-- **FR-C4:** **Aggregate panels** (ignore `activeWorkspace`):
-  - `live-feed.tsx`
-  - `notifications-panel.tsx`
-  - `dashboard.tsx`
-  - `system-monitor-panel.tsx`
-  - `audit-trail-panel.tsx`
-- **FR-C5:** Default `activeWorkspace = null` ⇒ every panel aggregate (existing single-workspace UX). Zero-regression guarantee.
-- **FR-C6:** Agent squad panel adds hierarchical grouping: **Facility (globals) › ProductLine › Department › Agent**.
+  - quality-review UI surfaces
+  - DB-backed chat message/conversation surfaces
+- **FR-C5:** **Facility/global panels or surfaces** do not become Product Line-owned in SPEC-002:
+  - `live-feed.tsx`, `notifications-panel.tsx`, `dashboard.tsx`, `system-monitor-panel.tsx`, and `audit-trail-panel.tsx` render Facility aggregate data, not stale authenticated-workspace-only data.
+  - `skills-panel.tsx` remains Facility/global. SPEC-002 adds no product-line skill ownership, assignment, permissioning, CRUD, or visibility filters.
+  - Local/gateway sessions and transcripts remain Facility/global. SPEC-002 adds no session-to-workspace transcript mapping.
+- **FR-C6:** Agent squad panel adds hierarchical grouping: **Facility (globals) › Product Line › Department › Agent**. Selected Product Line views include `scope='global'` agents plus local Product Line agents. Duplicate global/local display names require id-based mutation semantics and must not merge task stats across Product Lines.
 
 ### D. Task pipeline engine (D5)
 
@@ -484,6 +494,7 @@ CREATE INDEX idx_resource_policy_events_task
 | R9 | ChatGPT Pro / subscribed-provider cost reads as `$0`, hiding runaway usage | D12 separates estimated marginal USD from token/request/session/WIP budgets. Raw usage budgets still enforce even when dollar cost is zero. |
 | R10 | "Additive" schema changes are mistaken for upstream-safe changes | D13 forces explicit compatibility labeling; roadmap must mark schema/state divergence as fork pressure before implementation. |
 | R11 | OpenClaw health electricity integration leaks OpenClaw-node-specific assumptions into upstream installs | Keep it fork-only optional, runtime-adapter-based, absent-safe, and behind its own flag with no schema migration in v1. |
+| R12 | Global gateway coupling blocks clean multi-facility v2 | Treat `openclaw_home` and `gateway_port` as tenant provisioning data, and `owner_gateway` as persisted future ownership metadata rather than a runtime endpoint/FK. v1 must avoid new assumptions that one `gateways.is_primary` row or process-global `OPENCLAW_GATEWAY_*` config is the only runtime source. A future v2 spec owns tenant-aware gateway registry, resolution, health checks, and config path routing before multiple facilities run concurrently. |
 
 ## 10) Open Questions (deferred)
 
@@ -498,7 +509,8 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 | Phase | Scope | Status | Ship-safe? | Compatibility class |
 |---|---|---|---|---|
 | 0 | Foundation migrations (M53–M61) | Complete | Yes — runtime-safe | `upstream-divergent` |
-| 1 | Workspace switcher + `activeWorkspace` scoping | Pending | Yes — flag-off default | `upstream-safe` |
+| 1 | Workspace switcher + `activeWorkspace` scoping | Implementation complete; PR pending | Yes — flag-off default | `upstream-safe` |
+| 1A | Spec archive + evidence retention | Pending | Yes — process/tooling only | `upstream-safe` |
 | 2 | Aegis refactor (facility singleton) | Pending | Yes — shim preserves legacy | `upstream-divergent` |
 | 3 | Task-chain engine + declarative routing over `workflow_templates` | Pending | Yes — null-default fields | `upstream-divergent` |
 | 4 | `ready_for_owner` state + two-step terminal | Pending | Yes — per-template opt-in | `upstream-divergent` |
@@ -508,7 +520,13 @@ Detailed phasing in `docs/ai/rc-factory-technical-roadmap.md`. Summary:
 | 8 | Product Line A pilot (issue #110, then #111) | Pending | Gated behind pilot feature flag | Fork rollout only |
 | 9 | Second product line onboarding (Product Line B) | Pending | Post-pilot | Fork rollout only |
 
+**V2 readiness item:** Tenant-aware gateway isolation is deliberately deferred from v1 implementation. Before hosting multiple live tenant/facility accounts in one Mission Control instance, add a dedicated v2 spec to give gateway registry, runtime resolution, health checks, and OpenClaw config paths an explicit tenant context, with compatibility fallbacks for the current process-global primary gateway behavior.
+
 **Phase 0 completion note:** SPEC-001 is complete on PR #15 after HAL UAT acceptance on 2026-04-26. Acceptance evidence: M53-M61 migration markers present, `PRAGMA quick_check` OK, `workspaces.slug='facility'` seeded, Aegis/HAL/Security Guardian backfilled to `scope='global'`, and operator UAT found no blocking regressions in the core app flows.
+
+**Phase 1 implementation note:** SPEC-002 is implementation-complete and G7-verified on branch `002-product-line-switcher` as of 2026-04-26. Evidence: all 50 generated tasks checked, `pnpm typecheck`, `pnpm lint`, `pnpm test` (106 files / 1035 tests), `pnpm build`, and `pnpm test:e2e` (526 tests) passed; roadmap status remains PR/merge-gated.
+
+**Phase 1A planning note:** SPEC-002A is inserted before SPEC-003 to define spec artifact archival, Playwright screenshot retention, PR evidence links, and CI/local guards. It evaluates `stn1slv/spec-kit-archive` as the default post-merge archive mechanism and blocks later feature specs until the retention policy is explicit.
 
 ### Autopilot Caveats (per spec)
 

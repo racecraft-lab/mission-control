@@ -2194,5 +2194,15 @@
     "restarting": "Restarting...",
     "diagnosing": "Diagnosing...",
     "notInstalled": "Not installed"
+  },
+  "workspaceSwitcher": {
+    "facility": "Facility",
+    "productLine": "Product Line",
+    "loading": "Loading scopes...",
+    "empty": "No Product Lines available",
+    "loadError": "Product Line list failed to load.",
+    "unauthorizedSelection": "Selected Product Line is no longer authorized.",
+    "triggerAria": "Change Facility or Product Line scope",
+    "listboxAria": "Facility and Product Line scopes"
   }
 }
