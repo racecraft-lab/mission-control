@@ -4,8 +4,9 @@ const responsiveHtml = `
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; }
-    header { width: 100vw; height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 12px; overflow: hidden; border-bottom: 1px solid #333; }
-    #trigger { height: 32px; min-width: 0; max-width: min(11rem, calc(100vw - 24px)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    header { width: 100vw; height: 56px; display: flex; align-items: center; gap: 4px; padding: 0 8px; overflow: hidden; border-bottom: 1px solid #333; }
+    #trigger { flex: 1 1 auto; height: 32px; min-width: 64px; max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .control { flex: 0 0 24px; width: 24px; height: 24px; min-width: 24px; }
     #popup { position: absolute; top: 40px; left: 12px; width: min(18rem, calc(100vw - 1rem)); border: 1px solid #333; }
     [role="option"] { width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
@@ -13,6 +14,11 @@ const responsiveHtml = `
     <button id="trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Change Facility or Product Line scope" title="Facility: Facility">
       <span>Facility</span><span> / </span><span>Assembly Product Line With Long Label</span><span aria-hidden>v</span>
     </button>
+    <button class="control" type="button" aria-label="Search">S</button>
+    <button class="control" type="button" aria-label="Notifications">N</button>
+    <button class="control" type="button" aria-label="Language">L</button>
+    <button class="control" type="button" aria-label="Theme">T</button>
+    <button class="control" type="button" aria-label="Account">A</button>
   </header>
   <div id="popup" hidden>
     <div role="listbox" aria-label="Facility and Product Line scopes">
@@ -42,6 +48,13 @@ test.describe('Workspace switcher responsive layout', () => {
       const triggerBox = await trigger.boundingBox()
       expect(triggerBox).not.toBeNull()
       expect((triggerBox?.x ?? 0) + (triggerBox?.width ?? 0)).toBeLessThanOrEqual(width)
+      for (const label of ['Search', 'Notifications', 'Language', 'Theme', 'Account']) {
+        const control = page.getByRole('button', { name: label })
+        await expect(control).toBeVisible()
+        const controlBox = await control.boundingBox()
+        expect(controlBox).not.toBeNull()
+        expect((controlBox?.x ?? 0) + (controlBox?.width ?? 0)).toBeLessThanOrEqual(width)
+      }
 
       await trigger.click()
       const listbox = page.getByRole('listbox', { name: /facility and product line scopes/i })
