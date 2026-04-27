@@ -70,7 +70,7 @@ through the API.
 ## Screenshot Review and Defect Gate
 
 1. Confirm `tests/product-line-switcher-ui.spec.ts` attaches screenshots for Facility task-board state, scope menu options, selected Product Line task-board state, Facility aggregate return, keyboard listbox focus, 320/375/390 px mobile menus, and cross-tab Product Line sync.
-2. Review the screenshots from local `test-results/` or the GitHub Actions `spec-002-ui-e2e-artifacts` artifact before updating the PR branch.
+2. Review the screenshots from local `test-results/`, the committed review copy in `specs/002-product-line-switcher/screenshots/`, or the GitHub Actions `spec-002-ui-e2e-artifacts` artifact before updating the PR branch.
 3. If e2e output fails or screenshots show a user-visible defect, clipped or overlapping controls, wrong seeded data, inaccessible controls, or a broken Product Line journey, remediate the defect and rerun the relevant e2e command before pushing.
 4. Do not update or mark the PR ready with known UI user journey bugs.
 
@@ -131,7 +131,7 @@ Recorded on 2026-04-26 and updated on 2026-04-27 from worktree `.worktrees/002-p
 - `pnpm test:e2e` passed after remediation: 526 tests.
 - `pnpm test:e2e:spec-002` passed 10 focused SPEC-002 tests with screenshot capture enabled.
 - `pnpm test:e2e:docker` passed against the production Docker build: 1 clean flag-off regression test and 9 seeded flag-on Product Line tests.
-- Screenshot artifacts were generated under `test-results/spec-002-screenshots/` and reviewed after initial remediation; no known visible UI user journey defects remain.
+- Screenshot artifacts were generated under `test-results/spec-002-screenshots/`, copied to `specs/002-product-line-switcher/screenshots/` for PR-description review, and reviewed after initial remediation; no known visible UI user journey defects remain.
 - `rg -n 'process\.env\.FEATURE_[A-Z0-9_]+' src --glob '!src/lib/feature-flags.ts'` returned no matches.
 
 Traceability notes:
