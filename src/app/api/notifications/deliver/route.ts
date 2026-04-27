@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const db = getDatabase();
     const body = await request.json();
-    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user);
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { body });
     const workspaceFilter = workspaceScopePredicate(acceptedScope, 'n.workspace_id');
     const batchWorkspaceId = acceptedScope.workspaceId ?? acceptedScope.workspaceIds[0] ?? 1;
     const {

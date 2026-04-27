@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMissionControl, type CurrentUser, type Project, type Task } from '@/store'
 import { appendScopeToPath, createFacilityScope, createProductLineScope, type ProductLine } from '@/types/product-line'
 
@@ -86,6 +86,10 @@ describe('Product Line cache and URL ownership', () => {
     })
   })
 
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('owns request URLs by scopeKey-compatible query parameters', () => {
     const facility = createFacilityScope(7, 1)
     const scoped = createProductLineScope(productLine, 2)
@@ -93,6 +97,25 @@ describe('Product Line cache and URL ownership', () => {
     expect(appendScopeToPath('/api/tasks?limit=20&workspace_id=99', facility)).toBe('/api/tasks?limit=20&workspace_scope=facility')
     expect(appendScopeToPath('/api/tasks?limit=20&workspace_scope=facility', scoped)).toBe('/api/tasks?limit=20&workspace_id=42')
     expect(appendScopeToPath('/api/tasks?limit=20', null)).toBe('/api/tasks?limit=20')
+  })
+
+  it('fetches projects through the active Product Line scope', async () => {
+    const scoped = createProductLineScope(productLine, 2)
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ projects: [project] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    useMissionControl.setState({
+      activeProductLineScope: scoped,
+      scopeKey: scoped.scopeKey,
+      projects: [],
+    })
+
+    await useMissionControl.getState().fetchProjects()
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects?workspace_id=42', { cache: 'no-store' })
+    expect(useMissionControl.getState().projects).toEqual([project])
   })
 
   it('resets unowned entity state and scoped cache state when the scope changes', () => {

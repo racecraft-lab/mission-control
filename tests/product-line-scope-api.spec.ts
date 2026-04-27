@@ -1,7 +1,17 @@
 import { test, expect } from '@playwright/test'
-import { API_KEY_HEADER } from './helpers'
+import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
 
 test.describe('Product Line scope API contract', () => {
+  let restoreWorkspaceSwitcherFlag: () => void
+
+  test.beforeAll(() => {
+    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  })
+
+  test.afterAll(() => {
+    restoreWorkspaceSwitcherFlag?.()
+  })
+
   test('task route accepts Facility scope and rejects conflicting scope carriers', async ({ request }) => {
     const facilityRes = await request.get('/api/tasks?workspace_scope=facility', { headers: API_KEY_HEADER })
     expect(facilityRes.status()).toBe(200)

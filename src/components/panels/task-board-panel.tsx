@@ -447,6 +447,10 @@ export function TaskBoardPanel() {
 
   // Fetch tasks, agents, and projects
   const fetchData = useCallback(async () => {
+    const requestScopeKey = activeProductLineScope?.scopeKey ?? 'legacy'
+    const isCurrentScope = () =>
+      (useMissionControl.getState().activeProductLineScope?.scopeKey ?? 'legacy') === requestScopeKey
+
     try {
       setError(null)
 
@@ -476,6 +480,8 @@ export function TaskBoardPanel() {
       const tasksList = tasksData.tasks || []
       const taskIds = tasksList.map((task: Task) => task.id)
 
+      if (!isCurrentScope()) return
+
       // Render primary board data first; hydrate Aegis approvals in background.
       storeSetTasks(tasksList)
       setAgents(agentsData.agents || [])
@@ -485,6 +491,7 @@ export function TaskBoardPanel() {
         fetch(appendScopeToPath(`/api/quality-review?taskIds=${taskIds.join(',')}`, activeProductLineScope))
           .then((reviewResponse) => reviewResponse.ok ? reviewResponse.json() : null)
           .then((reviewData) => {
+            if (!isCurrentScope()) return
             const latest = reviewData?.latest || {}
             const newAegisMap: Record<number, boolean> = Object.fromEntries(
               Object.entries(latest).map(([id, row]: [string, any]) => [
@@ -495,15 +502,20 @@ export function TaskBoardPanel() {
             setAegisMap(newAegisMap)
           })
           .catch(() => {
+            if (!isCurrentScope()) return
             setAegisMap({})
           })
       } else {
         setAegisMap({})
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      if (isCurrentScope()) {
+        setError(err instanceof Error ? err.message : 'An error occurred')
+      }
     } finally {
-      setLoading(false)
+      if (isCurrentScope()) {
+        setLoading(false)
+      }
     }
   }, [activeProductLineScope, projectFilter, storeSetTasks])
 

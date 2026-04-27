@@ -387,18 +387,24 @@ export async function PUT(request: NextRequest) {
     }
     const workspaceId = acceptedScope.workspaceId;
     const body = await request.json();
+    const hasAgentId = body.id !== undefined && body.id !== null && body.id !== '';
 
     // Handle single agent update or bulk updates
-    if (body.name) {
+    if (hasAgentId || body.name) {
       // Single agent update
-      const { name, status, last_activity, config, session_key, soul_content, role } = body;
+      const { id, name, status, last_activity, config, session_key, soul_content, role } = body;
+      const agentId = Number(id);
+      if (hasAgentId && (!Number.isSafeInteger(agentId) || agentId <= 0)) {
+        return NextResponse.json({ error: 'Invalid agent id' }, { status: 400 });
+      }
       
       const agent = db
-        .prepare('SELECT * FROM agents WHERE name = ? AND workspace_id = ?')
-        .get(name, workspaceId) as Agent;
+        .prepare(hasAgentId ? 'SELECT * FROM agents WHERE id = ? AND workspace_id = ?' : 'SELECT * FROM agents WHERE name = ? AND workspace_id = ?')
+        .get(hasAgentId ? agentId : name, workspaceId) as Agent | undefined;
       if (!agent) {
         return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
       }
+      const agentName = agent.name;
       
       const now = Math.floor(Date.now() / 1000);
       
@@ -441,7 +447,7 @@ export async function PUT(request: NextRequest) {
       
       fieldsToUpdate.push('updated_at = ?');
       params.push(now);
-      params.push(name, workspaceId);
+      params.push(hasAgentId ? agentId : name, workspaceId);
       
       if (fieldsToUpdate.length === 1) { // Only updated_at
         return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -450,7 +456,7 @@ export async function PUT(request: NextRequest) {
       const stmt = db.prepare(`
         UPDATE agents 
         SET ${fieldsToUpdate.join(', ')}
-        WHERE name = ? AND workspace_id = ?
+        WHERE ${hasAgentId ? 'id' : 'name'} = ? AND workspace_id = ?
       `);
       
       stmt.run(...params);
@@ -461,7 +467,7 @@ export async function PUT(request: NextRequest) {
           'agent_status_change',
           'agent',
           agent.id,
-          name,
+          agentName,
           `Agent status changed from ${agent.status} to ${status}`,
           {
             oldStatus: agent.status,
@@ -475,7 +481,7 @@ export async function PUT(request: NextRequest) {
       // Broadcast update to SSE clients
       eventBus.broadcast('agent.updated', {
         id: agent.id,
-        name,
+        name: agentName,
         ...(status !== undefined && { status }),
         ...(last_activity !== undefined && { last_activity }),
         ...(role !== undefined && { role }),
@@ -485,7 +491,7 @@ export async function PUT(request: NextRequest) {
 
       return NextResponse.json({ success: true });
     } else {
-      return NextResponse.json({ error: 'Agent name is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Agent id or name is required' }, { status: 400 });
     }
   } catch (error) {
     const scopeError = workspaceScopeError(error);

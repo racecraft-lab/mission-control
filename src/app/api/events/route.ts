@@ -1,12 +1,12 @@
-import { NextRequest , NextResponse } from 'next/server'
-import { eventBus, ServerEvent } from '@/lib/event-bus'
+import { NextRequest, NextResponse } from 'next/server'
+import { eventBus, type ServerEvent } from '@/lib/event-bus'
 import { requireRole } from '@/lib/auth'
 import { getDatabase } from '@/lib/db'
 import { resolveWorkspaceScopeFromRequest, workspaceScopeError } from '@/lib/workspaces'
+import { shouldForwardEventForScope } from './scope-filter'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-const GLOBAL_EVENT_TYPES = new Set(['connected', 'connection.created', 'connection.disconnected'])
 
 /**
  * GET /api/events - Server-Sent Events stream for real-time DB mutations.
@@ -39,16 +39,7 @@ export async function GET(request: NextRequest) {
 
       // Forward workspace-scoped server events to this SSE client
       const handler = (event: ServerEvent) => {
-        const eventWorkspaceId = event.data?.workspace_id
-        const isGlobalEvent = GLOBAL_EVENT_TYPES.has(event.type)
-        if (acceptedScope.kind === 'productLine') {
-          if (eventWorkspaceId !== acceptedScope.workspaceId && !isGlobalEvent) return
-        } else if (
-          typeof eventWorkspaceId === 'number' &&
-          !acceptedScope.workspaceIds.includes(eventWorkspaceId)
-        ) {
-          return
-        }
+        if (!shouldForwardEventForScope(event, acceptedScope)) return
         try {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify(event)}\n\n`)

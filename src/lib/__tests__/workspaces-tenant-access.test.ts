@@ -219,6 +219,24 @@ describe('workspace scope resolution', () => {
     ).toThrow(BadWorkspaceScopeError)
   })
 
+  it('rejects explicit scope carriers when the workspace switcher flag is disabled', () => {
+    const db = createTestDb()
+    const user = { workspace_id: 4, tenant_id: 10 }
+
+    const legacyScope = resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks'), user)
+    expect(legacyScope.kind).toBe('legacy')
+    expect(legacyScope.workspaceIds).toEqual([4])
+    expect(legacyScope.featureEnabled).toBe(false)
+
+    expect(() =>
+      resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_id=1'), user)
+    ).toThrow(BadWorkspaceScopeError)
+
+    expect(() =>
+      resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_scope=facility'), user)
+    ).toThrow(BadWorkspaceScopeError)
+  })
+
   it('accepts synthetic Facility scope and aggregates tenant workspace ids', () => {
     const db = createTestDb()
     const scope = resolveWorkspaceScope(db, new Request('http://mc.test/api/tasks?workspace_scope=facility'), {

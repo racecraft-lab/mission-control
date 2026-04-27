@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { API_KEY_HEADER } from './helpers'
+import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
 
 type Workspace = {
   id: number
@@ -37,6 +37,16 @@ async function openEventStream(path: string) {
 }
 
 test.describe('Product Line SSE scope contract', () => {
+  let restoreWorkspaceSwitcherFlag: () => void
+
+  test.beforeAll(() => {
+    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  })
+
+  test.afterAll(() => {
+    restoreWorkspaceSwitcherFlag?.()
+  })
+
   test('authorizes Facility and Product Line event streams and rejects invalid setup scopes', async ({ request }) => {
     const { facility, productLine } = await loadWorkspaceFixtures(request)
 
@@ -64,14 +74,16 @@ test.describe('Product Line SSE scope contract', () => {
   })
 
   test('documents scoped event filtering, global allowlist, and workspace_id producer requirements', () => {
-    const eventsRoute = readFileSync('src/app/api/events/route.ts', 'utf8')
+    const eventsScopeFilter = readFileSync('src/app/api/events/scope-filter.ts', 'utf8')
     const dbSource = readFileSync('src/lib/db.ts', 'utf8')
     const qualityReviewSource = readFileSync('src/app/api/quality-review/route.ts', 'utf8')
     const chatMessagesSource = readFileSync('src/app/api/chat/messages/route.ts', 'utf8')
 
-    expect(eventsRoute).toContain("new Set(['connected', 'connection.created', 'connection.disconnected'])")
-    expect(eventsRoute).toContain("eventWorkspaceId !== acceptedScope.workspaceId")
-    expect(eventsRoute).toContain('!acceptedScope.workspaceIds.includes(eventWorkspaceId)')
+    expect(eventsScopeFilter).toContain("new Set(['connected', 'connection.created', 'connection.disconnected'])")
+    expect(eventsScopeFilter).toContain("typeof eventWorkspaceId !== 'number'")
+    expect(eventsScopeFilter).toContain('return isGlobalEvent')
+    expect(eventsScopeFilter).toContain("acceptedScope.kind === 'productLine'")
+    expect(eventsScopeFilter).toContain('acceptedScope.workspaceIds.includes(eventWorkspaceId)')
 
     for (const [source, eventType] of [
       [dbSource, 'agent.status_changed'],

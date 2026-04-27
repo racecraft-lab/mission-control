@@ -6,6 +6,7 @@ import { resolveFlag } from '@/lib/feature-flags'
 import { MODEL_CATALOG } from '@/lib/models'
 import {
   ACTIVE_WORKSPACE_STORAGE_KEY,
+  appendScopeToPath,
   createFacilityScope,
   createProductLineScope,
   isFacilityWorkspace,
@@ -1015,7 +1016,8 @@ export const useMissionControl = create<MissionControlStore>()(
     setProjects: (projects) => set({ projects }),
     fetchProjects: async () => {
       try {
-        const res = await fetch('/api/projects', { cache: 'no-store' })
+        const { activeProductLineScope } = get()
+        const res = await fetch(appendScopeToPath('/api/projects', activeProductLineScope), { cache: 'no-store' })
         if (!res.ok) return
         const data = await res.json()
         const projectList = Array.isArray(data?.projects) ? data.projects : []

@@ -27,7 +27,7 @@ export async function POST(
     }
 
     const db = getDatabase()
-    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { body })
     const workspaceFilter = workspaceScopePredicate(acceptedScope, 'workspace_id')
     const task = db
       .prepare(`SELECT * FROM tasks WHERE id = ? AND ${workspaceFilter.sql}`)

@@ -164,12 +164,13 @@ export function AgentSquadPanelPhase3() {
   useSmartPoll(fetchAgents, 30000, { enabled: autoRefresh, pauseWhenSseConnected: true })
 
   // Update agent status
-  const updateAgentStatus = async (agentName: string, status: Agent['status'], activity?: string) => {
+  const updateAgentStatus = async (agentId: number, agentName: string, status: Agent['status'], activity?: string) => {
     try {
       const response = await fetch(appendScopeToPath('/api/agents', activeProductLineScope), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: agentId,
           name: agentName,
           status,
           last_activity: activity || `Status changed to ${status}`
@@ -180,7 +181,7 @@ export function AgentSquadPanelPhase3() {
       
       // Update store state
       setAgents(agents.map(agent =>
-        agent.name === agentName
+        agent.id === agentId
           ? {
               ...agent,
               status,
@@ -197,9 +198,9 @@ export function AgentSquadPanelPhase3() {
   }
 
   // Wake agent via session_send
-  const wakeAgent = async (agentName: string) => {
+  const wakeAgent = async (agentId: number, agentName: string) => {
     try {
-      const response = await fetch(appendScopeToPath(`/api/agents/${agentName}/wake`, activeProductLineScope), {
+      const response = await fetch(appendScopeToPath(`/api/agents/${agentId}/wake`, activeProductLineScope), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -212,7 +213,7 @@ export function AgentSquadPanelPhase3() {
         throw new Error(data.error || 'Failed to wake agent')
       }
 
-      await updateAgentStatus(agentName, 'idle', 'Manually woken via session')
+      await updateAgentStatus(agentId, agentName, 'idle', 'Manually woken via session')
     } catch (error) {
       log.error('Failed to wake agent:', error)
       setError('Failed to wake agent')
@@ -482,7 +483,7 @@ export function AgentSquadPanelPhase3() {
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            wakeAgent(agent.name)
+                            wakeAgent(agent.id, agent.name)
                           }}
                           size="xs"
                           variant="ghost"
@@ -495,7 +496,7 @@ export function AgentSquadPanelPhase3() {
                         <Button
                           onClick={(e) => {
                             e.stopPropagation()
-                            updateAgentStatus(agent.name, 'idle', 'Manually activated')
+                            updateAgentStatus(agent.id, agent.name, 'idle', 'Manually activated')
                           }}
                           disabled={agent.status === 'idle'}
                           size="xs"
@@ -584,8 +585,8 @@ function AgentDetailModalPhase3({
   agent: Agent
   onClose: () => void
   onUpdate: () => void
-  onStatusUpdate: (name: string, status: Agent['status'], activity?: string) => Promise<void>
-  onWakeAgent: (name: string, sessionKey: string) => Promise<void>
+  onStatusUpdate: (agentId: number, name: string, status: Agent['status'], activity?: string) => Promise<void>
+  onWakeAgent: (agentId: number, name: string) => Promise<void>
   onDelete: (agentId: number, removeWorkspace: boolean) => Promise<void>
 }) {
   const [agentState, setAgentState] = useState<Agent & { config?: any; working_memory?: string }>(agent as Agent & { config?: any; working_memory?: string })

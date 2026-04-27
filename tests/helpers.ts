@@ -1,9 +1,38 @@
 import { APIRequestContext } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
+import path from 'node:path'
+import Database from 'better-sqlite3'
 
 export const API_KEY_HEADER: Record<string, string> = {
   'x-api-key': 'test-api-key-e2e-12345',
   'Content-Type': 'application/json',
+}
+
+export function setDefaultWorkspaceSwitcherFlag(enabled: boolean): () => void {
+  const dbPath = process.env.MISSION_CONTROL_DB_PATH ||
+    path.join(process.cwd(), '.tmp', 'e2e-openclaw', 'local', 'data', 'mission-control.db')
+  const db = new Database(dbPath)
+  try {
+    const row = db.prepare("SELECT id, feature_flags FROM workspaces WHERE slug = 'default' LIMIT 1")
+      .get() as { id: number; feature_flags: string | null } | undefined
+    if (!row) return () => {}
+
+    const nextFlags = enabled ? JSON.stringify({ FEATURE_WORKSPACE_SWITCHER: true }) : null
+    db.prepare('UPDATE workspaces SET feature_flags = ?, updated_at = unixepoch() WHERE id = ?')
+      .run(nextFlags, row.id)
+
+    return () => {
+      const restoreDb = new Database(dbPath)
+      try {
+        restoreDb.prepare('UPDATE workspaces SET feature_flags = ?, updated_at = unixepoch() WHERE id = ?')
+          .run(row.feature_flags, row.id)
+      } finally {
+        restoreDb.close()
+      }
+    }
+  } finally {
+    db.close()
+  }
 }
 
 function uid() {

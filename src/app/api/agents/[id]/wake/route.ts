@@ -21,7 +21,7 @@ export async function POST(
       typeof body?.message === 'string' ? body.message.trim() : ''
 
     const db = getDatabase()
-    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user)
+    const acceptedScope = await resolveWorkspaceScopeFromRequest(db, request, auth.user, { body })
     const workspaceFilter = agentWorkspaceScopePredicate(db, acceptedScope, 'workspace_id')
     const agent: any = isNaN(Number(agentId))
       ? db.prepare(`SELECT * FROM agents WHERE name = ? AND ${workspaceFilter.sql}`).get(agentId, ...workspaceFilter.params)

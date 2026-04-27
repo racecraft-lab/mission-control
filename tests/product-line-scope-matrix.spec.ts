@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test'
-import { API_KEY_HEADER } from './helpers'
+import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
 
 type Workspace = {
   id: number
@@ -45,6 +45,16 @@ async function loadWorkspaceFixtures(request: APIRequestContext) {
 }
 
 test.describe('Product Line scope route matrix', () => {
+  let restoreWorkspaceSwitcherFlag: () => void
+
+  test.beforeAll(() => {
+    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  })
+
+  test.afterAll(() => {
+    restoreWorkspaceSwitcherFlag?.()
+  })
+
   test('GET routes accept Facility/Product Line scope and reject invalid carriers', async ({ request }) => {
     const { facility, productLine } = await loadWorkspaceFixtures(request)
 

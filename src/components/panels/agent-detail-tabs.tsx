@@ -74,8 +74,8 @@ export function OverviewTab({
   setFormData: (data: any) => void
   onSave: () => Promise<void>
   saveBusy?: boolean
-  onStatusUpdate: (name: string, status: Agent['status'], activity?: string) => Promise<void>
-  onWakeAgent: (name: string, sessionKey: string) => Promise<void>
+  onStatusUpdate: (agentId: number, name: string, status: Agent['status'], activity?: string) => Promise<void>
+  onWakeAgent: (agentId: number, name: string) => Promise<void>
   onEdit: () => void
   onCancel: () => void
   heartbeatData: HeartbeatResponse | null
@@ -132,7 +132,7 @@ export function OverviewTab({
             {(['idle', 'busy', 'offline'] as const).map(status => (
               <button
                 key={status}
-                onClick={() => onStatusUpdate(agent.name, status)}
+                onClick={() => onStatusUpdate(agent.id, agent.name, status)}
                 className={`px-3 py-1 text-xs rounded-full border transition-colors ${
                   agent.status === status
                     ? status === 'idle' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
@@ -146,7 +146,7 @@ export function OverviewTab({
             ))}
             {agent.session_key && (
               <button
-                onClick={() => onWakeAgent(agent.name, agent.session_key!)}
+                onClick={() => onWakeAgent(agent.id, agent.name)}
                 className="ml-auto px-3 py-1 text-xs rounded-full border border-cyan-500/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
               >
                 Wake

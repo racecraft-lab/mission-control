@@ -184,6 +184,10 @@ export function resolveWorkspaceScope(
   const carriers = getScopeCarriers(request, options.body)
   const carrier = carriers[0]
 
+  if (carrier && !featureEnabled) {
+    throw new BadWorkspaceScopeError('Workspace scoping is disabled')
+  }
+
   if (!carrier) {
     if (featureEnabled && options.requireExplicitWhenEnabled !== false) {
       throw new BadWorkspaceScopeError('workspace_id or workspace_scope=facility is required')
