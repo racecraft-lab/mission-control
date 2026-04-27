@@ -20,6 +20,8 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:e2e": "pnpm run verify:node && playwright test",
+    "test:e2e:spec-002": "pnpm build && SPEC002_SCREENSHOTS=1 playwright test tests/product-line-switcher-ui.spec.ts tests/workspace-switcher-flag-off.spec.ts tests/product-line-scope-api.spec.ts tests/product-line-scope-matrix.spec.ts tests/product-line-events.spec.ts",
+    "test:e2e:docker": "pnpm run verify:node && bash scripts/e2e-docker.sh",
     "test:e2e:openclaw:local": "pnpm run verify:node && E2E_GATEWAY_EXPECTED=0 playwright test -c playwright.openclaw.local.config.ts",
     "test:e2e:openclaw:gateway": "pnpm run verify:node && E2E_GATEWAY_EXPECTED=1 playwright test -c playwright.openclaw.gateway.config.ts",
     "test:e2e:openclaw": "pnpm test:e2e:openclaw:local && pnpm test:e2e:openclaw:gateway",

@@ -1,5 +1,5 @@
 import { test, expect, APIRequestContext } from '@playwright/test'
-import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
+import { API_KEY_HEADER, enableWorkspaceSwitcherFlagForE2E } from './helpers'
 
 type Workspace = {
   id: number
@@ -47,8 +47,8 @@ async function loadWorkspaceFixtures(request: APIRequestContext) {
 test.describe('Product Line scope route matrix', () => {
   let restoreWorkspaceSwitcherFlag: () => void
 
-  test.beforeAll(() => {
-    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  test.beforeAll(async ({ request }) => {
+    restoreWorkspaceSwitcherFlag = await enableWorkspaceSwitcherFlagForE2E(request)
   })
 
   test.afterAll(() => {

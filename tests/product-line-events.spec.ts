@@ -1,6 +1,6 @@
 import { test, expect, APIRequestContext } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
+import { API_KEY_HEADER, enableWorkspaceSwitcherFlagForE2E } from './helpers'
 
 type Workspace = {
   id: number
@@ -39,8 +39,8 @@ async function openEventStream(path: string) {
 test.describe('Product Line SSE scope contract', () => {
   let restoreWorkspaceSwitcherFlag: () => void
 
-  test.beforeAll(() => {
-    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  test.beforeAll(async ({ request }) => {
+    restoreWorkspaceSwitcherFlag = await enableWorkspaceSwitcherFlagForE2E(request)
   })
 
   test.afterAll(() => {

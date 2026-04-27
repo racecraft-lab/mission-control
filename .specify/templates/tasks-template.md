@@ -8,7 +8,11 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
+**Tests**: The examples below include test tasks. Tests are required when the
+feature specification or constitution requires them. User-facing UI changes
+MUST include real Playwright e2e journey tasks, Docker-backed seed-data
+execution when Docker is available, screenshot artifact capture, and an
+e2e/screenshot defect review before any PR update.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -85,6 +89,8 @@ Examples of foundational tasks (adjust based on your project):
 
 - [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
 - [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
+- [ ] T011A [P] [US1] Real Playwright UI journey with deterministic seed data in tests/e2e/[journey].spec.ts, attaching review screenshots for before/during/after states
+- [ ] T011B [US1] Docker-backed Playwright run using the repository Docker build and seeded data; review screenshots and remediate known UI journey defects before PR update
 
 ### Implementation for User Story 1
 

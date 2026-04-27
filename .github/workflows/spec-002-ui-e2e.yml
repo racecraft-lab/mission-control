@@ -1,0 +1,103 @@
+name: SPEC-002 UI E2E
+
+on:
+  pull_request:
+    paths:
+      - 'src/components/layout/**'
+      - 'src/components/ui/theme-selector.tsx'
+      - 'src/store/**'
+      - 'src/types/product-line.ts'
+      - 'src/lib/feature-flags.ts'
+      - 'src/lib/workspaces.ts'
+      - 'src/app/api/**'
+      - 'tests/product-line-*.spec.ts'
+      - 'tests/workspace-switcher-*.spec.ts'
+      - 'tests/helpers.ts'
+      - 'scripts/e2e-docker.sh'
+      - 'scripts/seed-e2e-workspace-switcher.cjs'
+      - 'playwright*.config.ts'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'specs/002-product-line-switcher/**'
+      - '.specify/memory/constitution.md'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  docker-ui-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Docker-backed SPEC-002 Playwright journey
+        id: e2e
+        continue-on-error: true
+        env:
+          SPEC002_SCREENSHOTS: '1'
+        run: pnpm test:e2e:docker
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec-002-ui-e2e-artifacts
+          path: |
+            test-results/
+            playwright-report/docker/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Comment with screenshot review artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- spec-002-ui-e2e -->';
+            const outcome = '${{ steps.e2e.outcome }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              `SPEC-002 Docker-backed Playwright UI journey: **${outcome}**`,
+              '',
+              `Review screenshots and traces in the \`spec-002-ui-e2e-artifacts\` artifact: ${runUrl}`,
+              '',
+              'Covered states: Facility task board, scope menu options, selected Product Line task board, Facility aggregate return, keyboard listbox focus, 320/375/390 px mobile scope menus, and cross-tab Product Line sync.'
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.data.find((comment) => comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      - name: Fail on E2E defects
+        if: steps.e2e.outcome != 'success'
+        run: exit 1

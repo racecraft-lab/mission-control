@@ -363,7 +363,8 @@ export function HeaderBar() {
             size="icon-sm"
             onClick={openCommandPalette}
             className="md:hidden"
-            title="Search"
+            title={th('jumpToSearch')}
+            aria-label={th('jumpToSearch')}
           >
             <SearchIcon />
           </Button>
@@ -375,6 +376,8 @@ export function HeaderBar() {
             onMouseEnter={() => prefetchPanel('notifications')}
             onFocus={() => prefetchPanel('notifications')}
             className="relative"
+            title={th('goToNotifications')}
+            aria-label={th('goToNotifications')}
           >
             <BellIcon />
             {unreadNotificationCount > 0 && (
@@ -475,7 +478,7 @@ function ModeBadge({
 
   if (isLocal) {
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1 rounded-md text-2xs bg-void-cyan/10 border border-void-cyan/25">
+      <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-2xs bg-void-cyan/10 border border-void-cyan/25">
         <span className="w-1.5 h-1.5 rounded-full bg-void-cyan" />
         <span className="font-medium text-void-cyan">{th('local')}</span>
       </div>
@@ -511,7 +514,7 @@ function ModeBadge({
 
   return (
     <div
-      className="relative"
+      className="relative hidden sm:block"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >

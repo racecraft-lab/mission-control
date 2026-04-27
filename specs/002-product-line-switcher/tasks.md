@@ -3,7 +3,7 @@
 **Input**: Design documents from `/specs/002-product-line-switcher/`
 **Prerequisites**: `plan.md`, `spec.md`, `data-model.md`, `contracts/`, `research.md`, `quickstart.md`
 
-**Tests**: TDD is explicitly requested; write or update focused Vitest and Playwright tests before implementation where feasible.
+**Tests**: TDD is explicitly requested; write or update focused Vitest and Playwright tests before implementation where feasible. User-facing UI acceptance requires real Playwright coverage against the running app, Docker-backed seed-data execution when Docker is available, screenshot artifacts, and review/remediation of e2e failures or visible screenshot defects before PR update.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -133,6 +133,15 @@
 - [x] T048 [P] Add a prohibited-drift grep check in `specs/002-product-line-switcher/quickstart.md` that guards against inline `process.env.FEATURE_*` reads outside `src/lib/feature-flags.ts`
 - [x] T049 [P] Add a final verification checklist in `specs/002-product-line-switcher/quickstart.md` for flag-off regression, flag-on Facility bootstrap, REST, SSE, cross-tab sync, accessibility, and boundary behavior
 - [x] T050 Run the SPEC-002 verification command set from `specs/002-product-line-switcher/quickstart.md` and record the results in `specs/002-product-line-switcher/research.md`
+
+## Phase 9: Post-Review UI E2E Hardening
+
+**Purpose**: Replace fixture-only UI acceptance with real running-app evidence, Docker seedability, human-review screenshots, and a no-known-defects PR update gate.
+
+- [x] T051 [P] Add real Playwright UI journey coverage in `tests/product-line-switcher-ui.spec.ts` that authenticates, seeds Product Line data, drives the real switcher, verifies scoped task-board data, keyboard focus return, mobile header controls at 320/375/390 px, and same-user cross-tab convergence
+- [x] T052 [P] Add Docker-backed e2e execution in `scripts/e2e-docker.sh`, `playwright.docker.config.ts`, and package scripts so SPEC-002 e2e runs against the existing production Docker build with mounted SQLite seed data
+- [x] T053 [P] Add CI screenshot artifact publication in `.github/workflows/spec-002-ui-e2e.yml` so PR reviewers can inspect the new Playwright screenshots and traces
+- [x] T054 Review initial SPEC-002 e2e failures and screenshot artifacts, remediate any visible or failing UI user journey defects, rerun focused and Docker e2e, and only then push the PR branch
 
 ## Dependencies & Execution Order
 

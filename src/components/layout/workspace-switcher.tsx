@@ -136,7 +136,7 @@ export function WorkspaceSwitcher() {
           setActiveIndex(currentIndex)
         }}
         onKeyDown={onTriggerKeyDown}
-        className="h-8 min-w-0 max-w-[11rem] md:max-w-[16rem] justify-start bg-secondary/35 px-2"
+        className="h-8 min-w-0 max-w-[8rem] sm:max-w-[11rem] md:max-w-[16rem] justify-start bg-secondary/35 px-2"
         title={`${selectedKind}: ${selectedLabel}`}
       >
         <span className="min-w-0 flex-1 truncate text-left">

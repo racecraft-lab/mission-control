@@ -21,6 +21,27 @@ If the environment supports it, also run:
 pnpm test:e2e
 ```
 
+For SPEC-002 UI acceptance, run the real Product Line browser journey with
+screenshot artifacts enabled:
+
+```bash
+pnpm test:e2e:spec-002
+```
+
+When Docker is available, run the same acceptance path against the repository's
+production Docker build with deterministic seed data:
+
+```bash
+pnpm test:e2e:docker
+```
+
+The Docker runner builds the existing `Dockerfile`, boots disposable
+containers, mounts temporary host data directories at `/app/.data`, validates a
+clean flag-off regression phase, then seeds `FEATURE_WORKSPACE_SWITCHER`
+through `workspaces.feature_flags` in the mounted SQLite database before running
+the flag-on Product Line journey. Product Line workspaces/tasks are seeded
+through the API.
+
 ## Feature-Flag Baseline Check
 
 1. Run the app with `FEATURE_WORKSPACE_SWITCHER=0`.
@@ -45,6 +66,13 @@ pnpm test:e2e
 3. Confirm listbox semantics cover selected state, `aria-selected`, roving focus or `aria-activedescendant`, Arrow/Home/End navigation, Enter/Space selection, Escape/outside-click close, and trigger focus return.
 4. Confirm loading and empty states are non-focusable `role="status"` content, while workspace-list failure, unauthorized-selection, and error states are non-focusable `role="alert"` content outside the selectable option set.
 5. Confirm mode-sensitive panels and Facility/global surfaces match the Panel Taxonomy in `spec.md`.
+
+## Screenshot Review and Defect Gate
+
+1. Confirm `tests/product-line-switcher-ui.spec.ts` attaches screenshots for Facility task-board state, scope menu options, selected Product Line task-board state, Facility aggregate return, keyboard listbox focus, 320/375/390 px mobile menus, and cross-tab Product Line sync.
+2. Review the screenshots from local `test-results/` or the GitHub Actions `spec-002-ui-e2e-artifacts` artifact before updating the PR branch.
+3. If e2e output fails or screenshots show a user-visible defect, clipped or overlapping controls, wrong seeded data, inaccessible controls, or a broken Product Line journey, remediate the defect and rerun the relevant e2e command before pushing.
+4. Do not update or mark the PR ready with known UI user journey bugs.
 
 ## State-Management Check
 
@@ -92,20 +120,23 @@ The only allowed header match is the internal `WorkspaceSwitcher` component symb
 
 ## Implementation Verification Evidence
 
-Recorded on 2026-04-26 from worktree `.worktrees/002-product-line-switcher` on branch `002-product-line-switcher`:
+Recorded on 2026-04-26 and updated on 2026-04-27 from worktree `.worktrees/002-product-line-switcher` on branch `002-product-line-switcher`:
 
 - `pnpm typecheck` passed.
 - `pnpm build` passed and generated the standalone App Router bundle used by E2E.
-- `pnpm test` passed: 106 files, 1037 tests.
+- `pnpm test` passed: 108 files, 1043 tests.
 - `pnpm lint` passed with 0 errors and 11 pre-existing warnings.
 - `pnpm exec playwright test tests/product-line-scope-api.spec.ts` passed: 2 tests.
 - `pnpm exec playwright test tests/injection-guard-endpoints.spec.ts tests/limit-caps.spec.ts` passed after remediation: 15 tests.
 - `pnpm test:e2e` passed after remediation: 526 tests.
+- `pnpm test:e2e:spec-002` passed 10 focused SPEC-002 tests with screenshot capture enabled.
+- `pnpm test:e2e:docker` passed against the production Docker build: 1 clean flag-off regression test and 9 seeded flag-on Product Line tests.
+- Screenshot artifacts were generated under `test-results/spec-002-screenshots/` and reviewed after initial remediation; no known visible UI user journey defects remain.
 - `rg -n 'process\.env\.FEATURE_[A-Z0-9_]+' src --glob '!src/lib/feature-flags.ts'` returned no matches.
 
 Traceability notes:
 
-- SC-003 and P1-AC6 map to `src/store/index.ts` guarded `BroadcastChannel` handling, persisted `scopeVersion`, and scope-change invalidation; expanded standalone cross-tab UI coverage remains listed in `tasks.md`.
+- SC-003 and P1-AC6 map to `src/store/index.ts` guarded `BroadcastChannel` handling, persisted `scopeVersion`, scope-change invalidation, and real cross-tab UI coverage in `tests/product-line-switcher-ui.spec.ts`.
 - SC-014 and P1-AC14 map to `scopeKey` helpers in `src/types/product-line.ts`, the store scope slice, and scoped URL/request calls through `appendScopeToPath`.
 - SC-15/V2-001 and P1-AC16 remain deferred: SPEC-002 does not add tenant-routed gateway selection or multi-facility runtime modeling.
 - SC-016 and P1-AC14/P1-AC15 map to `setActiveProductLine(productLine | null, options)`, persisted-scope validation after `/api/workspaces`, and panel/API request scoping.

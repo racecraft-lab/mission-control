@@ -130,7 +130,7 @@ Implement the RC Factory Phase 1 Product Line switcher:
 - [x] P1-AC10: `/api/events` returns authorized Product Line-filtered events and authorized Facility aggregate events; scoped events include `workspace_id`; selected clients drop missing/mismatched workspace events; EventSource reconnects on scope change.
 - [x] P1-AC11: `src/store/index.ts` exports Product Line scope persistence and guarded BroadcastChannel tests.
 - [x] P1-AC12: Facility/Product Line/tenant terminology is consistent and SPEC-002 does not introduce multi-facility tenant modeling.
-- [x] P1-AC13: Header switcher is responsive and accessible at 320/375/390 px with long-name truncation, preserved header controls, localized labels, non-focusable loading/empty/error states, listbox semantics, and trigger focus return.
+- [x] P1-AC13: Header switcher is responsive and accessible at 320/375/390 px with long-name truncation, preserved header controls, localized labels, non-focusable loading/empty/error states, listbox semantics, trigger focus return, and post-review real-app Playwright screenshot coverage.
 - [x] P1-AC14: Mode-sensitive fetch/cache keys include `scopeKey`; transitions ignore stale in-flight responses and scoped mutation completions.
 - [x] P1-AC15: URL state is scope-owned and invalid/unowned entity params are stripped rather than resolved against stale persisted state.
 - [x] P1-AC16: Deferred boundaries are enforced for skills, local/gateway sessions/transcripts, SC-15/V2 gateway readiness, and multi-facility tenant modeling.
@@ -687,6 +687,7 @@ Every remaining step must follow the Open File Hygiene guard above: use bounded 
 | D - REST route matrix, route discovery, and SSE contracts | T035-T036, T041 | Complete | `pnpm exec playwright test tests/product-line-scope-matrix.spec.ts tests/product-line-route-discovery.spec.ts tests/product-line-events.spec.ts` passed 4 tests |
 | E - Panel wiring and Facility/global boundaries | T042-T043 | Complete | `pnpm test -- src/components/panels/product-line-panels.test.ts src/components/panels/facility-global-boundaries.test.ts` passed 106 files / 1035 tests; post-code-review `pnpm test` passed 106 files / 1037 tests |
 | F - Final G7 validation and status sync | Complete | No generated task ids | All `tasks.md` tasks checked, G7 evidence ledger rows pass, PRD/roadmap status updated, full verification rerun, and helper cleanup check recorded |
+| G - Real UI e2e, Docker seed data, screenshots, and defect gate | T051-T054 | In Progress | `tests/product-line-switcher-ui.spec.ts`, `scripts/e2e-docker.sh`, `playwright.docker.config.ts`, `.github/workflows/spec-002-ui-e2e.yml`, focused/Docker Playwright results, screenshot review, and remediation evidence |
 
 ---
 
@@ -708,7 +709,7 @@ Populate this ledger before G7 is marked complete. Every row must cite the comma
 | P1-AC10 | `/api/events` tests cover Product Line, Facility, missing/mismatched `workspace_id`, EventSource reconnect, and whitelisted global events | Pass | `tests/product-line-events.spec.ts`; `src/lib/use-server-events.test.tsx` |
 | P1-AC11 | Store tests cover persistence key, serialization, hydrate validation, guarded BroadcastChannel, and fallback behavior | Pass | `src/types/product-line.test.ts`; `src/store/product-line-scope.test.ts`; `src/store/product-line-persistence.test.ts`; `src/store/product-line-broadcast.test.ts` |
 | P1-AC12 | Traceability/grep evidence proves Facility/Product Line/tenant terminology and no multi-facility tenant modeling | Pass | `spec.md`, `plan.md`, `quickstart.md`, PRD, and roadmap traceability sections |
-| P1-AC13 | Playwright/a11y/component tests prove 320/375/390 px layout, truncation, preserved header controls, localized labels, listbox semantics, and focus return | Pass | `src/components/layout/workspace-switcher.test.tsx`; `tests/workspace-switcher-a11y.spec.ts`; `tests/workspace-switcher-responsive.spec.ts` |
+| P1-AC13 | Playwright/a11y/component tests prove 320/375/390 px layout, truncation, preserved header controls, localized labels, listbox semantics, and focus return | Pass, real UI e2e hardening in progress | `src/components/layout/workspace-switcher.test.tsx`; `tests/workspace-switcher-a11y.spec.ts`; `tests/workspace-switcher-responsive.spec.ts`; `tests/product-line-switcher-ui.spec.ts`; `pnpm test:e2e:docker`; `spec-002-ui-e2e-artifacts` |
 | P1-AC14 | Cache/request tests prove `scopeKey`, scoped invalidation, stale in-flight response rejection, and stale mutation completion rejection | Pass | `src/store/product-line-cache-url.test.ts`; `src/store/product-line-scope.test.ts`; `src/components/panels/product-line-panels.test.ts` |
 | P1-AC15 | URL tests prove valid scope adoption, invalid scope reset, and unowned entity param stripping | Pass | `src/store/product-line-cache-url.test.ts`; `tests/product-line-route-discovery.spec.ts`; `tests/product-line-scope-matrix.spec.ts` |
 | P1-AC16 | Deferred-boundary and SC-15/V2-001 grep/tests prove no product-line skill ownership, session/transcript mapping, tenant-routed gateway selection, or multi-facility modeling | Pass | `src/components/panels/facility-global-boundaries.test.ts`; diff grep found no new runtime gateway globals or downstream-boundary implementations |
@@ -728,6 +729,9 @@ Populate this ledger before G7 is marked complete. Every row must cite the comma
 - [x] REST and SSE scoping tests cover authorized, unauthorized, both-param, Facility aggregate, facility-row-as-product-line, missing-payload, EventSource reconnect, and whitelisted global-event cases.
 - [x] Mode-sensitive panels respect selected Product Line scope; Facility/global surfaces do not become Product Line-owned.
 - [x] URL scope, stale in-flight response, stale mutation completion, scoped invalidation, duplicate Facility, long-name, loading, empty, error, localized label, and mobile header checks pass.
+- [x] Real Product Line UI journey coverage runs against the application, not static fixtures, and verifies seeded Facility/Product Line data, keyboard behavior, mobile header controls, and cross-tab convergence.
+- [x] Docker-backed Playwright runs against the existing production Docker build with deterministic seed data.
+- [x] Playwright screenshot artifacts are available for human review, and failing or visibly defective UI journeys are remediated before the PR branch is updated.
 - [x] Deferred-boundary checks prove SPEC-002 did not implement product-line skill ownership, session/transcript mapping, tenant-routed gateway selection, or multi-facility tenant modeling.
 - [x] SC-15/V2-001 grep checks prove no new direct `OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, or `gateways.is_primary` assumptions were added outside approved resolver/adapter paths when gateway-facing code was touched.
 - [x] `pnpm typecheck` passes or any environment failure is documented with evidence.
@@ -744,12 +748,16 @@ Populate this ledger before G7 is marked complete. Every row must cite the comma
 
 - `pnpm typecheck` passed.
 - `pnpm lint` passed with 0 errors / 11 warnings.
-- `pnpm test` passed 106 files / 1037 tests after post-code-review remediation.
+- `pnpm test` passed 108 files / 1043 tests after post-review UI hardening.
 - `pnpm build` passed.
 - `pnpm test:e2e` passed 526 tests.
+- `pnpm test:e2e:spec-002` passed 10 focused SPEC-002 tests with screenshot capture enabled.
+- `pnpm test:e2e:docker` passed against the production Docker build: 1 clean flag-off regression test and 9 seeded flag-on Product Line tests.
+- SPEC-002 screenshot artifacts were generated under `test-results/spec-002-screenshots/` and reviewed for visible UI user-journey defects before branch update.
 - `git diff --check` passed.
 - Focused remediation verification passed for tenant access, workspace switcher failure/empty state, Product Line store/cache scope, and Product Line API/SSE route contracts.
 - Code review remediation preserved Facility/global agent visibility inside Product Line views, distinguished workspace-load failure from true empty Product Line state, and enforced JSON body scope carriers plus query/body conflicts through `resolveWorkspaceScopeFromRequest`.
+- Post-review UI hardening added a CI-runnable Docker e2e harness, real Product Line UI journey tests, screenshot artifact publication, and remediation for standalone asset serving, task-board aria labeling, mobile header overflow, accessible header controls, banner action wrapping, and Docker seed sequencing.
 - Guardrail greps found no inline runtime `FEATURE_*` reads outside `src/lib/feature-flags.ts`; gateway and deferred-boundary matches in the implementation diff are documentation guardrails, not new runtime coupling.
 - Open-file/process cleanup check under Codex PID 53107 found only the baseline MCP helper set (`repoprompt_cli`, Jira issue link, GitHub inline comment, PAL, Tavily, mcp-ical, QMD bridge, Computer Use) and no lingering Spec 002 dev server, Playwright worker, or build/test process.
 

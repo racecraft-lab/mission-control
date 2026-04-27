@@ -34,6 +34,18 @@
 
 [Gates determined based on constitution file]
 
+For user-facing UI changes, the generated plan MUST also define:
+
+- Real Playwright e2e journeys against the running app; mocked `page.setContent()`
+  fixtures do not satisfy acceptance for new UI behavior.
+- Docker-backed execution using the existing repository Docker build and
+  deterministic seed data when Docker is available.
+- Screenshot artifacts for human-in-the-loop review covering important
+  before, during, after, and responsive states.
+- A defect-remediation gate: failing e2e output and screenshots are reviewed
+  before PR update, and known UI journey bugs are fixed before the PR is
+  opened, updated, or marked ready.
+
 ## Project Structure
 
 ### Documentation (this feature)

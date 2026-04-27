@@ -1,3 +1,16 @@
+<!--
+Sync Impact Report
+Version change: 1.2.0 -> 1.3.0
+Modified principles: IV. Test-First Development; added XIV. Real UI Journey Quality Gate
+Added sections: XIV. Real UI Journey Quality Gate
+Removed sections: None
+Templates requiring updates:
+- .specify/templates/plan-template.md: updated
+- .specify/templates/spec-template.md: updated
+- .specify/templates/tasks-template.md: updated
+Follow-up TODOs: None
+-->
+
 # Mission Control Constitution
 
 Governing principles for the `racecraft-lab/mission-control` fork of
@@ -81,6 +94,10 @@ Exceptions: documentation-only edits, dependency pin bumps that touch
 no runtime code, and pure file-move refactors with tests unchanged.
 
 Every PR must pass `pnpm typecheck` and `pnpm lint` clean.
+
+User-facing UI changes also inherit Principle XIV. Unit/component tests can
+support a UI change, but they cannot replace real browser coverage for new
+or changed user journeys.
 
 ### V. Feature-Flag Resolution Discipline
 
@@ -283,6 +300,40 @@ This principle complements Principle X. Observability and Auditability
 records WHAT happened; this principle ensures the recording never
 crashes the request and never leaks secrets while doing so.
 
+### XIV. Real UI Journey Quality Gate (NON-NEGOTIABLE)
+
+Every PR that adds or changes a user-facing UI journey MUST include real
+Playwright e2e coverage against the running application. Static HTML
+fixtures, `page.setContent()` component surrogates, mocked localStorage-only
+flows, and isolated component tests may supplement the evidence, but they
+do not satisfy acceptance for a new UI feature.
+
+Operationalized as:
+
+- The test boots the real app, authenticates through supported auth seams,
+  seeds deterministic data, and drives the same accessible controls a user
+  would use.
+- Where Docker is available, UI e2e tests run against the existing Docker
+  production build with a disposable data directory or volume containing
+  deterministic seed data.
+- Playwright tests for new UI journeys attach screenshots for human-in-the-
+  loop review. Required screenshots cover the important before, during, and
+  after states, including responsive states when mobile or narrow layouts are
+  part of the acceptance criteria.
+- Before a PR is updated or opened, an agent MUST review failing e2e output
+  and attached screenshots. Failing tests, visible defects, clipped or
+  overlapping controls, wrong data, inaccessible controls, and broken user
+  journeys are known defects and MUST be remediated first.
+- A PR MUST NOT be opened, updated, or marked ready with known UI user
+  journey bugs, even when unit tests or mocked Playwright fixtures pass.
+- Existing failing e2e tests discovered during the review pass are either
+  remediated in the same PR when they cover the touched journey, or explicitly
+  documented as unrelated pre-existing failures with evidence. They cannot be
+  ignored when screenshots show a user-visible defect in the changed journey.
+
+Compliance evidence names the Playwright spec files, the Docker or local app
+command used, and where screenshot artifacts are stored for reviewer access.
+
 ## Tech Stack Constraints
 
 - Next.js 16, React 19, TypeScript 5.7.
@@ -481,10 +532,12 @@ Compliance checkpoints:
 - Every PR: `pnpm test:all` green, constitution principles self-checked
   by PR description, and applicable extensions (`speckit.verify`,
   `speckit.cleanup`, `speckit.review`) run where the extension hook
-  fires.
+  fires. UI PRs also include real Playwright journey results, screenshot
+  artifacts, and an explicit note that known UI journey defects were reviewed
+  and remediated before PR update.
 - Every spec: `/speckit.analyze` produces no CRITICAL findings against
   this constitution.
 - Every migration: rollback file present; upstream-compat checklist
   satisfied.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-26
+**Version**: 1.3.0 | **Ratified**: 2026-04-24 | **Last Amended**: 2026-04-27

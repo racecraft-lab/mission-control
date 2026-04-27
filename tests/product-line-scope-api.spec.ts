@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { API_KEY_HEADER, setDefaultWorkspaceSwitcherFlag } from './helpers'
+import { API_KEY_HEADER, enableWorkspaceSwitcherFlagForE2E } from './helpers'
 
 test.describe('Product Line scope API contract', () => {
   let restoreWorkspaceSwitcherFlag: () => void
 
-  test.beforeAll(() => {
-    restoreWorkspaceSwitcherFlag = setDefaultWorkspaceSwitcherFlag(true)
+  test.beforeAll(async ({ request }) => {
+    restoreWorkspaceSwitcherFlag = await enableWorkspaceSwitcherFlagForE2E(request)
   })
 
   test.afterAll(() => {

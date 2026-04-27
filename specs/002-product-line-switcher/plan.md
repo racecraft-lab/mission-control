@@ -12,7 +12,7 @@ Add a feature-flagged Product Line switcher that keeps tenant/facility context i
 **Language/Version**: TypeScript 5 on Next.js 16 App Router with React 19
 **Primary Dependencies**: Zustand, better-sqlite3, Tailwind CSS 3, Vitest, Playwright
 **Storage**: SQLite plus Zustand `persist` localStorage key `mc:active-workspace:v1` for the Product Line scope slice only
-**Testing**: Vitest, Playwright e2e, `pnpm typecheck`, `pnpm lint`; flag-OFF regression evidence must preserve the pre-SPEC-002 baseline test counts and Playwright snapshots, while flag-ON Facility coverage adds SPEC-002-only aggregate-scope assertions without rewriting existing baseline tests
+**Testing**: Vitest, Playwright e2e, Docker-backed Playwright for the real Product Line UI journey, `pnpm typecheck`, `pnpm lint`; flag-OFF regression evidence must preserve the pre-SPEC-002 baseline test counts and Playwright snapshots, while flag-ON Facility coverage adds SPEC-002-only aggregate-scope assertions without rewriting existing baseline tests
 **Target Platform**: Web application
 **Project Type**: Web application
 **Performance Goals**: Preserve existing baseline behavior with flag OFF; cross-tab sync should converge within 1s when BroadcastChannel is available
@@ -31,6 +31,7 @@ GATE: Must pass before Phase 0 research and re-check after Phase 1 design.
 - Feature-flag resolution discipline: All new runtime behavior must route through `resolveFlag(name, ctx)` in `src/lib/feature-flags.ts`.
 - Upstream compatibility discipline: No destructive schema change or upstream-owned merge risk is introduced by the plan.
 - Test-first development: Plan assumes failing tests are written before runtime implementation.
+- Real UI journey quality gate: Product Line switcher acceptance requires real Playwright coverage against the running app, deterministic seed data, screenshot artifacts for reviewer inspection, and remediation of failing or visibly defective UI journeys before PR update.
 - Strict scope ramp: New production modules are limited to the three spec-owned files listed above.
 - Package manager: pnpm is required for verification.
 
@@ -71,5 +72,6 @@ No constitution violations require justification at the planning stage.
 - Flag OFF: `FEATURE_WORKSPACE_SWITCHER=0 pnpm test:all` must preserve existing single-workspace behavior, must not reduce or skip the pre-SPEC-002 baseline counts recorded in the workflow evidence, and must produce no Playwright snapshot diffs or snapshot update artifacts.
 - Flag ON Facility: seed `workspaces.feature_flags` for the authenticated Facility/workspace context; existing baseline assertions must remain unchanged, and new tests must assert only SPEC-002 Facility aggregate semantics.
 - Test scope: new Vitest and Playwright tests must cover only SPEC-002 feature-flag resolution, Facility/Product Line scope, REST/SSE contract, cache/URL ownership, switcher UX, state transitions, and BroadcastChannel behavior. They must not encode Aegis ownership, task pipeline, `ready_for_owner`, area-label, artifact, governance, Product Line skill ownership, session/transcript mapping, tenant-routed gateway selection, or multi-facility tenant assumptions from later specs.
+- Real UI journey gate: `tests/product-line-switcher-ui.spec.ts` must drive the running app with seeded Product Line data, attach screenshots for the core Facility/Product Line states and narrow mobile layouts, and pass through `pnpm test:e2e:docker` before the PR branch is updated.
 - Feature-flag grep: runtime code must not introduce inline `process.env.FEATURE_*` reads outside `src/lib/feature-flags.ts`; implementation verification must run the quickstart grep and fail on any unapproved match.
 - Gateway grep: when gateway-facing code is touched, implementation verification must grep touched files for new direct `OPENCLAW_GATEWAY_*`, `config.gatewayHost`, `config.gatewayPort`, or `gateways.is_primary` assumptions and allow matches only in an explicitly documented resolver/adapter path with an SC-15/V2-001 reference.
